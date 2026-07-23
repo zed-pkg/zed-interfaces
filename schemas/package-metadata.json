@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PackageMetadata",
+  "type": "object",
+  "properties": {
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "latest": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "org": {
+      "type": "string"
+    },
+    "repo_url": {
+      "type": "string"
+    },
+    "vcs": {
+      "$ref": "#/$defs/Vcs"
+    },
+    "versions": {
+      "description": "All published, non-yanked versions, newest first.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "org",
+    "name",
+    "vcs",
+    "repo_url",
+    "versions"
+  ],
+  "$defs": {
+    "Vcs": {
+      "description": "Version-control systems a package's source repository can live on.\n\nzed-pkg is VCS-agnostic by design: what gets installed is always a\nregistry artifact, and the VCS is where provenance (tags) is anchored.\nAuthors must create a matching tag on their declared backing repo\n(GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo, Gitea, Azure\nDevOps, CodeCommit, Radicle, or self-hosted) before publishing.\n\n`jj` and Sapling are git-compatible and push to git remotes, so their\nprovenance is verified through git tags.",
+      "type": "string",
+      "enum": [
+        "git",
+        "hg",
+        "jj",
+        "sapling",
+        "fossil",
+        "pijul"
+      ]
+    }
+  }
+}

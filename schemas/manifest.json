@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Manifest",
+  "description": "The `.zpkg.toml` manifest at the root of every package repository.\nTOML only — never YAML or JSON.\n\n```toml\n[package]\norg = \"acme\"\nname = \"http-kit\"\nversion = \"1.2.0\"\ndescription = \"Tiny HTTP helpers\"\nlicense = \"MIT\"\n\n[package.repository]\nvcs = \"git\"\nurl = \"https://github.com/acme/http-kit\"\n\n[dependencies]\n\"acme/logkit\" = \"^0.3\"\n\n[publish]\nexclude = [\"benches/**\"]\nsmoke_test = \"sh scripts/smoke.sh\"\n```",
+  "type": "object",
+  "properties": {
+    "dependencies": {
+      "description": "Dependencies keyed by `org/name`, valued by a semver requirement.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "package": {
+      "$ref": "#/$defs/PackageSection"
+    },
+    "publish": {
+      "$ref": "#/$defs/PublishSection",
+      "default": {
+        "exclude": [],
+        "include_readme": false,
+        "smoke_test": null,
+        "tag_format": "v{version}"
+      }
+    },
+    "scripts": {
+      "$ref": "#/$defs/ScriptsSection",
+      "default": {
+        "test": null
+      }
+    }
+  },
+  "required": [
+    "package"
+  ],
+  "$defs": {
+    "PackageSection": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "license": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Package name, unique within the org. Lowercase slug.",
+          "type": "string"
+        },
+        "org": {
+          "description": "Namespace the package is published under. Lowercase slug.",
+          "type": "string"
+        },
+        "repository": {
+          "$ref": "#/$defs/RepositorySection"
+        },
+        "version": {
+          "description": "Semver version of this package.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "org",
+        "name",
+        "version",
+        "repository"
+      ]
+    },
+    "PublishSection": {
+      "type": "object",
+      "properties": {
+        "exclude": {
+          "description": "Extra glob patterns to exclude on top of the built-in defaults.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "include_readme": {
+          "description": "Keep README files in the published artifact (stripped by default).",
+          "type": "boolean",
+          "default": false
+        },
+        "smoke_test": {
+          "description": "Command run by `zed test-local` inside a throwaway consumer project\nthat has this package installed the same way a real consumer would.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "tag_format": {
+          "description": "VCS tag template that must exist and point at the published commit.\n`{version}` is substituted with `package.version`.",
+          "type": "string",
+          "default": "v{version}"
+        }
+      }
+    },
+    "RepositorySection": {
+      "description": "Where the package's source of truth lives. Any Git or Mercurial host\nworks: GitHub, GitLab, Bitbucket, or a self-hosted server.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "vcs": {
+          "$ref": "#/$defs/Vcs",
+          "default": "git"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "ScriptsSection": {
+      "type": "object",
+      "properties": {
+        "test": {
+          "description": "Test command run from the repository (not from published artifacts;\ntests are stripped at publish time).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
+    "Vcs": {
+      "description": "Version-control systems a package's source repository can live on.\n\nzed-pkg is VCS-agnostic by design: what gets installed is always a\nregistry artifact, and the VCS is where provenance (tags) is anchored.\nAuthors must create a matching tag on their declared backing repo\n(GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo, Gitea, Azure\nDevOps, CodeCommit, Radicle, or self-hosted) before publishing.\n\n`jj` and Sapling are git-compatible and push to git remotes, so their\nprovenance is verified through git tags.",
+      "type": "string",
+      "enum": [
+        "git",
+        "hg",
+        "jj",
+        "sapling",
+        "fossil",
+        "pijul"
+      ]
+    }
+  }
+}

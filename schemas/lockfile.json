@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lockfile",
+  "description": "The `zed.lock` file written next to `zed.toml` after resolution.\n\nSerialized as TOML with one `[[package]]` table per locked package,\nCargo.lock-style. Every entry pins the exact artifact hash and the VCS\ntag it was published from, so installs are reproducible and every\nartifact is traceable back to source.",
+  "type": "object",
+  "properties": {
+    "package": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LockedPackage"
+      }
+    },
+    "version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "$defs": {
+    "ArtifactFormat": {
+      "description": "On-the-wire formats for published package artifacts.",
+      "type": "string",
+      "enum": [
+        "tar.gz",
+        "zip"
+      ]
+    },
+    "LockedPackage": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/ArtifactFormat",
+          "default": "tar.gz"
+        },
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "sha256": {
+          "description": "Hex sha256 of the artifact archive; also its store address.",
+          "type": "string"
+        },
+        "size": {
+          "description": "Artifact size in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "source": {
+          "description": "Base URL of the registry the artifact was resolved from.",
+          "type": "string"
+        },
+        "vcs_commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vcs_tag": {
+          "description": "VCS tag the version was published from, e.g. `v1.2.0`.",
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "org",
+        "name",
+        "version",
+        "sha256",
+        "size",
+        "vcs_tag",
+        "source"
+      ]
+    }
+  }
+}

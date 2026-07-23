@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApiError",
+  "description": "Error body returned with any non-2xx status.",
+  "type": "object",
+  "properties": {
+    "code": {
+      "description": "Stable machine-readable code, e.g. `not_found`, `sha256_mismatch`,\n`tag_not_found`, `unauthorized`, `org_taken`.",
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ]
+}
