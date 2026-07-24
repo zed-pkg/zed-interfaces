@@ -31,13 +31,60 @@ use crate::version::{Requirement, VersionScheme};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Manifest {
     pub package: PackageSection,
+    /// Monorepo workspace declaration (zed-docs issue #7). When present,
+    /// `zed install` at this root resolves every member against one store and
+    /// writes one `.zpkg.lock`; member→member dependencies link by path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceSection>,
     /// Dependencies keyed by `org/name`, valued by a semver requirement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub dependencies: BTreeMap<String, String>,
+    /// Tools needed only to *build* this package (compilers, codegen). They
+    /// are made available in the build sandbox and never linked into a
+    /// consumer's `zed_modules/`. See [`BuildSection`] and zed-docs issue #5.
+    #[serde(
+        default,
+        rename = "build-dependencies",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub build_dependencies: BTreeMap<String, String>,
+    /// This package's own build step, run after extraction on the consumer's
+    /// machine when the package ships source that needs compiling.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<BuildSection>,
+    /// Consumer-side patches to a *dependency's* build step, keyed by
+    /// `org/name`. Lets a project fix a broken/missing upstream build locally.
+    #[serde(
+        default,
+        rename = "build-overrides",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub build_overrides: BTreeMap<String, BuildSection>,
+    /// Executables this package exposes, `name -> path relative to the package
+    /// root`. On install they are hoisted into `zed_modules/.bin/` and run via
+    /// `zed run <name>` (zed-docs issue #7).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub bin: BTreeMap<String, String>,
     #[serde(default)]
     pub publish: PublishSection,
     #[serde(default)]
     pub scripts: ScriptsSection,
+}
+
+/// A build step: the command to run after extraction, and the artifacts to
+/// expose. Because compiled output is OS/arch-specific, zed-pkg runs this in a
+/// sandbox and caches the result in a build cache keyed by
+/// `(source sha256, target triple, command)` — separate from the universal,
+/// platform-independent source store (zed-docs issue #5).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BuildSection {
+    /// Command executed with `sh -c` in the sandboxed copy of the source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// Files (relative paths) to expose to consumers. When empty, the whole
+    /// built tree is exposed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -108,6 +155,15 @@ pub struct ScriptsSection {
     pub test: Option<String>,
 }
 
+/// Monorepo workspace membership. `members` are glob patterns (relative to
+/// the workspace root) selecting directories that each contain a `.zpkg.toml`,
+/// e.g. `["packages/*", "apps/*"]`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct WorkspaceSection {
+    pub members: Vec<String>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     #[error("invalid org slug `{0}`: must match [a-z0-9][a-z0-9-]*[a-z0-9]")]
@@ -120,8 +176,35 @@ pub enum ManifestError {
     InvalidDependencyKey(String),
     #[error("invalid requirement `{1}` for dependency `{0}`: {2}")]
     InvalidDependencyReq(String, String, String),
+    #[error("invalid bin `{0}`: {1}")]
+    InvalidBin(String, String),
+    #[error("invalid workspace member pattern `{0}`")]
+    InvalidWorkspaceMember(String),
     #[error("manifest toml error: {0}")]
     Toml(String),
+}
+
+/// True for a relative path that stays within the package (no absolute paths,
+/// no `..` traversal). Used to keep hoisted bins and build outputs contained.
+pub fn is_safe_relative_path(path: &str) -> bool {
+    let p = std::path::Path::new(path);
+    !path.is_empty()
+        && p.is_relative()
+        && p.components().all(|c| {
+            matches!(
+                c,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        })
+}
+
+/// True for a well-formed `org/name` dependency key.
+pub fn is_dependency_key(key: &str) -> bool {
+    let mut parts = key.splitn(2, '/');
+    match (parts.next(), parts.next()) {
+        (Some(org), Some(name)) => is_slug(org) && is_slug(name),
+        _ => false,
+    }
 }
 
 /// True for the lowercase slugs zed-pkg accepts as org and package names.
@@ -174,7 +257,67 @@ impl Manifest {
             }
             let _ = Requirement::parse(req);
         }
+        for (key, req) in &self.build_dependencies {
+            if !is_dependency_key(key) {
+                return Err(ManifestError::InvalidDependencyKey(key.clone()));
+            }
+            if req.trim().is_empty() {
+                return Err(ManifestError::InvalidDependencyReq(
+                    key.clone(),
+                    req.clone(),
+                    "build-dependency requirement must not be empty".to_string(),
+                ));
+            }
+        }
+        for key in self.build_overrides.keys() {
+            if !is_dependency_key(key) {
+                return Err(ManifestError::InvalidDependencyKey(key.clone()));
+            }
+        }
+        for (name, path) in &self.bin {
+            if name.trim().is_empty() || name.contains('/') || name.contains('\\') {
+                return Err(ManifestError::InvalidBin(
+                    name.clone(),
+                    "bin name must be non-empty with no path separators".to_string(),
+                ));
+            }
+            if !is_safe_relative_path(path) {
+                return Err(ManifestError::InvalidBin(
+                    name.clone(),
+                    format!("bin path `{path}` must be relative and stay inside the package"),
+                ));
+            }
+        }
+        if let Some(ws) = &self.workspace {
+            for pat in &ws.members {
+                if pat.trim().is_empty() {
+                    return Err(ManifestError::InvalidWorkspaceMember(pat.clone()));
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// True when this manifest declares a non-empty monorepo workspace.
+    pub fn is_workspace_root(&self) -> bool {
+        self.workspace
+            .as_ref()
+            .is_some_and(|w| !w.members.is_empty())
+    }
+
+    /// The effective build step for a dependency `org/name`: this manifest's
+    /// `[build-overrides]` entry if present, else the dependency's own
+    /// `[build]`. Returns `None` when neither declares a build command.
+    pub fn effective_build(
+        &self,
+        dep_key: &str,
+        dep_build: Option<&BuildSection>,
+    ) -> Option<BuildSection> {
+        self.build_overrides
+            .get(dep_key)
+            .or(dep_build)
+            .filter(|b| b.command.is_some())
+            .cloned()
     }
 
     /// `org/name`, the canonical package identifier.
