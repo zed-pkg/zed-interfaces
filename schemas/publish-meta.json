@@ -46,16 +46,65 @@
         "zip"
       ]
     },
+    "BuildSection": {
+      "description": "A post-extract build step. `command` runs via `sh -c` inside a staging\ncopy of the package; `outputs` optionally narrows what is promoted into\nthe per-platform build cache (default: the whole staged tree).",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "Command executed after extraction, e.g. `make` or `cargo build --release`.",
+          "type": "string"
+        },
+        "outputs": {
+          "description": "Paths (relative to the package root) to keep from the staging build.\nEmpty means keep everything.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "command"
+      ]
+    },
     "Manifest": {
       "description": "The `.zpkg.toml` manifest at the root of every package repository.\nTOML only — never YAML or JSON.\n\n```toml\n[package]\norg = \"acme\"\nname = \"http-kit\"\nversion = \"1.2.0\"\ndescription = \"Tiny HTTP helpers\"\nlicense = \"MIT\"\n\n[package.repository]\nvcs = \"git\"\nurl = \"https://github.com/acme/http-kit\"\n\n[dependencies]\n\"acme/logkit\" = \"^0.3\"\n\n[publish]\nexclude = [\"benches/**\"]\nsmoke_test = \"sh scripts/smoke.sh\"\n```",
       "type": "object",
       "properties": {
+        "bin": {
+          "description": "Executables this package exposes, keyed by command name, valued by a\npath relative to the package root. Consumers get them hoisted into\n`zed_modules/.bin/` and runnable via `zed run <name>`.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "build": {
+          "description": "Optional post-extract build step (compiled extensions, codegen).\nBuilds run in an isolated staging copy — never inside the immutable\nsource store — and results are cached per (sha256, platform).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuildSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "build_dependencies": {
+          "description": "Dependencies needed only while running this package's `[build]`\ncommand. Never linked into a consumer's zed_modules/.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "dependencies": {
           "description": "Dependencies keyed by `org/name`, valued by a semver requirement.",
           "type": "object",
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "overrides": {
+          "description": "Consumer-side patches for dependencies (e.g. fixing a dependency's\nbroken or missing build command without waiting on upstream).",
+          "$ref": "#/$defs/OverridesSection"
         },
         "package": {
           "$ref": "#/$defs/PackageSection"
@@ -74,11 +123,35 @@
           "default": {
             "test": null
           }
+        },
+        "workspace": {
+          "description": "Monorepo workspace configuration; only meaningful in a workspace\nroot manifest.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "package"
       ]
+    },
+    "OverridesSection": {
+      "description": "Consumer-side dependency patches, keyed by `org/name`.",
+      "type": "object",
+      "properties": {
+        "build": {
+          "description": "Replace or provide a dependency's `[build]` step.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/BuildSection"
+          }
+        }
+      }
     },
     "PackageSection": {
       "type": "object",
@@ -219,6 +292,19 @@
           "const": "opaque"
         }
       ]
+    },
+    "WorkspaceSection": {
+      "description": "Workspace configuration for monorepos: member globs relative to the\nworkspace root, e.g. `[\"packages/*\", \"apps/*\"]`. Dependencies that\nresolve to a member are symlinked straight to the member's source\ndirectory instead of going through the registry.",
+      "type": "object",
+      "properties": {
+        "members": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     }
   }
 }
