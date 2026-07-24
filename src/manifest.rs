@@ -130,6 +130,44 @@ pub struct ScriptsSection {
     pub test: Option<String>,
 }
 
+/// A post-extract build step. `command` runs via `sh -c` inside a staging
+/// copy of the package; `outputs` optionally narrows what is promoted into
+/// the per-platform build cache (default: the whole staged tree).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BuildSection {
+    /// Command executed after extraction, e.g. `make` or `cargo build --release`.
+    pub command: String,
+    /// Paths (relative to the package root) to keep from the staging build.
+    /// Empty means keep everything.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
+}
+
+/// Workspace configuration for monorepos: member globs relative to the
+/// workspace root, e.g. `["packages/*", "apps/*"]`. Dependencies that
+/// resolve to a member are symlinked straight to the member's source
+/// directory instead of going through the registry.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct WorkspaceSection {
+    pub members: Vec<String>,
+}
+
+/// Consumer-side dependency patches, keyed by `org/name`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct OverridesSection {
+    /// Replace or provide a dependency's `[build]` step.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub build: BTreeMap<String, BuildSection>,
+}
+
+impl OverridesSection {
+    pub fn is_empty(&self) -> bool {
+        self.build.is_empty()
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     #[error("invalid org slug `{0}`: must match [a-z0-9][a-z0-9-]*[a-z0-9]")]
