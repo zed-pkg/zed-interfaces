@@ -34,10 +34,32 @@ pub struct Manifest {
     /// Dependencies keyed by `org/name`, valued by a semver requirement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub dependencies: BTreeMap<String, String>,
+    /// Dependencies needed only while running this package's `[build]`
+    /// command. Never linked into a consumer's zed_modules/.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub build_dependencies: BTreeMap<String, String>,
     #[serde(default)]
     pub publish: PublishSection,
     #[serde(default)]
     pub scripts: ScriptsSection,
+    /// Executables this package exposes, keyed by command name, valued by a
+    /// path relative to the package root. Consumers get them hoisted into
+    /// `zed_modules/.bin/` and runnable via `zed run <name>`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub bin: BTreeMap<String, String>,
+    /// Optional post-extract build step (compiled extensions, codegen).
+    /// Builds run in an isolated staging copy — never inside the immutable
+    /// source store — and results are cached per (sha256, platform).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<BuildSection>,
+    /// Monorepo workspace configuration; only meaningful in a workspace
+    /// root manifest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceSection>,
+    /// Consumer-side patches for dependencies (e.g. fixing a dependency's
+    /// broken or missing build command without waiting on upstream).
+    #[serde(default, skip_serializing_if = "OverridesSection::is_empty")]
+    pub overrides: OverridesSection,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
