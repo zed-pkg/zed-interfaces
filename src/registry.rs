@@ -49,6 +49,13 @@ pub fn file_path(org: &str, name: &str, version: &str, path: &str) -> String {
     format!("{API_V1}/files/{org}/{name}/{version}/{path}")
 }
 
+/// `POST` (bearer token, org-scoped) — mark a published version as yanked
+/// (or restore it). Yanked versions stay downloadable for existing
+/// lockfiles but are hidden from resolution and search.
+pub fn yank_path(org: &str, name: &str, version: &str) -> String {
+    format!("{API_V1}/packages/{org}/{name}/versions/{version}/yank")
+}
+
 /// `POST` (bearer token) — claim an org namespace.
 pub fn orgs_path() -> String {
     format!("{API_V1}/orgs")
