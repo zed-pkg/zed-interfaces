@@ -199,6 +199,39 @@ pub fn is_slug(s: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+/// True for a 64-character lowercase-hex sha256 digest. Registry responses
+/// and lockfiles feed digests into filesystem paths, so anything else is
+/// rejected before it can reach the disk layer.
+pub fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64
+        && s.chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+}
+
+/// True when `path` is a relative path with no `..` components — the only
+/// shape allowed for manifest-declared paths (bin targets, build outputs).
+pub fn is_safe_relative_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with('/')
+        && !path.starts_with('\\')
+        && !path.contains('\0')
+        // windows drive/UNC prefixes
+        && !(path.len() >= 2 && path.as_bytes()[1] == b':')
+        && !path
+            .split(['/', '\\'])
+            .any(|seg| seg == ".." || seg.is_empty())
+}
+
+fn is_allowed_repo_url(url: &str) -> bool {
+    // The repo URL renders as a link in registry UIs and is shelled to VCS
+    // tooling, so restrict it to the schemes those consumers expect.
+    ["https://", "http://", "ssh://", "git://", "git+ssh://"]
+        .iter()
+        .any(|scheme| url.starts_with(scheme))
+        // scp-like git syntax: git@github.com:org/repo.git
+        || (url.contains('@') && url.contains(':') && !url.contains("://"))
+}
+
 impl Manifest {
     /// Parse and validate a `.zpkg.toml` document.
     pub fn parse(input: &str) -> Result<Self, ManifestError> {
