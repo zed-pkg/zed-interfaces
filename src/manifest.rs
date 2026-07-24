@@ -256,14 +256,19 @@ impl Manifest {
             .version_scheme
             .validate_version(&self.package.version)
             .map_err(|e| ManifestError::InvalidVersion(self.package.version.clone(), e))?;
-        for (key, req) in &self.dependencies {
+        if !is_allowed_repo_url(&self.package.repository.url) {
+            return Err(ManifestError::InvalidRepositoryUrl(
+                self.package.repository.url.clone(),
+                "expected an https/http/ssh/git URL or scp-like git syntax".to_string(),
+            ));
+        }
+        for (key, req) in self.dependencies.iter().chain(&self.build_dependencies) {
             let mut parts = key.splitn(2, '/');
             let (org, name) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
             if !is_slug(org) || !is_slug(name) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
             }
-            // A requirement is either a semver range or an exact (opaque) tag;
-            // only an empty string is invalid.
+            // A requirement is either a semver range or an exact (opaque) tag.
             if req.trim().is_empty() {
                 return Err(ManifestError::InvalidDependencyReq(
                     key.clone(),
@@ -271,7 +276,56 @@ impl Manifest {
                     "requirement must not be empty".to_string(),
                 ));
             }
-            let _ = Requirement::parse(req);
+            // Ranges that *look* like semver ranges but do not parse are
+            // rejected rather than silently degrading to an opaque tag.
+            if let Err(reason) = Requirement::validate(req) {
+                return Err(ManifestError::InvalidDependencyReq(
+                    key.clone(),
+                    req.clone(),
+                    reason,
+                ));
+            }
+        }
+        for (bin_name, target) in &self.bin {
+            if bin_name.is_empty()
+                || bin_name.starts_with('.')
+                || bin_name
+                    .chars()
+                    .any(|c| !(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'))
+            {
+                return Err(ManifestError::InvalidBin(
+                    bin_name.clone(),
+                    "names use [A-Za-z0-9._-] and cannot start with `.`".to_string(),
+                ));
+            }
+            if !is_safe_relative_path(target) {
+                return Err(ManifestError::InvalidBin(
+                    bin_name.clone(),
+                    format!("target `{target}` must be a relative path without `..`"),
+                ));
+            }
+        }
+        let overriding = self.overrides.build.values();
+        for build in self.build.iter().chain(overriding) {
+            if build.command.trim().is_empty() {
+                return Err(ManifestError::InvalidBuild(
+                    "command must not be empty".to_string(),
+                ));
+            }
+            for output in &build.outputs {
+                if !is_safe_relative_path(output) {
+                    return Err(ManifestError::InvalidBuild(format!(
+                        "output `{output}` must be a relative path without `..`"
+                    )));
+                }
+            }
+        }
+        for (key, _) in &self.overrides.build {
+            let mut parts = key.splitn(2, '/');
+            let (org, name) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+            if !is_slug(org) || !is_slug(name) {
+                return Err(ManifestError::InvalidDependencyKey(key.clone()));
+            }
         }
         Ok(())
     }
