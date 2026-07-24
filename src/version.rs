@@ -242,6 +242,25 @@ impl Requirement {
             Requirement::Exact(want) => want == version,
         }
     }
+
+    /// Reject requirement strings that *look* like semver ranges but fail to
+    /// parse (e.g. `^1.x.y`, `>= banana`). Without this, a typo'd range would
+    /// silently degrade to an opaque exact-match tag and never resolve.
+    /// Strings with no range operators are legitimate opaque tags and pass.
+    pub fn validate(input: &str) -> Result<(), String> {
+        let looks_like_range = input.starts_with(['^', '~', '>', '<', '='])
+            || input.contains(['*', ','])
+            || input.split_whitespace().count() > 1;
+        if !looks_like_range {
+            return Ok(());
+        }
+        match Self::parse(input) {
+            Requirement::Range(_) => Ok(()),
+            Requirement::Exact(_) => Err(format!(
+                "`{input}` looks like a version range but is not a valid one"
+            )),
+        }
+    }
 }
 
 /// Pick the version string satisfying `req` from `versions`.
