@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Lockfile",
-  "description": "The `zed.lock` file written next to `zed.toml` after resolution.\n\nSerialized as TOML with one `[[package]]` table per locked package,\nCargo.lock-style. Every entry pins the exact artifact hash and the VCS\ntag it was published from, so installs are reproducible and every\nartifact is traceable back to source.",
+  "description": "The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.\n\nSerialized as TOML with one `[[package]]` table per locked package,\nCargo.lock-style. Every entry pins the exact artifact hash and the VCS\ntag it was published from, so installs are reproducible and every\nartifact is traceable back to source.",
   "type": "object",
   "properties": {
     "package": {

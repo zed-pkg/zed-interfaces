@@ -34,10 +34,32 @@ pub struct Manifest {
     /// Dependencies keyed by `org/name`, valued by a semver requirement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub dependencies: BTreeMap<String, String>,
+    /// Dependencies needed only while running this package's `[build]`
+    /// command. Never linked into a consumer's zed_modules/.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub build_dependencies: BTreeMap<String, String>,
     #[serde(default)]
     pub publish: PublishSection,
     #[serde(default)]
     pub scripts: ScriptsSection,
+    /// Executables this package exposes, keyed by command name, valued by a
+    /// path relative to the package root. Consumers get them hoisted into
+    /// `zed_modules/.bin/` and runnable via `zed run <name>`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub bin: BTreeMap<String, String>,
+    /// Optional post-extract build step (compiled extensions, codegen).
+    /// Builds run in an isolated staging copy — never inside the immutable
+    /// source store — and results are cached per (sha256, platform).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<BuildSection>,
+    /// Monorepo workspace configuration; only meaningful in a workspace
+    /// root manifest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceSection>,
+    /// Consumer-side patches for dependencies (e.g. fixing a dependency's
+    /// broken or missing build command without waiting on upstream).
+    #[serde(default, skip_serializing_if = "OverridesSection::is_empty")]
+    pub overrides: OverridesSection,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -108,6 +130,44 @@ pub struct ScriptsSection {
     pub test: Option<String>,
 }
 
+/// A post-extract build step. `command` runs via `sh -c` inside a staging
+/// copy of the package; `outputs` optionally narrows what is promoted into
+/// the per-platform build cache (default: the whole staged tree).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BuildSection {
+    /// Command executed after extraction, e.g. `make` or `cargo build --release`.
+    pub command: String,
+    /// Paths (relative to the package root) to keep from the staging build.
+    /// Empty means keep everything.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
+}
+
+/// Workspace configuration for monorepos: member globs relative to the
+/// workspace root, e.g. `["packages/*", "apps/*"]`. Dependencies that
+/// resolve to a member are symlinked straight to the member's source
+/// directory instead of going through the registry.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct WorkspaceSection {
+    pub members: Vec<String>,
+}
+
+/// Consumer-side dependency patches, keyed by `org/name`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct OverridesSection {
+    /// Replace or provide a dependency's `[build]` step.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub build: BTreeMap<String, BuildSection>,
+}
+
+impl OverridesSection {
+    pub fn is_empty(&self) -> bool {
+        self.build.is_empty()
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     #[error("invalid org slug `{0}`: must match [a-z0-9][a-z0-9-]*[a-z0-9]")]
@@ -120,6 +180,12 @@ pub enum ManifestError {
     InvalidDependencyKey(String),
     #[error("invalid requirement `{1}` for dependency `{0}`: {2}")]
     InvalidDependencyReq(String, String, String),
+    #[error("invalid repository url `{0}`: {1}")]
+    InvalidRepositoryUrl(String, String),
+    #[error("invalid bin entry `{0}`: {1}")]
+    InvalidBin(String, String),
+    #[error("invalid build section: {0}")]
+    InvalidBuild(String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
@@ -131,6 +197,39 @@ pub fn is_slug(s: &str) -> bool {
         && !s.ends_with('-')
         && s.chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// True for a 64-character lowercase-hex sha256 digest. Registry responses
+/// and lockfiles feed digests into filesystem paths, so anything else is
+/// rejected before it can reach the disk layer.
+pub fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64
+        && s.chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+}
+
+/// True when `path` is a relative path with no `..` components — the only
+/// shape allowed for manifest-declared paths (bin targets, build outputs).
+pub fn is_safe_relative_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with('/')
+        && !path.starts_with('\\')
+        && !path.contains('\0')
+        // windows drive/UNC prefixes
+        && !(path.len() >= 2 && path.as_bytes()[1] == b':')
+        && !path
+            .split(['/', '\\'])
+            .any(|seg| seg == ".." || seg.is_empty())
+}
+
+fn is_allowed_repo_url(url: &str) -> bool {
+    // The repo URL renders as a link in registry UIs and is shelled to VCS
+    // tooling, so restrict it to the schemes those consumers expect.
+    ["https://", "http://", "ssh://", "git://", "git+ssh://"]
+        .iter()
+        .any(|scheme| url.starts_with(scheme))
+        // scp-like git syntax: git@github.com:org/repo.git
+        || (url.contains('@') && url.contains(':') && !url.contains("://"))
 }
 
 impl Manifest {
@@ -157,14 +256,19 @@ impl Manifest {
             .version_scheme
             .validate_version(&self.package.version)
             .map_err(|e| ManifestError::InvalidVersion(self.package.version.clone(), e))?;
-        for (key, req) in &self.dependencies {
+        if !is_allowed_repo_url(&self.package.repository.url) {
+            return Err(ManifestError::InvalidRepositoryUrl(
+                self.package.repository.url.clone(),
+                "expected an https/http/ssh/git URL or scp-like git syntax".to_string(),
+            ));
+        }
+        for (key, req) in self.dependencies.iter().chain(&self.build_dependencies) {
             let mut parts = key.splitn(2, '/');
             let (org, name) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
             if !is_slug(org) || !is_slug(name) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
             }
-            // A requirement is either a semver range or an exact (opaque) tag;
-            // only an empty string is invalid.
+            // A requirement is either a semver range or an exact (opaque) tag.
             if req.trim().is_empty() {
                 return Err(ManifestError::InvalidDependencyReq(
                     key.clone(),
@@ -172,7 +276,56 @@ impl Manifest {
                     "requirement must not be empty".to_string(),
                 ));
             }
-            let _ = Requirement::parse(req);
+            // Ranges that *look* like semver ranges but do not parse are
+            // rejected rather than silently degrading to an opaque tag.
+            if let Err(reason) = Requirement::validate(req) {
+                return Err(ManifestError::InvalidDependencyReq(
+                    key.clone(),
+                    req.clone(),
+                    reason,
+                ));
+            }
+        }
+        for (bin_name, target) in &self.bin {
+            if bin_name.is_empty()
+                || bin_name.starts_with('.')
+                || bin_name
+                    .chars()
+                    .any(|c| !(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'))
+            {
+                return Err(ManifestError::InvalidBin(
+                    bin_name.clone(),
+                    "names use [A-Za-z0-9._-] and cannot start with `.`".to_string(),
+                ));
+            }
+            if !is_safe_relative_path(target) {
+                return Err(ManifestError::InvalidBin(
+                    bin_name.clone(),
+                    format!("target `{target}` must be a relative path without `..`"),
+                ));
+            }
+        }
+        let overriding = self.overrides.build.values();
+        for build in self.build.iter().chain(overriding) {
+            if build.command.trim().is_empty() {
+                return Err(ManifestError::InvalidBuild(
+                    "command must not be empty".to_string(),
+                ));
+            }
+            for output in &build.outputs {
+                if !is_safe_relative_path(output) {
+                    return Err(ManifestError::InvalidBuild(format!(
+                        "output `{output}` must be a relative path without `..`"
+                    )));
+                }
+            }
+        }
+        for (key, _) in &self.overrides.build {
+            let mut parts = key.splitn(2, '/');
+            let (org, name) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+            if !is_slug(org) || !is_slug(name) {
+                return Err(ManifestError::InvalidDependencyKey(key.clone()));
+            }
         }
         Ok(())
     }
