@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SyncWriteMode",
+  "description": "Per-write optimism level (mirrors zed-sync `WriteMode`). Enum, not a\nboolean: a write names its exact behavior.",
+  "type": "string",
+  "enum": [
+    "local_only",
+    "optimistic_queue",
+    "optimistic_await_ack",
+    "server_first",
+    "server_only"
+  ]
+}

@@ -77,6 +77,12 @@ pub struct PackageMetadata {
     pub description: Option<String>,
     pub vcs: Vcs,
     pub repo_url: String,
+    /// How this package's versions should be interpreted (semver by default).
+    #[serde(
+        default,
+        skip_serializing_if = "crate::version::VersionScheme::is_default"
+    )]
+    pub version_scheme: crate::version::VersionScheme,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest: Option<String>,
     /// All published, non-yanked versions, newest first.

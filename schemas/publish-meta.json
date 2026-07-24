@@ -113,8 +113,12 @@
           "$ref": "#/$defs/RepositorySection"
         },
         "version": {
-          "description": "Semver version of this package.",
+          "description": "Version of this package, interpreted according to `version_scheme`\n(semver by default).",
           "type": "string"
+        },
+        "version_scheme": {
+          "description": "How `version` (and published tags) should be interpreted. Semver by\ndefault; `calver` for calendar versions, `opaque` for arbitrary tags.",
+          "$ref": "#/$defs/VersionScheme"
         }
       },
       "required": [
@@ -194,6 +198,26 @@
         "sapling",
         "fossil",
         "pijul"
+      ]
+    },
+    "VersionScheme": {
+      "description": "How a package's `version` string (and its published tags) should be\ninterpreted. Defaults to [`VersionScheme::Semver`], which covers the vast\nmajority of modern ecosystems.",
+      "oneOf": [
+        {
+          "description": "Semantic Versioning. `package.version` must be valid semver; ranges\n(`^1.2`, `>=0.2 <0.5`) resolve to the max satisfying stable version.",
+          "type": "string",
+          "const": "semver"
+        },
+        {
+          "description": "Calendar Versioning (`2026.07.24`, `2026.07`). Normalized to a semver\ntotal order (leading zeros dropped, padded to major.minor.patch) so the\nsame range algebra applies. See [`normalize_calver`].",
+          "type": "string",
+          "const": "calver"
+        },
+        {
+          "description": "Arbitrary tags (`release-candidate-1`, `legacy-api`). No range algebra:\na requirement must match a published version **exactly**.",
+          "type": "string",
+          "const": "opaque"
+        }
       ]
     }
   }

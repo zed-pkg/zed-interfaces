@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SyncErrorPolicy",
+  "description": "How write/flush errors are surfaced (mirrors zed-sync `ErrorPolicy`).",
+  "type": "string",
+  "enum": [
+    "throw_only",
+    "emit_only",
+    "throw_and_emit",
+    "silent"
+  ]
+}

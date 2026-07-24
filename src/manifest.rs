@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::vcs::Vcs;
+use crate::version::{Requirement, VersionScheme};
 
 /// The `.zpkg.toml` manifest at the root of every package repository.
 /// TOML only — never YAML or JSON.
@@ -45,8 +46,16 @@ pub struct PackageSection {
     pub org: String,
     /// Package name, unique within the org. Lowercase slug.
     pub name: String,
-    /// Semver version of this package.
+    /// Version of this package, interpreted according to `version_scheme`
+    /// (semver by default).
     pub version: String,
+    /// How `version` (and published tags) should be interpreted. Semver by
+    /// default; `calver` for calendar versions, `opaque` for arbitrary tags.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::version::VersionScheme::is_default"
+    )]
+    pub version_scheme: VersionScheme,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -144,18 +153,26 @@ impl Manifest {
         if !is_slug(&self.package.name) {
             return Err(ManifestError::InvalidName(self.package.name.clone()));
         }
-        semver::Version::parse(&self.package.version).map_err(|e| {
-            ManifestError::InvalidVersion(self.package.version.clone(), e.to_string())
-        })?;
+        self.package
+            .version_scheme
+            .validate_version(&self.package.version)
+            .map_err(|e| ManifestError::InvalidVersion(self.package.version.clone(), e))?;
         for (key, req) in &self.dependencies {
             let mut parts = key.splitn(2, '/');
             let (org, name) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
             if !is_slug(org) || !is_slug(name) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
             }
-            semver::VersionReq::parse(req).map_err(|e| {
-                ManifestError::InvalidDependencyReq(key.clone(), req.clone(), e.to_string())
-            })?;
+            // A requirement is either a semver range or an exact (opaque) tag;
+            // only an empty string is invalid.
+            if req.trim().is_empty() {
+                return Err(ManifestError::InvalidDependencyReq(
+                    key.clone(),
+                    req.clone(),
+                    "requirement must not be empty".to_string(),
+                ));
+            }
+            let _ = Requirement::parse(req);
         }
         Ok(())
     }

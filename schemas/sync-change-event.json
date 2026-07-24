@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SyncChangeEvent",
+  "description": "The change envelope both transports decode to (mirrors zed-sync\n`ChangeEvent`). `version` is the ONLY reconciliation key; `sync_sequence`\nis the catch-up cursor and never feeds reconciliation.",
+  "type": "object",
+  "properties": {
+    "at_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "id": {
+      "type": "string"
+    },
+    "op": {
+      "$ref": "#/$defs/SyncOp"
+    },
+    "row": true,
+    "sync_sequence": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "table": {
+      "type": "string"
+    },
+    "version": {
+      "$ref": "#/$defs/Hlc"
+    },
+    "write_key": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "table",
+    "op",
+    "id",
+    "version",
+    "at_ms"
+  ],
+  "$defs": {
+    "Hlc": {
+      "description": "Hybrid Logical Clock stamp — the reconciliation key. Total order:\n`wall_ms`, then `counter`, then `actor`.",
+      "type": "object",
+      "properties": {
+        "actor": {
+          "type": "string"
+        },
+        "counter": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "wall_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "wall_ms",
+        "counter",
+        "actor"
+      ]
+    },
+    "SyncOp": {
+      "type": "string",
+      "enum": [
+        "upsert",
+        "delete"
+      ]
+    }
+  }
+}

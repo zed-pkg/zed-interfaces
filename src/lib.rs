@@ -12,9 +12,12 @@ pub mod lockfile;
 pub mod manifest;
 pub mod paths;
 pub mod registry;
+pub mod sync;
 pub mod vcs;
+pub mod version;
 
 pub use artifact::ArtifactFormat;
 pub use lockfile::{LockedPackage, Lockfile};
 pub use manifest::{Manifest, ManifestError};
 pub use vcs::Vcs;
+pub use version::{Requirement, VersionScheme};
