@@ -180,6 +180,12 @@ pub enum ManifestError {
     InvalidDependencyKey(String),
     #[error("invalid requirement `{1}` for dependency `{0}`: {2}")]
     InvalidDependencyReq(String, String, String),
+    #[error("invalid repository url `{0}`: {1}")]
+    InvalidRepositoryUrl(String, String),
+    #[error("invalid bin entry `{0}`: {1}")]
+    InvalidBin(String, String),
+    #[error("invalid build section: {0}")]
+    InvalidBuild(String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
