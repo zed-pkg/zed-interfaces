@@ -36,9 +36,28 @@ pub const ARCHIVE_ROOT: &str = "pkg";
 /// Where `zed pack` writes artifacts, relative to the project root.
 pub const PACK_OUT_DIR: &str = ".zed/pack";
 
+/// Directory inside `zed_modules/` where package-declared executables are
+/// hoisted (`zed_modules/.bin/<name>`), runnable via `zed run <name>`.
+pub const BIN_DIR: &str = ".bin";
+
 /// Store entry path for an artifact, relative to the zed home directory,
 /// e.g. `store/v1/ab/abcdef.../`.
 pub fn store_entry_rel(sha256: &str) -> String {
     let prefix = sha256.get(..2).unwrap_or("xx");
     format!("store/{STORE_VERSION}/{prefix}/{sha256}")
+}
+
+/// Build-cache entry for an artifact on one platform, relative to the zed
+/// home directory, e.g. `builds/v1/macos-aarch64/ab/abcdef.../`. Source
+/// extraction (`store/`) is platform-independent; compiled results are not,
+/// so they cache separately per (sha256, platform) and the source store
+/// stays immutable.
+pub fn build_entry_rel(platform: &str, sha256: &str) -> String {
+    let prefix = sha256.get(..2).unwrap_or("xx");
+    format!("builds/{STORE_VERSION}/{platform}/{prefix}/{sha256}")
+}
+
+/// The `os-arch` pair used to key the build cache, e.g. `linux-x86_64`.
+pub fn current_platform() -> String {
+    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
