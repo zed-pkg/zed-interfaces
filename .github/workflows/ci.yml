@@ -1,0 +1,25 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format
+        run: cargo fmt --check
+      - name: Test
+        run: cargo test
+      # The generated JSON schemas are committed for the non-Rust SDKs to
+      # mirror; fail if they drift from the source types.
+      - name: Schemas are up to date
+        run: |
+          cargo run --example generate_schemas
+          git diff --exit-code schemas/ \
+            || (echo "schemas/ is stale; run 'cargo run --example generate_schemas' and commit" && exit 1)

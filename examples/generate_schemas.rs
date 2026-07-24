@@ -29,10 +29,13 @@ fn main() {
     write::<zed_interfaces::registry::SearchResponse>(dir, "search-response");
     write::<zed_interfaces::registry::ClaimOrgRequest>(dir, "claim-org-request");
     write::<zed_interfaces::registry::ClaimOrgResponse>(dir, "claim-org-response");
+    write::<zed_interfaces::registry::YankRequest>(dir, "yank-request");
+    write::<zed_interfaces::registry::YankResponse>(dir, "yank-response");
     write::<zed_interfaces::registry::ApiError>(dir, "api-error");
 
     // Sync contract types shared with zed-sync + zed-clients.
     write::<zed_interfaces::sync::SyncChangeEvent>(dir, "sync-change-event");
     write::<zed_interfaces::sync::SyncWriteMode>(dir, "sync-write-mode");
     write::<zed_interfaces::sync::SyncErrorPolicy>(dir, "sync-error-policy");
+    write::<zed_interfaces::sync::SyncConflictResolution>(dir, "sync-conflict-resolution");
 }

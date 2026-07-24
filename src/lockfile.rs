@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::artifact::ArtifactFormat;
 
-/// The `zed.lock` file written next to `zed.toml` after resolution.
+/// The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.
 ///
 /// Serialized as TOML with one `[[package]]` table per locked package,
 /// Cargo.lock-style. Every entry pins the exact artifact hash and the VCS

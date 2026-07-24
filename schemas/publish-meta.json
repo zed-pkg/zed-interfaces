@@ -46,16 +46,65 @@
         "zip"
       ]
     },
+    "BuildSection": {
+      "description": "A post-extract build step. Because compiled output is OS/arch-specific,\nzed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the\nsource and caches the result in a build cache keyed by\n`(source sha256, target triple, command)` — separate from the universal,\nplatform-independent source store (zed-docs issue #5).",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "Command executed after extraction, e.g. `make` or `cargo build --release`.",
+          "type": "string"
+        },
+        "outputs": {
+          "description": "Paths (relative to the package root) to keep from the staging build.\nEmpty means keep everything.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "command"
+      ]
+    },
     "Manifest": {
       "description": "The `.zpkg.toml` manifest at the root of every package repository.\nTOML only — never YAML or JSON.\n\n```toml\n[package]\norg = \"acme\"\nname = \"http-kit\"\nversion = \"1.2.0\"\ndescription = \"Tiny HTTP helpers\"\nlicense = \"MIT\"\n\n[package.repository]\nvcs = \"git\"\nurl = \"https://github.com/acme/http-kit\"\n\n[dependencies]\n\"acme/logkit\" = \"^0.3\"\n\n[publish]\nexclude = [\"benches/**\"]\nsmoke_test = \"sh scripts/smoke.sh\"\n```",
       "type": "object",
       "properties": {
+        "bin": {
+          "description": "Executables this package exposes, keyed by command name, valued by a\npath relative to the package root. On install they are hoisted into\n`zed_modules/.bin/` and runnable via `zed run <name>` (zed-docs\nissue #7).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "build": {
+          "description": "This package's own post-extract build step (compiled extensions,\ncodegen), run when the package ships source that needs compiling.\nBuilds run in an isolated staging copy — never inside the immutable\nsource store — and results are cached per (sha256, target, command).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuildSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "build-dependencies": {
+          "description": "Tools needed only while running this package's `[build]` command\n(compilers, codegen). They are made available in the build sandbox and\nnever linked into a consumer's `zed_modules/`. See [`BuildSection`]\nand zed-docs issue #5. Canonical TOML key is Cargo-style\n`[build-dependencies]`; the snake_case spelling is accepted on read.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "dependencies": {
           "description": "Dependencies keyed by `org/name`, valued by a semver requirement.",
           "type": "object",
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "overrides": {
+          "description": "Consumer-side patches for dependencies (e.g. fixing a dependency's\nbroken or missing `[build]` step without waiting on upstream).",
+          "$ref": "#/$defs/OverridesSection"
         },
         "package": {
           "$ref": "#/$defs/PackageSection"
@@ -74,11 +123,35 @@
           "default": {
             "test": null
           }
+        },
+        "workspace": {
+          "description": "Monorepo workspace declaration (zed-docs issue #7); only meaningful in\na workspace root manifest. When present, `zed install` at this root\nresolves every member against one store and writes one `.zpkg.lock`;\nmember→member dependencies link by path instead of going through the\nregistry.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "package"
       ]
+    },
+    "OverridesSection": {
+      "description": "Consumer-side dependency patches, keyed by `org/name`.",
+      "type": "object",
+      "properties": {
+        "build": {
+          "description": "Replace or provide a dependency's `[build]` step.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/BuildSection"
+          }
+        }
+      }
     },
     "PackageSection": {
       "type": "object",
@@ -145,7 +218,7 @@
           "default": false
         },
         "smoke_test": {
-          "description": "Command run by `zed test-local` inside a throwaway consumer project\nthat has this package installed the same way a real consumer would.",
+          "description": "Command run by `zed r2g` (alias `zed test-local`) inside a throwaway\nconsumer project that has this package installed the same way a real\nconsumer would.",
           "type": [
             "string",
             "null"
@@ -219,6 +292,19 @@
           "const": "opaque"
         }
       ]
+    },
+    "WorkspaceSection": {
+      "description": "Monorepo workspace membership. `members` are glob patterns (relative to\nthe workspace root) selecting directories that each contain a `.zpkg.toml`,\ne.g. `[\"packages/*\", \"apps/*\"]`. Dependencies that resolve to a member are\nlinked straight to the member's source directory instead of going through\nthe registry.",
+      "type": "object",
+      "properties": {
+        "members": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     }
   }
 }

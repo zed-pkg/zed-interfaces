@@ -31,60 +31,48 @@ use crate::version::{Requirement, VersionScheme};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Manifest {
     pub package: PackageSection,
-    /// Monorepo workspace declaration (zed-docs issue #7). When present,
-    /// `zed install` at this root resolves every member against one store and
-    /// writes one `.zpkg.lock`; member→member dependencies link by path.
+    /// Monorepo workspace declaration (zed-docs issue #7); only meaningful in
+    /// a workspace root manifest. When present, `zed install` at this root
+    /// resolves every member against one store and writes one `.zpkg.lock`;
+    /// member→member dependencies link by path instead of going through the
+    /// registry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<WorkspaceSection>,
     /// Dependencies keyed by `org/name`, valued by a semver requirement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub dependencies: BTreeMap<String, String>,
-    /// Tools needed only to *build* this package (compilers, codegen). They
-    /// are made available in the build sandbox and never linked into a
-    /// consumer's `zed_modules/`. See [`BuildSection`] and zed-docs issue #5.
+    /// Tools needed only while running this package's `[build]` command
+    /// (compilers, codegen). They are made available in the build sandbox and
+    /// never linked into a consumer's `zed_modules/`. See [`BuildSection`]
+    /// and zed-docs issue #5. Canonical TOML key is Cargo-style
+    /// `[build-dependencies]`; the snake_case spelling is accepted on read.
     #[serde(
         default,
         rename = "build-dependencies",
+        alias = "build_dependencies",
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub build_dependencies: BTreeMap<String, String>,
-    /// This package's own build step, run after extraction on the consumer's
-    /// machine when the package ships source that needs compiling.
+    /// This package's own post-extract build step (compiled extensions,
+    /// codegen), run when the package ships source that needs compiling.
+    /// Builds run in an isolated staging copy — never inside the immutable
+    /// source store — and results are cached per (sha256, target, command).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub build: Option<BuildSection>,
-    /// Consumer-side patches to a *dependency's* build step, keyed by
-    /// `org/name`. Lets a project fix a broken/missing upstream build locally.
-    #[serde(
-        default,
-        rename = "build-overrides",
-        skip_serializing_if = "BTreeMap::is_empty"
-    )]
-    pub build_overrides: BTreeMap<String, BuildSection>,
-    /// Executables this package exposes, `name -> path relative to the package
-    /// root`. On install they are hoisted into `zed_modules/.bin/` and run via
-    /// `zed run <name>` (zed-docs issue #7).
+    /// Consumer-side patches for dependencies (e.g. fixing a dependency's
+    /// broken or missing `[build]` step without waiting on upstream).
+    #[serde(default, skip_serializing_if = "OverridesSection::is_empty")]
+    pub overrides: OverridesSection,
+    /// Executables this package exposes, keyed by command name, valued by a
+    /// path relative to the package root. On install they are hoisted into
+    /// `zed_modules/.bin/` and runnable via `zed run <name>` (zed-docs
+    /// issue #7).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub bin: BTreeMap<String, String>,
     #[serde(default)]
     pub publish: PublishSection,
     #[serde(default)]
     pub scripts: ScriptsSection,
-}
-
-/// A build step: the command to run after extraction, and the artifacts to
-/// expose. Because compiled output is OS/arch-specific, zed-pkg runs this in a
-/// sandbox and caches the result in a build cache keyed by
-/// `(source sha256, target triple, command)` — separate from the universal,
-/// platform-independent source store (zed-docs issue #5).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct BuildSection {
-    /// Command executed with `sh -c` in the sandboxed copy of the source.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub command: Option<String>,
-    /// Files (relative paths) to expose to consumers. When empty, the whole
-    /// built tree is exposed.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub outputs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -128,8 +116,9 @@ pub struct PublishSection {
     pub exclude: Vec<String>,
     /// Keep README files in the published artifact (stripped by default).
     pub include_readme: bool,
-    /// Command run by `zed test-local` inside a throwaway consumer project
-    /// that has this package installed the same way a real consumer would.
+    /// Command run by `zed r2g` (alias `zed test-local`) inside a throwaway
+    /// consumer project that has this package installed the same way a real
+    /// consumer would.
     pub smoke_test: Option<String>,
     /// VCS tag template that must exist and point at the published commit.
     /// `{version}` is substituted with `package.version`.
@@ -155,13 +144,45 @@ pub struct ScriptsSection {
     pub test: Option<String>,
 }
 
+/// A post-extract build step. Because compiled output is OS/arch-specific,
+/// zed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the
+/// source and caches the result in a build cache keyed by
+/// `(source sha256, target triple, command)` — separate from the universal,
+/// platform-independent source store (zed-docs issue #5).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BuildSection {
+    /// Command executed after extraction, e.g. `make` or `cargo build --release`.
+    pub command: String,
+    /// Paths (relative to the package root) to keep from the staging build.
+    /// Empty means keep everything.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
+}
+
 /// Monorepo workspace membership. `members` are glob patterns (relative to
 /// the workspace root) selecting directories that each contain a `.zpkg.toml`,
-/// e.g. `["packages/*", "apps/*"]`.
+/// e.g. `["packages/*", "apps/*"]`. Dependencies that resolve to a member are
+/// linked straight to the member's source directory instead of going through
+/// the registry.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct WorkspaceSection {
     pub members: Vec<String>,
+}
+
+/// Consumer-side dependency patches, keyed by `org/name`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct OverridesSection {
+    /// Replace or provide a dependency's `[build]` step.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub build: BTreeMap<String, BuildSection>,
+}
+
+impl OverridesSection {
+    pub fn is_empty(&self) -> bool {
+        self.build.is_empty()
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -176,26 +197,25 @@ pub enum ManifestError {
     InvalidDependencyKey(String),
     #[error("invalid requirement `{1}` for dependency `{0}`: {2}")]
     InvalidDependencyReq(String, String, String),
-    #[error("invalid bin `{0}`: {1}")]
+    #[error("invalid repository url `{0}`: {1}")]
+    InvalidRepositoryUrl(String, String),
+    #[error("invalid bin entry `{0}`: {1}")]
     InvalidBin(String, String),
+    #[error("invalid build section: {0}")]
+    InvalidBuild(String),
     #[error("invalid workspace member pattern `{0}`")]
     InvalidWorkspaceMember(String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
 
-/// True for a relative path that stays within the package (no absolute paths,
-/// no `..` traversal). Used to keep hoisted bins and build outputs contained.
-pub fn is_safe_relative_path(path: &str) -> bool {
-    let p = std::path::Path::new(path);
-    !path.is_empty()
-        && p.is_relative()
-        && p.components().all(|c| {
-            matches!(
-                c,
-                std::path::Component::Normal(_) | std::path::Component::CurDir
-            )
-        })
+/// True for the lowercase slugs zed-pkg accepts as org and package names.
+pub fn is_slug(s: &str) -> bool {
+    !s.is_empty()
+        && !s.starts_with('-')
+        && !s.ends_with('-')
+        && s.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 /// True for a well-formed `org/name` dependency key.
@@ -207,13 +227,38 @@ pub fn is_dependency_key(key: &str) -> bool {
     }
 }
 
-/// True for the lowercase slugs zed-pkg accepts as org and package names.
-pub fn is_slug(s: &str) -> bool {
-    !s.is_empty()
-        && !s.starts_with('-')
-        && !s.ends_with('-')
+/// True for a 64-character lowercase-hex sha256 digest. Registry responses
+/// and lockfiles feed digests into filesystem paths, so anything else is
+/// rejected before it can reach the disk layer.
+pub fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64
         && s.chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+}
+
+/// True when `path` is a relative path with no `..` components — the only
+/// shape allowed for manifest-declared paths (bin targets, build outputs).
+/// Keeps hoisted bins and build outputs contained inside the package.
+pub fn is_safe_relative_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with('/')
+        && !path.starts_with('\\')
+        && !path.contains('\0')
+        // windows drive/UNC prefixes
+        && !(path.len() >= 2 && path.as_bytes()[1] == b':')
+        && !path
+            .split(['/', '\\'])
+            .any(|seg| seg == ".." || seg.is_empty())
+}
+
+fn is_allowed_repo_url(url: &str) -> bool {
+    // The repo URL renders as a link in registry UIs and is shelled to VCS
+    // tooling, so restrict it to the schemes those consumers expect.
+    ["https://", "http://", "ssh://", "git://", "git+ssh://"]
+        .iter()
+        .any(|scheme| url.starts_with(scheme))
+        // scp-like git syntax: git@github.com:org/repo.git
+        || (url.contains('@') && url.contains(':') && !url.contains("://"))
 }
 
 impl Manifest {
@@ -240,14 +285,17 @@ impl Manifest {
             .version_scheme
             .validate_version(&self.package.version)
             .map_err(|e| ManifestError::InvalidVersion(self.package.version.clone(), e))?;
-        for (key, req) in &self.dependencies {
-            let mut parts = key.splitn(2, '/');
-            let (org, name) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
-            if !is_slug(org) || !is_slug(name) {
+        if !is_allowed_repo_url(&self.package.repository.url) {
+            return Err(ManifestError::InvalidRepositoryUrl(
+                self.package.repository.url.clone(),
+                "expected an https/http/ssh/git URL or scp-like git syntax".to_string(),
+            ));
+        }
+        for (key, req) in self.dependencies.iter().chain(&self.build_dependencies) {
+            if !is_dependency_key(key) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
             }
-            // A requirement is either a semver range or an exact (opaque) tag;
-            // only an empty string is invalid.
+            // A requirement is either a semver range or an exact (opaque) tag.
             if req.trim().is_empty() {
                 return Err(ManifestError::InvalidDependencyReq(
                     key.clone(),
@@ -255,37 +303,53 @@ impl Manifest {
                     "requirement must not be empty".to_string(),
                 ));
             }
-            let _ = Requirement::parse(req);
-        }
-        for (key, req) in &self.build_dependencies {
-            if !is_dependency_key(key) {
-                return Err(ManifestError::InvalidDependencyKey(key.clone()));
-            }
-            if req.trim().is_empty() {
+            // Ranges that *look* like semver ranges but do not parse are
+            // rejected rather than silently degrading to an opaque tag.
+            if let Err(reason) = Requirement::validate(req) {
                 return Err(ManifestError::InvalidDependencyReq(
                     key.clone(),
                     req.clone(),
-                    "build-dependency requirement must not be empty".to_string(),
+                    reason,
                 ));
             }
         }
-        for key in self.build_overrides.keys() {
+        for (bin_name, target) in &self.bin {
+            if bin_name.is_empty()
+                || bin_name.starts_with('.')
+                || bin_name
+                    .chars()
+                    .any(|c| !(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'))
+            {
+                return Err(ManifestError::InvalidBin(
+                    bin_name.clone(),
+                    "names use [A-Za-z0-9._-] and cannot start with `.`".to_string(),
+                ));
+            }
+            if !is_safe_relative_path(target) {
+                return Err(ManifestError::InvalidBin(
+                    bin_name.clone(),
+                    format!("target `{target}` must be a relative path without `..`"),
+                ));
+            }
+        }
+        let overriding = self.overrides.build.values();
+        for build in self.build.iter().chain(overriding) {
+            if build.command.trim().is_empty() {
+                return Err(ManifestError::InvalidBuild(
+                    "command must not be empty".to_string(),
+                ));
+            }
+            for output in &build.outputs {
+                if !is_safe_relative_path(output) {
+                    return Err(ManifestError::InvalidBuild(format!(
+                        "output `{output}` must be a relative path without `..`"
+                    )));
+                }
+            }
+        }
+        for key in self.overrides.build.keys() {
             if !is_dependency_key(key) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
-            }
-        }
-        for (name, path) in &self.bin {
-            if name.trim().is_empty() || name.contains('/') || name.contains('\\') {
-                return Err(ManifestError::InvalidBin(
-                    name.clone(),
-                    "bin name must be non-empty with no path separators".to_string(),
-                ));
-            }
-            if !is_safe_relative_path(path) {
-                return Err(ManifestError::InvalidBin(
-                    name.clone(),
-                    format!("bin path `{path}` must be relative and stay inside the package"),
-                ));
             }
         }
         if let Some(ws) = &self.workspace {
@@ -306,18 +370,14 @@ impl Manifest {
     }
 
     /// The effective build step for a dependency `org/name`: this manifest's
-    /// `[build-overrides]` entry if present, else the dependency's own
-    /// `[build]`. Returns `None` when neither declares a build command.
+    /// `[overrides.build]` entry if present, else the dependency's own
+    /// `[build]`. Returns `None` when neither declares one.
     pub fn effective_build(
         &self,
         dep_key: &str,
         dep_build: Option<&BuildSection>,
     ) -> Option<BuildSection> {
-        self.build_overrides
-            .get(dep_key)
-            .or(dep_build)
-            .filter(|b| b.command.is_some())
-            .cloned()
+        self.overrides.build.get(dep_key).or(dep_build).cloned()
     }
 
     /// `org/name`, the canonical package identifier.

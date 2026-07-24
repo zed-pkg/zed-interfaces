@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "YankResponse",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "org": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "yanked": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "org",
+    "name",
+    "version",
+    "yanked"
+  ]
+}
