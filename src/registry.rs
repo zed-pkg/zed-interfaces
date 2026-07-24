@@ -141,6 +141,20 @@ pub struct PublishResponse {
     pub sha256: String,
 }
 
+/// Body for the yank route. `yanked: false` restores a yanked version.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct YankRequest {
+    pub yanked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct YankResponse {
+    pub org: String,
+    pub name: String,
+    pub version: String,
+    pub yanked: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ClaimOrgRequest {
     pub slug: String,
