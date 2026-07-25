@@ -179,8 +179,17 @@ pub struct InstallSection {
 
 impl InstallSection {
     pub fn is_empty(&self) -> bool {
-        self.dir.is_none() && self.adapter.is_none()
+        self.dir.is_none() && self.adapter.is_none() && self.target.is_none()
     }
+}
+
+/// One ecosystem's slice of a polyglot package.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TargetSection {
+    /// Package-relative directory that is this ecosystem's package root, e.g.
+    /// `python` or `clients/go`. Must be a safe relative path (no leading `/`,
+    /// no `..`) so a target can never escape the package.
+    pub dir: String,
 }
 
 /// A post-extract build step. Because compiled output is OS/arch-specific,
