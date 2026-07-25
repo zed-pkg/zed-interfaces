@@ -5,14 +5,14 @@
   "type": "object",
   "properties": {
     "bin": {
-      "description": "Executables this package exposes, keyed by command name, valued by a\npath relative to the package root. Consumers get them hoisted into\n`zed_modules/.bin/` and runnable via `zed run <name>`.",
+      "description": "Executables this package exposes, keyed by command name, valued by a\npath relative to the package root. On install they are hoisted into\n`zed_modules/.bin/` and runnable via `zed run <name>` (zed-docs\nissue #7).",
       "type": "object",
       "additionalProperties": {
         "type": "string"
       }
     },
     "build": {
-      "description": "Optional post-extract build step (compiled extensions, codegen).\nBuilds run in an isolated staging copy — never inside the immutable\nsource store — and results are cached per (sha256, platform).",
+      "description": "This package's own post-extract build step (compiled extensions,\ncodegen), run when the package ships source that needs compiling.\nBuilds run in an isolated staging copy — never inside the immutable\nsource store — and results are cached per (sha256, target, command).",
       "anyOf": [
         {
           "$ref": "#/$defs/BuildSection"
@@ -22,8 +22,8 @@
         }
       ]
     },
-    "build_dependencies": {
-      "description": "Dependencies needed only while running this package's `[build]`\ncommand. Never linked into a consumer's zed_modules/.",
+    "build-dependencies": {
+      "description": "Tools needed only while running this package's `[build]` command\n(compilers, codegen). They are made available in the build sandbox and\nnever linked into a consumer's `zed_modules/`. See [`BuildSection`]\nand zed-docs issue #5. Canonical TOML key is Cargo-style\n`[build-dependencies]`; the snake_case spelling is accepted on read.",
       "type": "object",
       "additionalProperties": {
         "type": "string"
@@ -37,7 +37,7 @@
       }
     },
     "overrides": {
-      "description": "Consumer-side patches for dependencies (e.g. fixing a dependency's\nbroken or missing build command without waiting on upstream).",
+      "description": "Consumer-side patches for dependencies (e.g. fixing a dependency's\nbroken or missing `[build]` step without waiting on upstream).",
       "$ref": "#/$defs/OverridesSection"
     },
     "package": {
@@ -59,7 +59,7 @@
       }
     },
     "workspace": {
-      "description": "Monorepo workspace configuration; only meaningful in a workspace\nroot manifest.",
+      "description": "Monorepo workspace declaration (zed-docs issue #7); only meaningful in\na workspace root manifest. When present, `zed install` at this root\nresolves every member against one store and writes one `.zpkg.lock`;\nmember→member dependencies link by path instead of going through the\nregistry.",
       "anyOf": [
         {
           "$ref": "#/$defs/WorkspaceSection"
@@ -75,7 +75,7 @@
   ],
   "$defs": {
     "BuildSection": {
-      "description": "A post-extract build step. `command` runs via `sh -c` inside a staging\ncopy of the package; `outputs` optionally narrows what is promoted into\nthe per-platform build cache (default: the whole staged tree).",
+      "description": "A post-extract build step. Because compiled output is OS/arch-specific,\nzed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the\nsource and caches the result in a build cache keyed by\n`(source sha256, target triple, command)` — separate from the universal,\nplatform-independent source store (zed-docs issue #5).",
       "type": "object",
       "properties": {
         "command": {
@@ -172,7 +172,7 @@
           "default": false
         },
         "smoke_test": {
-          "description": "Command run by `zed test-local` inside a throwaway consumer project\nthat has this package installed the same way a real consumer would.",
+          "description": "Command run by `zed r2g` (alias `zed test-local`) inside a throwaway\nconsumer project that has this package installed the same way a real\nconsumer would.",
           "type": [
             "string",
             "null"
@@ -248,7 +248,7 @@
       ]
     },
     "WorkspaceSection": {
-      "description": "Workspace configuration for monorepos: member globs relative to the\nworkspace root, e.g. `[\"packages/*\", \"apps/*\"]`. Dependencies that\nresolve to a member are symlinked straight to the member's source\ndirectory instead of going through the registry.",
+      "description": "Monorepo workspace membership. `members` are glob patterns (relative to\nthe workspace root) selecting directories that each contain a `.zpkg.toml`,\ne.g. `[\"packages/*\", \"apps/*\"]`. Dependencies that resolve to a member are\nlinked straight to the member's source directory instead of going through\nthe registry.",
       "type": "object",
       "properties": {
         "members": {

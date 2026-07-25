@@ -31,35 +31,56 @@ use crate::version::{Requirement, VersionScheme};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Manifest {
     pub package: PackageSection,
+    /// Monorepo workspace declaration (zed-docs issue #7); only meaningful in
+    /// a workspace root manifest. When present, `zed install` at this root
+    /// resolves every member against one store and writes one `.zpkg.lock`;
+    /// member→member dependencies link by path instead of going through the
+    /// registry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceSection>,
     /// Dependencies keyed by `org/name`, valued by a semver requirement.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub dependencies: BTreeMap<String, String>,
-    /// Dependencies needed only while running this package's `[build]`
-    /// command. Never linked into a consumer's zed_modules/.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    /// Tools needed only while running this package's `[build]` command
+    /// (compilers, codegen). They are made available in the build sandbox and
+    /// never linked into a consumer's `zed_modules/`. See [`BuildSection`]
+    /// and zed-docs issue #5. Canonical TOML key is Cargo-style
+    /// `[build-dependencies]`; the snake_case spelling is accepted on read.
+    #[serde(
+        default,
+        rename = "build-dependencies",
+        alias = "build_dependencies",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     pub build_dependencies: BTreeMap<String, String>,
+    /// This package's own post-extract build step (compiled extensions,
+    /// codegen), run when the package ships source that needs compiling.
+    /// Builds run in an isolated staging copy — never inside the immutable
+    /// source store — and results are cached per (sha256, target, command).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<BuildSection>,
+    /// Consumer-side patches for dependencies (e.g. fixing a dependency's
+    /// broken or missing `[build]` step without waiting on upstream).
+    #[serde(default, skip_serializing_if = "OverridesSection::is_empty")]
+    pub overrides: OverridesSection,
+    /// Executables this package exposes, keyed by command name, valued by a
+    /// path relative to the package root. On install they are hoisted into
+    /// `zed_modules/.bin/` and runnable via `zed run <name>` (zed-docs
+    /// issue #7).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub bin: BTreeMap<String, String>,
     #[serde(default)]
     pub publish: PublishSection,
     #[serde(default)]
     pub scripts: ScriptsSection,
-    /// Executables this package exposes, keyed by command name, valued by a
-    /// path relative to the package root. Consumers get them hoisted into
-    /// `zed_modules/.bin/` and runnable via `zed run <name>`.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub bin: BTreeMap<String, String>,
-    /// Optional post-extract build step (compiled extensions, codegen).
-    /// Builds run in an isolated staging copy — never inside the immutable
-    /// source store — and results are cached per (sha256, platform).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub build: Option<BuildSection>,
-    /// Monorepo workspace configuration; only meaningful in a workspace
-    /// root manifest.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace: Option<WorkspaceSection>,
-    /// Consumer-side patches for dependencies (e.g. fixing a dependency's
-    /// broken or missing build command without waiting on upstream).
-    #[serde(default, skip_serializing_if = "OverridesSection::is_empty")]
-    pub overrides: OverridesSection,
+    /// Where zed materializes the (few, hand-picked) dependencies it sources —
+    /// zed complements npm/maven/etc. rather than replacing them, so this dir
+    /// sits alongside the native one and the ecosystem adapter wires it into
+    /// the toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`
+    /// defaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or
+    /// `.deps/.zed`.
+    #[serde(default, skip_serializing_if = "InstallSection::is_empty")]
+    pub install: InstallSection,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -103,8 +124,9 @@ pub struct PublishSection {
     pub exclude: Vec<String>,
     /// Keep README files in the published artifact (stripped by default).
     pub include_readme: bool,
-    /// Command run by `zed test-local` inside a throwaway consumer project
-    /// that has this package installed the same way a real consumer would.
+    /// Command run by `zed r2g` (alias `zed test-local`) inside a throwaway
+    /// consumer project that has this package installed the same way a real
+    /// consumer would.
     pub smoke_test: Option<String>,
     /// VCS tag template that must exist and point at the published commit.
     /// `{version}` is substituted with `package.version`.
@@ -130,9 +152,11 @@ pub struct ScriptsSection {
     pub test: Option<String>,
 }
 
-/// A post-extract build step. `command` runs via `sh -c` inside a staging
-/// copy of the package; `outputs` optionally narrows what is promoted into
-/// the per-platform build cache (default: the whole staged tree).
+/// A post-extract build step. Because compiled output is OS/arch-specific,
+/// zed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the
+/// source and caches the result in a build cache keyed by
+/// `(source sha256, target triple, command)` — separate from the universal,
+/// platform-independent source store (zed-docs issue #5).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct BuildSection {
     /// Command executed after extraction, e.g. `make` or `cargo build --release`.
@@ -143,10 +167,11 @@ pub struct BuildSection {
     pub outputs: Vec<String>,
 }
 
-/// Workspace configuration for monorepos: member globs relative to the
-/// workspace root, e.g. `["packages/*", "apps/*"]`. Dependencies that
-/// resolve to a member are symlinked straight to the member's source
-/// directory instead of going through the registry.
+/// Monorepo workspace membership. `members` are glob patterns (relative to
+/// the workspace root) selecting directories that each contain a `.zpkg.toml`,
+/// e.g. `["packages/*", "apps/*"]`. Dependencies that resolve to a member are
+/// linked straight to the member's source directory instead of going through
+/// the registry.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct WorkspaceSection {
@@ -186,6 +211,8 @@ pub enum ManifestError {
     InvalidBin(String, String),
     #[error("invalid build section: {0}")]
     InvalidBuild(String),
+    #[error("invalid workspace member pattern `{0}`")]
+    InvalidWorkspaceMember(String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
@@ -199,6 +226,15 @@ pub fn is_slug(s: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+/// True for a well-formed `org/name` dependency key.
+pub fn is_dependency_key(key: &str) -> bool {
+    let mut parts = key.splitn(2, '/');
+    match (parts.next(), parts.next()) {
+        (Some(org), Some(name)) => is_slug(org) && is_slug(name),
+        _ => false,
+    }
+}
+
 /// True for a 64-character lowercase-hex sha256 digest. Registry responses
 /// and lockfiles feed digests into filesystem paths, so anything else is
 /// rejected before it can reach the disk layer.
@@ -210,6 +246,7 @@ pub fn is_sha256_hex(s: &str) -> bool {
 
 /// True when `path` is a relative path with no `..` components — the only
 /// shape allowed for manifest-declared paths (bin targets, build outputs).
+/// Keeps hoisted bins and build outputs contained inside the package.
 pub fn is_safe_relative_path(path: &str) -> bool {
     !path.is_empty()
         && !path.starts_with('/')
@@ -263,9 +300,7 @@ impl Manifest {
             ));
         }
         for (key, req) in self.dependencies.iter().chain(&self.build_dependencies) {
-            let mut parts = key.splitn(2, '/');
-            let (org, name) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
-            if !is_slug(org) || !is_slug(name) {
+            if !is_dependency_key(key) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
             }
             // A requirement is either a semver range or an exact (opaque) tag.
@@ -320,14 +355,37 @@ impl Manifest {
                 }
             }
         }
-        for (key, _) in &self.overrides.build {
-            let mut parts = key.splitn(2, '/');
-            let (org, name) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
-            if !is_slug(org) || !is_slug(name) {
+        for key in self.overrides.build.keys() {
+            if !is_dependency_key(key) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
             }
         }
+        if let Some(ws) = &self.workspace {
+            for pat in &ws.members {
+                if pat.trim().is_empty() {
+                    return Err(ManifestError::InvalidWorkspaceMember(pat.clone()));
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// True when this manifest declares a non-empty monorepo workspace.
+    pub fn is_workspace_root(&self) -> bool {
+        self.workspace
+            .as_ref()
+            .is_some_and(|w| !w.members.is_empty())
+    }
+
+    /// The effective build step for a dependency `org/name`: this manifest's
+    /// `[overrides.build]` entry if present, else the dependency's own
+    /// `[build]`. Returns `None` when neither declares one.
+    pub fn effective_build(
+        &self,
+        dep_key: &str,
+        dep_build: Option<&BuildSection>,
+    ) -> Option<BuildSection> {
+        self.overrides.build.get(dep_key).or(dep_build).cloned()
     }
 
     /// `org/name`, the canonical package identifier.
