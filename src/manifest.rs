@@ -262,6 +262,8 @@ pub enum ManifestError {
     InvalidWorkspaceMember(String),
     #[error("invalid install dir `{0}`: {1}")]
     InvalidInstallDir(String, String),
+    #[error("invalid target `{0}`: {1}")]
+    InvalidTarget(String, String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
