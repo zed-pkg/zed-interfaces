@@ -372,6 +372,28 @@ impl Manifest {
                 ));
             }
         }
+        for (name, target) in &self.targets {
+            if !is_target_name(name) {
+                return Err(ManifestError::InvalidTarget(
+                    name.clone(),
+                    "target names use [a-z0-9][a-z0-9-]* (e.g. `node`, `python`, `go`)".to_string(),
+                ));
+            }
+            if !is_safe_relative_path(&target.dir) {
+                return Err(ManifestError::InvalidTarget(
+                    name.clone(),
+                    format!("dir `{}` must be a relative path without `..`", target.dir),
+                ));
+            }
+        }
+        if let Some(requested) = &self.install.target
+            && !is_target_name(requested)
+        {
+            return Err(ManifestError::InvalidTarget(
+                requested.clone(),
+                "target names use [a-z0-9][a-z0-9-]*".to_string(),
+            ));
+        }
         for (bin_name, target) in &self.bin {
             if bin_name.is_empty()
                 || bin_name.starts_with('.')
