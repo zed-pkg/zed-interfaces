@@ -235,6 +235,8 @@ pub enum ManifestError {
     InvalidBuild(String),
     #[error("invalid workspace member pattern `{0}`")]
     InvalidWorkspaceMember(String),
+    #[error("invalid install dir `{0}`: {1}")]
+    InvalidInstallDir(String, String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
