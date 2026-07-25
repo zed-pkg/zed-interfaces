@@ -404,6 +404,8 @@ impl Manifest {
                 ));
             }
         }
+        let mut target_dirs = BTreeMap::<&str, &str>::new();
+        let mut published_names = BTreeMap::<String, &str>::new();
         for (name, target) in &self.targets {
             if !is_target_name(name) {
                 return Err(ManifestError::InvalidTarget(
@@ -415,6 +417,53 @@ impl Manifest {
                 return Err(ManifestError::InvalidTarget(
                     name.clone(),
                     format!("dir `{}` must be a relative path without `..`", target.dir),
+                ));
+            }
+            if let Some(previous) = target_dirs.insert(target.dir.as_str(), name.as_str()) {
+                return Err(ManifestError::InvalidTarget(
+                    name.clone(),
+                    format!(
+                        "dir `{}` is already owned by target `{previous}`; every target must have an isolated source root",
+                        target.dir
+                    ),
+                ));
+            }
+            let published_name = target
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("{}-{name}", self.package.name));
+            if !is_slug(&published_name) {
+                return Err(ManifestError::InvalidTarget(
+                    name.clone(),
+                    format!(
+                        "published name `{published_name}` must match [a-z0-9][a-z0-9-]*[a-z0-9]"
+                    ),
+                ));
+            }
+            if published_name == self.package.name {
+                return Err(ManifestError::InvalidTarget(
+                    name.clone(),
+                    format!(
+                        "published name `{published_name}` collides with the polyglot source package"
+                    ),
+                ));
+            }
+            if let Some(previous) = published_names.insert(published_name.clone(), name.as_str()) {
+                return Err(ManifestError::InvalidTarget(
+                    name.clone(),
+                    format!(
+                        "published name `{published_name}` is already used by target `{previous}`"
+                    ),
+                ));
+            }
+            if let Some(adapter) = target.adapter.as_deref()
+                && !matches!(adapter, "node" | "java" | "none")
+            {
+                return Err(ManifestError::InvalidTarget(
+                    name.clone(),
+                    format!(
+                        "adapter `{adapter}` is unsupported; expected `node`, `java`, or `none`"
+                    ),
                 ));
             }
         }

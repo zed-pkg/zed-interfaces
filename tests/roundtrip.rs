@@ -124,6 +124,9 @@ fn excludes_respect_include_readme() {
     assert!(readme_kept.iter().any(|p| p == "extra/**"));
 
     assert!(DEFAULT_EXCLUDES.contains(&".github/**"));
+    assert!(DEFAULT_EXCLUDES.contains(&"**/node_modules/**"));
+    assert!(DEFAULT_EXCLUDES.contains(&"**/.dart_tool/**"));
+    assert!(DEFAULT_EXCLUDES.contains(&"**/build/**"));
     assert!(ALWAYS_INCLUDE.contains(&"LICENSE*"));
     assert!(ALWAYS_INCLUDE.contains(&".zpkg.toml"));
 }
@@ -225,6 +228,39 @@ fn target_dirs_and_names_are_validated() {
     let bad_request = format!("{SAMPLE}\n[install]\ntarget = \"Python 3\"\n");
     assert!(matches!(
         Manifest::parse(&bad_request),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+
+    let bad_published_name = POLYGLOT.replace(
+        "[targets.node]\ndir = \"node\"",
+        "[targets.node]\ndir = \"node\"\nname = \"Node SDK\"",
+    );
+    assert!(matches!(
+        Manifest::parse(&bad_published_name),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+
+    let duplicate_dir = POLYGLOT.replace(r#"dir = "python""#, r#"dir = "node""#);
+    assert!(matches!(
+        Manifest::parse(&duplicate_dir),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+
+    let duplicate_name = POLYGLOT.replace(
+        "[targets.python]\ndir = \"python\"",
+        "[targets.python]\ndir = \"python\"\nname = \"polyglot-lib-node\"",
+    );
+    assert!(matches!(
+        Manifest::parse(&duplicate_name),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+
+    let bad_adapter = POLYGLOT.replace(
+        "[targets.node]\ndir = \"node\"",
+        "[targets.node]\ndir = \"node\"\nadapter = \"npm\"",
+    );
+    assert!(matches!(
+        Manifest::parse(&bad_adapter),
         Err(ManifestError::InvalidTarget(_, _))
     ));
 }

@@ -83,6 +83,13 @@
             "string",
             "null"
           ]
+        },
+        "target": {
+          "description": "Which language subtree to take from **polyglot** dependencies (see\n[`TargetSection`]). Omitted = infer from the project (`package.json` →\n`node`, `go.mod` → `go`, `pyproject.toml` → `python`, …). Naming a\ntarget a dependency does not publish is an error rather than a silent\nfallback: the consumer asked for something specific.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -146,6 +153,13 @@
           "$ref": "#/$defs/ScriptsSection",
           "default": {
             "test": null
+          }
+        },
+        "targets": {
+          "description": "Language subtrees for a **polyglot package** — one repo shipping the\nsame library for several ecosystems (e.g. `node/`, `python/`, `go/`).\nKeyed by ecosystem name; the value says which subdirectory is that\necosystem's package root. On install the consumer resolves one target\nand only that subtree is materialized, so a Python project gets the\nPython source at its import root rather than a tree it has to reach\ninto. Absent (the common case) = single-language package, whole tree.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/TargetSection"
           }
         },
         "workspace": {
@@ -284,6 +298,33 @@
           "default": null
         }
       }
+    },
+    "TargetSection": {
+      "description": "One ecosystem's slice of a polyglot package — and, on publish, its own\nindependently installable package.\n\nA repo like `fiducia-clients` carrying `clients/ts`, `clients/java`, and\n`clients/go` declares one target each. `zed publish` then emits **one\nartifact per target**, named `<name>-<target>` by default:\n\n```text\nfiducia/fiducia-clients-nodejs@1.1.2   <- clients/ts only\nfiducia/fiducia-clients-java@1.1.2     <- clients/java only\nfiducia/fiducia-clients-golang@1.1.2   <- clients/go only\n```\n\nOne source of truth and one version in the repo; N packages on the wire.\nA Java consumer downloads only Java bytes — the decisive advantage over\nshipping one fat artifact and slicing it at install time.",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "description": "Ecosystem adapter consumers of THIS target should use (`node`, `java`,\n`none`). Recorded in the published per-target manifest so a consumer\ngets the right wiring without configuring it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir": {
+          "description": "Package-relative directory that is this ecosystem's package root, e.g.\n`python` or `clients/go`. Must be a safe relative path (no leading `/`,\nno `..`) so a target can never escape the package.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Published package name for this target. Defaults to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to\nbreak out of the suffix convention when an ecosystem expects a\ndifferent spelling.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "dir"
+      ]
     },
     "Vcs": {
       "description": "Version-control systems a package's source repository can live on.\n\nzed-pkg is VCS-agnostic by design: what gets installed is always a\nregistry artifact, and the VCS is where provenance (tags) is anchored.\nAuthors must create a matching tag on their declared backing repo\n(GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo, Gitea, Azure\nDevOps, CodeCommit, Radicle, or self-hosted) before publishing.\n\n`jj` and Sapling are git-compatible and push to git remotes, so their\nprovenance is verified through git tags.",
