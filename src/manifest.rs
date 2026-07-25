@@ -392,11 +392,13 @@ impl Manifest {
                 ));
             }
         }
-        if let Some(requested) = &self.install.target
+        // A blank request means "no target", the same way a blank
+        // `[install].dir` falls back to the default rather than erroring.
+        if let Some(requested) = self.requested_target()
             && !is_target_name(requested)
         {
             return Err(ManifestError::InvalidTarget(
-                requested.clone(),
+                requested.to_string(),
                 "target names use [a-z0-9][a-z0-9-]*".to_string(),
             ));
         }

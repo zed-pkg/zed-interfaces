@@ -133,3 +133,120 @@ fn store_paths_are_sharded() {
     let sha = "abcdef0123".to_string() + &"0".repeat(54);
     assert_eq!(store_entry_rel(&sha), format!("store/v1/ab/{sha}"));
 }
+
+/// A polyglot package declares one subtree per ecosystem; consumers pick one.
+const POLYGLOT: &str = r#"
+[package]
+org = "zedtest"
+name = "polyglot-lib"
+version = "1.0.0"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/zed-pkg-test/polyglot-lib"
+
+[targets.node]
+dir = "node"
+
+[targets.python]
+dir = "python"
+
+[targets.go]
+dir = "go"
+"#;
+
+#[test]
+fn polyglot_targets_roundtrip_and_resolve() {
+    let m = Manifest::parse(POLYGLOT).unwrap();
+    assert!(m.is_polyglot());
+    assert_eq!(m.targets.len(), 3);
+    assert_eq!(m.target_subdir(Some("python")).unwrap(), Some("python"));
+    assert_eq!(m.target_subdir(Some("node")).unwrap(), Some("node"));
+    // Round-trips through TOML unchanged.
+    assert_eq!(Manifest::parse(&m.to_toml_string().unwrap()).unwrap(), m);
+}
+
+#[test]
+fn a_single_language_package_ignores_target_selection() {
+    // No [targets] => always the whole tree, even if a consumer asks for one.
+    // Existing packages must keep installing exactly as before.
+    let m = Manifest::parse(SAMPLE).unwrap();
+    assert!(!m.is_polyglot());
+    assert_eq!(m.target_subdir(None).unwrap(), None);
+    assert_eq!(m.target_subdir(Some("python")).unwrap(), None);
+}
+
+#[test]
+fn a_polyglot_package_without_a_request_yields_the_whole_tree() {
+    // A consumer that has not opted into a target still installs fine.
+    let m = Manifest::parse(POLYGLOT).unwrap();
+    assert_eq!(m.target_subdir(None).unwrap(), None);
+}
+
+#[test]
+fn requesting_an_unpublished_target_is_an_error_listing_what_exists() {
+    let m = Manifest::parse(POLYGLOT).unwrap();
+    let err = m
+        .target_subdir(Some("ruby"))
+        .expect_err("a target the package does not publish must not silently fall back");
+    let msg = err.to_string();
+    assert!(msg.contains("ruby"), "{msg}");
+    assert!(msg.contains("zedtest/polyglot-lib"), "{msg}");
+    // The message enumerates the real targets so the fix is obvious.
+    for target in ["go", "node", "python"] {
+        assert!(msg.contains(target), "expected `{target}` listed in: {msg}");
+    }
+}
+
+#[test]
+fn target_dirs_and_names_are_validated() {
+    // `..` in a target dir would escape the package on install.
+    let escaping = POLYGLOT.replace(r#"dir = "python""#, r#"dir = "../../etc""#);
+    assert!(matches!(
+        Manifest::parse(&escaping),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+
+    // Absolute dirs likewise.
+    let absolute = POLYGLOT.replace(r#"dir = "python""#, r#"dir = "/etc/passwd""#);
+    assert!(matches!(
+        Manifest::parse(&absolute),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+
+    // Target names are slugs.
+    let bad_name = POLYGLOT.replace("[targets.node]", "[targets.\"Node JS\"]");
+    assert!(matches!(
+        Manifest::parse(&bad_name),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+
+    // And so is a consumer's requested target.
+    let bad_request = format!("{SAMPLE}\n[install]\ntarget = \"Python 3\"\n");
+    assert!(matches!(
+        Manifest::parse(&bad_request),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+}
+
+#[test]
+fn nested_target_dirs_are_allowed() {
+    // Real repos often nest, e.g. clients/go.
+    let nested = POLYGLOT.replace(r#"dir = "go""#, r#"dir = "clients/go""#);
+    let m = Manifest::parse(&nested).unwrap();
+    assert_eq!(m.target_subdir(Some("go")).unwrap(), Some("clients/go"));
+}
+
+#[test]
+fn consumer_requested_target_is_read_from_the_install_section() {
+    let consumer = format!("{SAMPLE}\n[install]\ndir = \".vendor/.zed\"\ntarget = \"python\"\n");
+    let m = Manifest::parse(&consumer).unwrap();
+    assert_eq!(m.requested_target(), Some("python"));
+    assert_eq!(m.modules_dir(), ".vendor/.zed");
+    assert_eq!(Manifest::parse(&m.to_toml_string().unwrap()).unwrap(), m);
+
+    // Absent or blank = no request.
+    assert_eq!(Manifest::parse(SAMPLE).unwrap().requested_target(), None);
+    let blank = format!("{SAMPLE}\n[install]\ntarget = \"  \"\n");
+    assert_eq!(Manifest::parse(&blank).unwrap().requested_target(), None);
+}
