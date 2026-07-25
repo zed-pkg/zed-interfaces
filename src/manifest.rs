@@ -175,6 +175,13 @@ pub struct InstallSection {
     /// auto-detect (or the CLI `--adapter`). Mirrors the CLI's values.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub adapter: Option<String>,
+    /// Which language subtree to take from **polyglot** dependencies (see
+    /// [`TargetSection`]). Omitted = infer from the project (`package.json` →
+    /// `node`, `go.mod` → `go`, `pyproject.toml` → `python`, …). Naming a
+    /// target a dependency does not publish is an error rather than a silent
+    /// fallback: the consumer asked for something specific.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
 }
 
 impl InstallSection {
