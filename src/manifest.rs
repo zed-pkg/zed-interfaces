@@ -73,6 +73,14 @@ pub struct Manifest {
     pub publish: PublishSection,
     #[serde(default)]
     pub scripts: ScriptsSection,
+    /// Where zed materializes the (few, hand-picked) dependencies it sources —
+    /// zed complements npm/maven/etc. rather than replacing them, so this dir
+    /// sits alongside the native one and the ecosystem adapter wires it into
+    /// the toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`
+    /// defaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or
+    /// `.deps/.zed`.
+    #[serde(default, skip_serializing_if = "InstallSection::is_empty")]
+    pub install: InstallSection,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -144,6 +152,28 @@ pub struct ScriptsSection {
     pub test: Option<String>,
 }
 
+/// Install-layout controls: where zed's dependency tree lands and which
+/// ecosystem adapter to emit so those deps are visible to the native toolchain.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct InstallSection {
+    /// Project-relative directory for the installed tree (`<dir>/<org>/<name>`).
+    /// Defaults to `zed_modules`. Common overrides: `.vendor/.zed`, `.deps/.zed`.
+    /// Must be a safe relative path (no leading `/`, no `..`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+    /// Force the ecosystem adapter: `node`, `java`, or `none`. Omitted =
+    /// auto-detect (or the CLI `--adapter`). Mirrors the CLI's values.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<String>,
+}
+
+impl InstallSection {
+    pub fn is_empty(&self) -> bool {
+        self.dir.is_none() && self.adapter.is_none()
+    }
+}
+
 /// A post-extract build step. Because compiled output is OS/arch-specific,
 /// zed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the
 /// source and caches the result in a build cache keyed by
@@ -205,6 +235,8 @@ pub enum ManifestError {
     InvalidBuild(String),
     #[error("invalid workspace member pattern `{0}`")]
     InvalidWorkspaceMember(String),
+    #[error("invalid install dir `{0}`: {1}")]
+    InvalidInstallDir(String, String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
@@ -359,7 +391,26 @@ impl Manifest {
                 }
             }
         }
+        if let Some(dir) = &self.install.dir
+            && !is_safe_relative_path(dir)
+        {
+            return Err(ManifestError::InvalidInstallDir(
+                dir.clone(),
+                "must be a relative path without `..` or a leading `/`".to_string(),
+            ));
+        }
         Ok(())
+    }
+
+    /// Project-relative directory dependencies install into. Honors
+    /// `[install].dir` (e.g. `.vendor/.zed`), else the default `zed_modules`.
+    pub fn modules_dir(&self) -> &str {
+        self.install
+            .dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or(crate::paths::MODULES_DIR)
     }
 
     /// True when this manifest declares a non-empty monorepo workspace.
