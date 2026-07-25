@@ -389,7 +389,26 @@ impl Manifest {
                 }
             }
         }
+        if let Some(dir) = &self.install.dir
+            && !is_safe_relative_path(dir)
+        {
+            return Err(ManifestError::InvalidInstallDir(
+                dir.clone(),
+                "must be a relative path without `..` or a leading `/`".to_string(),
+            ));
+        }
         Ok(())
+    }
+
+    /// Project-relative directory dependencies install into. Honors
+    /// `[install].dir` (e.g. `.vendor/.zed`), else the default `zed_modules`.
+    pub fn modules_dir(&self) -> &str {
+        self.install
+            .dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or(crate::paths::MODULES_DIR)
     }
 
     /// True when this manifest declares a non-empty monorepo workspace.
