@@ -44,6 +44,27 @@ fn manifest_roundtrip() {
 }
 
 #[test]
+fn install_dir_defaults_and_overrides() {
+    // No [install] section -> the default dep dir.
+    assert_eq!(Manifest::parse(SAMPLE).unwrap().modules_dir(), "zed_modules");
+
+    // A configured dir relocates the tree and round-trips.
+    let with_dir = format!("{SAMPLE}\n[install]\ndir = \".vendor/.zed\"\n");
+    let m = Manifest::parse(&with_dir).unwrap();
+    assert_eq!(m.modules_dir(), ".vendor/.zed");
+    assert_eq!(Manifest::parse(&m.to_toml_string().unwrap()).unwrap(), m);
+
+    // Unsafe dirs are rejected.
+    for bad in ["/abs/path", "../escape", "a/../../b"] {
+        let src = format!("{SAMPLE}\n[install]\ndir = \"{bad}\"\n");
+        assert!(
+            matches!(Manifest::parse(&src), Err(ManifestError::InvalidInstallDir(_, _))),
+            "expected {bad} rejected"
+        );
+    }
+}
+
+#[test]
 fn manifest_rejects_bad_input() {
     let bad_org = SAMPLE.replace("org = \"acme\"", "org = \"Acme!\"");
     assert!(matches!(
