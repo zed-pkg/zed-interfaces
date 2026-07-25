@@ -277,6 +277,12 @@ pub fn is_slug(s: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+/// True for a well-formed polyglot target name (`node`, `python`, `go`, …).
+/// Same shape as a slug: these appear in manifests, CLI flags, and messages.
+pub fn is_target_name(s: &str) -> bool {
+    is_slug(s)
+}
+
 /// True for a well-formed `org/name` dependency key.
 pub fn is_dependency_key(key: &str) -> bool {
     let mut parts = key.splitn(2, '/');
