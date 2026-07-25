@@ -36,6 +36,10 @@
         "type": "string"
       }
     },
+    "install": {
+      "description": "Where zed materializes the (few, hand-picked) dependencies it sources —\nzed complements npm/maven/etc. rather than replacing them, so this dir\nsits alongside the native one and the ecosystem adapter wires it into\nthe toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`\ndefaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or\n`.deps/.zed`.",
+      "$ref": "#/$defs/InstallSection"
+    },
     "overrides": {
       "description": "Consumer-side patches for dependencies (e.g. fixing a dependency's\nbroken or missing `[build]` step without waiting on upstream).",
       "$ref": "#/$defs/OverridesSection"
@@ -93,6 +97,26 @@
       "required": [
         "command"
       ]
+    },
+    "InstallSection": {
+      "description": "Install-layout controls: where zed's dependency tree lands and which\necosystem adapter to emit so those deps are visible to the native toolchain.",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "description": "Force the ecosystem adapter: `node`, `java`, or `none`. Omitted =\nauto-detect (or the CLI `--adapter`). Mirrors the CLI's values.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir": {
+          "description": "Project-relative directory for the installed tree (`<dir>/<org>/<name>`).\nDefaults to `zed_modules`. Common overrides: `.vendor/.zed`, `.deps/.zed`.\nMust be a safe relative path (no leading `/`, no `..`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "OverridesSection": {
       "description": "Consumer-side dependency patches, keyed by `org/name`.",
