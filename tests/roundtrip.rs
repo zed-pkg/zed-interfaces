@@ -133,3 +133,257 @@ fn store_paths_are_sharded() {
     let sha = "abcdef0123".to_string() + &"0".repeat(54);
     assert_eq!(store_entry_rel(&sha), format!("store/v1/ab/{sha}"));
 }
+
+/// A polyglot package declares one subtree per ecosystem; consumers pick one.
+const POLYGLOT: &str = r#"
+[package]
+org = "zedtest"
+name = "polyglot-lib"
+version = "1.0.0"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/zed-pkg-test/polyglot-lib"
+
+[targets.node]
+dir = "node"
+
+[targets.python]
+dir = "python"
+
+[targets.go]
+dir = "go"
+"#;
+
+#[test]
+fn polyglot_targets_roundtrip_and_resolve() {
+    let m = Manifest::parse(POLYGLOT).unwrap();
+    assert!(m.is_polyglot());
+    assert_eq!(m.targets.len(), 3);
+    assert_eq!(m.target_subdir(Some("python")).unwrap(), Some("python"));
+    assert_eq!(m.target_subdir(Some("node")).unwrap(), Some("node"));
+    // Round-trips through TOML unchanged.
+    assert_eq!(Manifest::parse(&m.to_toml_string().unwrap()).unwrap(), m);
+}
+
+#[test]
+fn a_single_language_package_ignores_target_selection() {
+    // No [targets] => always the whole tree, even if a consumer asks for one.
+    // Existing packages must keep installing exactly as before.
+    let m = Manifest::parse(SAMPLE).unwrap();
+    assert!(!m.is_polyglot());
+    assert_eq!(m.target_subdir(None).unwrap(), None);
+    assert_eq!(m.target_subdir(Some("python")).unwrap(), None);
+}
+
+#[test]
+fn a_polyglot_package_without_a_request_yields_the_whole_tree() {
+    // A consumer that has not opted into a target still installs fine.
+    let m = Manifest::parse(POLYGLOT).unwrap();
+    assert_eq!(m.target_subdir(None).unwrap(), None);
+}
+
+#[test]
+fn requesting_an_unpublished_target_is_an_error_listing_what_exists() {
+    let m = Manifest::parse(POLYGLOT).unwrap();
+    let err = m
+        .target_subdir(Some("ruby"))
+        .expect_err("a target the package does not publish must not silently fall back");
+    let msg = err.to_string();
+    assert!(msg.contains("ruby"), "{msg}");
+    assert!(msg.contains("zedtest/polyglot-lib"), "{msg}");
+    // The message enumerates the real targets so the fix is obvious.
+    for target in ["go", "node", "python"] {
+        assert!(msg.contains(target), "expected `{target}` listed in: {msg}");
+    }
+}
+
+#[test]
+fn target_dirs_and_names_are_validated() {
+    // `..` in a target dir would escape the package on install.
+    let escaping = POLYGLOT.replace(r#"dir = "python""#, r#"dir = "../../etc""#);
+    assert!(matches!(
+        Manifest::parse(&escaping),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+
+    // Absolute dirs likewise.
+    let absolute = POLYGLOT.replace(r#"dir = "python""#, r#"dir = "/etc/passwd""#);
+    assert!(matches!(
+        Manifest::parse(&absolute),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+
+    // Target names are slugs.
+    let bad_name = POLYGLOT.replace("[targets.node]", "[targets.\"Node JS\"]");
+    assert!(matches!(
+        Manifest::parse(&bad_name),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+
+    // And so is a consumer's requested target.
+    let bad_request = format!("{SAMPLE}\n[install]\ntarget = \"Python 3\"\n");
+    assert!(matches!(
+        Manifest::parse(&bad_request),
+        Err(ManifestError::InvalidTarget(_, _))
+    ));
+}
+
+#[test]
+fn nested_target_dirs_are_allowed() {
+    // Real repos often nest, e.g. clients/go.
+    let nested = POLYGLOT.replace(r#"dir = "go""#, r#"dir = "clients/go""#);
+    let m = Manifest::parse(&nested).unwrap();
+    assert_eq!(m.target_subdir(Some("go")).unwrap(), Some("clients/go"));
+}
+
+#[test]
+fn consumer_requested_target_is_read_from_the_install_section() {
+    let consumer = format!("{SAMPLE}\n[install]\ndir = \".vendor/.zed\"\ntarget = \"python\"\n");
+    let m = Manifest::parse(&consumer).unwrap();
+    assert_eq!(m.requested_target(), Some("python"));
+    assert_eq!(m.modules_dir(), ".vendor/.zed");
+    assert_eq!(Manifest::parse(&m.to_toml_string().unwrap()).unwrap(), m);
+
+    // Absent or blank = no request.
+    assert_eq!(Manifest::parse(SAMPLE).unwrap().requested_target(), None);
+    let blank = format!("{SAMPLE}\n[install]\ntarget = \"  \"\n");
+    assert_eq!(Manifest::parse(&blank).unwrap().requested_target(), None);
+}
+
+/// The real shape: a client repo publishing one package per language.
+const CLIENTS: &str = r#"
+[package]
+org = "fiducia"
+name = "fiducia-clients"
+version = "1.1.2"
+description = "Fiducia API clients"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/fiducia-cloud/fiducia-clients"
+
+[targets.nodejs]
+dir = "clients/ts"
+adapter = "node"
+
+[targets.java]
+dir = "clients/java"
+adapter = "java"
+
+[targets.golang]
+dir = "clients/go"
+"#;
+
+#[test]
+fn each_target_publishes_under_its_own_package_name() {
+    let m = Manifest::parse(CLIENTS).unwrap();
+    assert_eq!(
+        m.target_package_name("nodejs").as_deref(),
+        Some("fiducia-clients-nodejs")
+    );
+    assert_eq!(
+        m.target_package_name("java").as_deref(),
+        Some("fiducia-clients-java")
+    );
+    assert_eq!(
+        m.target_package_name("golang").as_deref(),
+        Some("fiducia-clients-golang")
+    );
+    assert_eq!(m.target_package_name("ruby"), None);
+
+    // Deterministic, sorted fan-out list.
+    assert_eq!(
+        m.target_package_names(),
+        vec![
+            ("golang".to_string(), "fiducia-clients-golang".to_string()),
+            ("java".to_string(), "fiducia-clients-java".to_string()),
+            ("nodejs".to_string(), "fiducia-clients-nodejs".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn an_explicit_target_name_overrides_the_suffix_convention() {
+    let custom = CLIENTS.replace(
+        "[targets.nodejs]\ndir = \"clients/ts\"",
+        "[targets.nodejs]\ndir = \"clients/ts\"\nname = \"fiducia-js-sdk\"",
+    );
+    let m = Manifest::parse(&custom).unwrap();
+    assert_eq!(
+        m.target_package_name("nodejs").as_deref(),
+        Some("fiducia-js-sdk")
+    );
+    // Other targets keep the convention.
+    assert_eq!(
+        m.target_package_name("java").as_deref(),
+        Some("fiducia-clients-java")
+    );
+}
+
+#[test]
+fn the_per_target_manifest_is_a_standalone_single_language_package() {
+    let base = Manifest::parse(CLIENTS).unwrap();
+    let java = base
+        .manifest_for_target("java")
+        .expect("java target exists");
+
+    // It is its own package, sharing org/version/repo with the parent.
+    assert_eq!(java.package.name, "fiducia-clients-java");
+    assert_eq!(java.package.org, "fiducia");
+    assert_eq!(java.package.version, "1.1.2");
+    assert_eq!(java.full_name(), "fiducia/fiducia-clients-java");
+    assert_eq!(
+        java.package.repository.url, base.package.repository.url,
+        "the artifact still points back at the source repo"
+    );
+
+    // It is NOT itself polyglot — the slice is single-language by construction,
+    // so a consumer can never recurse into another fan-out.
+    assert!(!java.is_polyglot());
+    assert!(java.targets.is_empty());
+
+    // It carries the ecosystem wiring its consumers need.
+    assert_eq!(java.install.adapter.as_deref(), Some("java"));
+    assert_eq!(
+        base.manifest_for_target("nodejs")
+            .unwrap()
+            .install
+            .adapter
+            .as_deref(),
+        Some("node")
+    );
+    // A target with no adapter inherits the base (here: none set).
+    assert_eq!(
+        base.manifest_for_target("golang").unwrap().install.adapter,
+        None
+    );
+
+    // The derived manifest is valid on its own and round-trips.
+    java.validate().expect("derived manifest must be valid");
+    assert_eq!(
+        Manifest::parse(&java.to_toml_string().unwrap()).unwrap(),
+        java
+    );
+
+    // The description makes the language obvious in registry listings.
+    assert_eq!(
+        java.package.description.as_deref(),
+        Some("Fiducia API clients (java)")
+    );
+
+    assert!(base.manifest_for_target("ruby").is_none());
+}
+
+#[test]
+fn derived_target_names_must_still_be_valid_package_names() {
+    // The suffix convention has to produce a legal slug, or publish would
+    // emit an unusable package name.
+    let m = Manifest::parse(CLIENTS).unwrap();
+    for (_, name) in m.target_package_names() {
+        assert!(
+            zed_interfaces::manifest::is_slug(&name),
+            "derived name `{name}` is not a valid package name"
+        );
+    }
+}

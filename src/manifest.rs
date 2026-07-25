@@ -81,6 +81,15 @@ pub struct Manifest {
     /// `.deps/.zed`.
     #[serde(default, skip_serializing_if = "InstallSection::is_empty")]
     pub install: InstallSection,
+    /// Language subtrees for a **polyglot package** — one repo shipping the
+    /// same library for several ecosystems (e.g. `node/`, `python/`, `go/`).
+    /// Keyed by ecosystem name; the value says which subdirectory is that
+    /// ecosystem's package root. On install the consumer resolves one target
+    /// and only that subtree is materialized, so a Python project gets the
+    /// Python source at its import root rather than a tree it has to reach
+    /// into. Absent (the common case) = single-language package, whole tree.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub targets: BTreeMap<String, TargetSection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -166,12 +175,54 @@ pub struct InstallSection {
     /// auto-detect (or the CLI `--adapter`). Mirrors the CLI's values.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub adapter: Option<String>,
+    /// Which language subtree to take from **polyglot** dependencies (see
+    /// [`TargetSection`]). Omitted = infer from the project (`package.json` →
+    /// `node`, `go.mod` → `go`, `pyproject.toml` → `python`, …). Naming a
+    /// target a dependency does not publish is an error rather than a silent
+    /// fallback: the consumer asked for something specific.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
 }
 
 impl InstallSection {
     pub fn is_empty(&self) -> bool {
-        self.dir.is_none() && self.adapter.is_none()
+        self.dir.is_none() && self.adapter.is_none() && self.target.is_none()
     }
+}
+
+/// One ecosystem's slice of a polyglot package — and, on publish, its own
+/// independently installable package.
+///
+/// A repo like `fiducia-clients` carrying `clients/ts`, `clients/java`, and
+/// `clients/go` declares one target each. `zed publish` then emits **one
+/// artifact per target**, named `<name>-<target>` by default:
+///
+/// ```text
+/// fiducia/fiducia-clients-nodejs@1.1.2   <- clients/ts only
+/// fiducia/fiducia-clients-java@1.1.2     <- clients/java only
+/// fiducia/fiducia-clients-golang@1.1.2   <- clients/go only
+/// ```
+///
+/// One source of truth and one version in the repo; N packages on the wire.
+/// A Java consumer downloads only Java bytes — the decisive advantage over
+/// shipping one fat artifact and slicing it at install time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TargetSection {
+    /// Package-relative directory that is this ecosystem's package root, e.g.
+    /// `python` or `clients/go`. Must be a safe relative path (no leading `/`,
+    /// no `..`) so a target can never escape the package.
+    pub dir: String,
+    /// Published package name for this target. Defaults to
+    /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to
+    /// break out of the suffix convention when an ecosystem expects a
+    /// different spelling.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Ecosystem adapter consumers of THIS target should use (`node`, `java`,
+    /// `none`). Recorded in the published per-target manifest so a consumer
+    /// gets the right wiring without configuring it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<String>,
 }
 
 /// A post-extract build step. Because compiled output is OS/arch-specific,
@@ -237,6 +288,8 @@ pub enum ManifestError {
     InvalidWorkspaceMember(String),
     #[error("invalid install dir `{0}`: {1}")]
     InvalidInstallDir(String, String),
+    #[error("invalid target `{0}`: {1}")]
+    InvalidTarget(String, String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
@@ -248,6 +301,12 @@ pub fn is_slug(s: &str) -> bool {
         && !s.ends_with('-')
         && s.chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// True for a well-formed polyglot target name (`node`, `python`, `go`, …).
+/// Same shape as a slug: these appear in manifests, CLI flags, and messages.
+pub fn is_target_name(s: &str) -> bool {
+    is_slug(s)
 }
 
 /// True for a well-formed `org/name` dependency key.
@@ -345,6 +404,30 @@ impl Manifest {
                 ));
             }
         }
+        for (name, target) in &self.targets {
+            if !is_target_name(name) {
+                return Err(ManifestError::InvalidTarget(
+                    name.clone(),
+                    "target names use [a-z0-9][a-z0-9-]* (e.g. `node`, `python`, `go`)".to_string(),
+                ));
+            }
+            if !is_safe_relative_path(&target.dir) {
+                return Err(ManifestError::InvalidTarget(
+                    name.clone(),
+                    format!("dir `{}` must be a relative path without `..`", target.dir),
+                ));
+            }
+        }
+        // A blank request means "no target", the same way a blank
+        // `[install].dir` falls back to the default rather than erroring.
+        if let Some(requested) = self.requested_target()
+            && !is_target_name(requested)
+        {
+            return Err(ManifestError::InvalidTarget(
+                requested.to_string(),
+                "target names use [a-z0-9][a-z0-9-]*".to_string(),
+            ));
+        }
         for (bin_name, target) in &self.bin {
             if bin_name.is_empty()
                 || bin_name.starts_with('.')
@@ -411,6 +494,104 @@ impl Manifest {
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .unwrap_or(crate::paths::MODULES_DIR)
+    }
+
+    /// The consumer's requested polyglot target, if it named one explicitly.
+    pub fn requested_target(&self) -> Option<&str> {
+        self.install
+            .target
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    }
+
+    /// True when this package ships per-ecosystem subtrees.
+    pub fn is_polyglot(&self) -> bool {
+        !self.targets.is_empty()
+    }
+
+    /// The package name a target publishes under: its explicit `name`, else
+    /// the `<name>-<target>` convention (`fiducia-clients` + `java` →
+    /// `fiducia-clients-java`).
+    pub fn target_package_name(&self, target: &str) -> Option<String> {
+        self.targets.get(target).map(|t| {
+            t.name
+                .clone()
+                .unwrap_or_else(|| format!("{}-{}", self.package.name, target))
+        })
+    }
+
+    /// Every `(target, published name)` pair this manifest fans out to, sorted
+    /// by target for deterministic publish order and output.
+    pub fn target_package_names(&self) -> Vec<(String, String)> {
+        let mut names: Vec<(String, String)> = self
+            .targets
+            .keys()
+            .filter_map(|target| {
+                self.target_package_name(target)
+                    .map(|name| (target.clone(), name))
+            })
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Derive the per-target manifest that ships *inside* that target's
+    /// artifact: same org/version/repo, the target's own package name, its
+    /// adapter, and no `[targets]` (the slice is single-language by
+    /// construction). Dependencies are carried over so a target's own zed
+    /// deps still resolve.
+    pub fn manifest_for_target(&self, target: &str) -> Option<Manifest> {
+        let name = self.target_package_name(target)?;
+        let section = self.targets.get(target)?;
+        let mut derived = self.clone();
+        derived.package.name = name;
+        derived.package.description = Some(match &self.package.description {
+            Some(base) => format!("{base} ({target})"),
+            None => format!("{} ({target} client)", self.package.name),
+        });
+        derived.targets = BTreeMap::new();
+        derived.workspace = None;
+        // The consumer-facing wiring for this ecosystem.
+        derived.install.adapter = section.adapter.clone().or(self.install.adapter.clone());
+        derived.install.target = None;
+        Some(derived)
+    }
+
+    /// Resolve which subdirectory of *this* (dependency) package a consumer
+    /// asking for `requested` should get.
+    ///
+    /// * Not polyglot → `Ok(None)`: the whole tree, exactly as before.
+    /// * Polyglot + a matching target → `Ok(Some(dir))`.
+    /// * Polyglot + `requested` names a target this package does not publish
+    ///   → `Err` listing what it does publish. An explicit request that cannot
+    ///   be honored is a mistake worth surfacing, not something to paper over
+    ///   by installing a tree the consumer's toolchain cannot read.
+    /// * Polyglot + nothing requested → `Ok(None)` (whole tree), so a consumer
+    ///   that has not opted in keeps working.
+    pub fn target_subdir(&self, requested: Option<&str>) -> Result<Option<&str>, ManifestError> {
+        if self.targets.is_empty() {
+            return Ok(None);
+        }
+        let Some(requested) = requested else {
+            return Ok(None);
+        };
+        match self.targets.get(requested) {
+            Some(target) => Ok(Some(target.dir.as_str())),
+            None => {
+                let mut available: Vec<&str> = self.targets.keys().map(String::as_str).collect();
+                available.sort_unstable();
+                Err(ManifestError::InvalidTarget(
+                    requested.to_string(),
+                    format!(
+                        "package `{}/{}` publishes no such target; it provides: {}",
+                        self.package.org,
+                        self.package.name,
+                        available.join(", ")
+                    ),
+                ))
+            }
+        }
     }
 
     /// True when this manifest declares a non-empty monorepo workspace.
