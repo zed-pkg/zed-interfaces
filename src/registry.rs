@@ -61,6 +61,12 @@ pub fn orgs_path() -> String {
     format!("{API_V1}/orgs")
 }
 
+/// `GET ?limit=` (bearer token, org `owner` or admin) — the org's audit log:
+/// who changed published state, what, and when (zed-docs issue #7 governance).
+pub fn audit_path(org: &str) -> String {
+    format!("{API_V1}/orgs/{org}/audit")
+}
+
 /// `GET` — liveness probe.
 pub fn healthz_path() -> String {
     "/healthz".to_string()
@@ -171,6 +177,76 @@ pub struct ClaimOrgResponse {
 pub struct SearchResponse {
     pub query: String,
     pub items: Vec<PackageSummary>,
+}
+
+/// A state-changing action recorded in an org's audit log. Reads are never
+/// audited — only mutations of published state and of the namespace itself, so
+/// the log answers "who changed what" without drowning in traffic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AuditAction {
+    /// A version was published.
+    Publish,
+    /// A version was yanked (hidden from fresh resolution).
+    Yank,
+    /// A previously yanked version was restored.
+    Unyank,
+    /// The org namespace was claimed.
+    OrgClaim,
+}
+
+impl AuditAction {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AuditAction::Publish => "publish",
+            AuditAction::Yank => "yank",
+            AuditAction::Unyank => "unyank",
+            AuditAction::OrgClaim => "org_claim",
+        }
+    }
+
+    /// Parse a stored action string; unknown values are preserved as `None` so
+    /// a newer server's rows never break an older client's read.
+    pub fn parse(s: &str) -> Option<AuditAction> {
+        match s {
+            "publish" => Some(AuditAction::Publish),
+            "yank" => Some(AuditAction::Yank),
+            "unyank" => Some(AuditAction::Unyank),
+            "org_claim" => Some(AuditAction::OrgClaim),
+            _ => None,
+        }
+    }
+}
+
+/// One audit-log record. The actor is identified by the *token* that acted —
+/// its name and role, never its secret — which is the identity a registry
+/// actually has (zed-docs issue #7 governance).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AuditEntry {
+    /// RFC 3339 timestamp of the action.
+    pub at: String,
+    /// Raw action string; `action_kind` is the parsed form when recognized.
+    pub action: String,
+    /// Parsed action, absent when this server build doesn't recognize it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_kind: Option<AuditAction>,
+    /// What was acted on, e.g. `acme/http-kit@1.2.0` or the org slug.
+    pub subject: String,
+    /// Human-readable name of the token that acted.
+    pub actor_token_name: String,
+    /// The acting token's role (`owner`/`publisher`/`reader`, or `admin` for
+    /// unscoped tokens).
+    pub actor_role: String,
+    /// Extra context, e.g. the artifact sha256 for a publish.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AuditLogResponse {
+    pub org: String,
+    /// Most recent first.
+    pub entries: Vec<AuditEntry>,
 }
 
 /// Error body returned with any non-2xx status.
