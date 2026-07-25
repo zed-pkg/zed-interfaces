@@ -46,7 +46,10 @@ fn manifest_roundtrip() {
 #[test]
 fn install_dir_defaults_and_overrides() {
     // No [install] section -> the default dep dir.
-    assert_eq!(Manifest::parse(SAMPLE).unwrap().modules_dir(), "zed_modules");
+    assert_eq!(
+        Manifest::parse(SAMPLE).unwrap().modules_dir(),
+        "zed_modules"
+    );
 
     // A configured dir relocates the tree and round-trips.
     let with_dir = format!("{SAMPLE}\n[install]\ndir = \".vendor/.zed\"\n");
@@ -58,7 +61,10 @@ fn install_dir_defaults_and_overrides() {
     for bad in ["/abs/path", "../escape", "a/../../b"] {
         let src = format!("{SAMPLE}\n[install]\ndir = \"{bad}\"\n");
         assert!(
-            matches!(Manifest::parse(&src), Err(ManifestError::InvalidInstallDir(_, _))),
+            matches!(
+                Manifest::parse(&src),
+                Err(ManifestError::InvalidInstallDir(_, _))
+            ),
             "expected {bad} rejected"
         );
     }

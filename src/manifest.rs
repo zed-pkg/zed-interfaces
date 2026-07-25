@@ -81,6 +81,15 @@ pub struct Manifest {
     /// `.deps/.zed`.
     #[serde(default, skip_serializing_if = "InstallSection::is_empty")]
     pub install: InstallSection,
+    /// Language subtrees for a **polyglot package** — one repo shipping the
+    /// same library for several ecosystems (e.g. `node/`, `python/`, `go/`).
+    /// Keyed by ecosystem name; the value says which subdirectory is that
+    /// ecosystem's package root. On install the consumer resolves one target
+    /// and only that subtree is materialized, so a Python project gets the
+    /// Python source at its import root rather than a tree it has to reach
+    /// into. Absent (the common case) = single-language package, whole tree.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub targets: BTreeMap<String, TargetSection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
