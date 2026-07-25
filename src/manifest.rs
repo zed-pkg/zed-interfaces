@@ -190,13 +190,39 @@ impl InstallSection {
     }
 }
 
-/// One ecosystem's slice of a polyglot package.
+/// One ecosystem's slice of a polyglot package — and, on publish, its own
+/// independently installable package.
+///
+/// A repo like `fiducia-clients` carrying `clients/ts`, `clients/java`, and
+/// `clients/go` declares one target each. `zed publish` then emits **one
+/// artifact per target**, named `<name>-<target>` by default:
+///
+/// ```text
+/// fiducia/fiducia-clients-nodejs@1.1.2   <- clients/ts only
+/// fiducia/fiducia-clients-java@1.1.2     <- clients/java only
+/// fiducia/fiducia-clients-golang@1.1.2   <- clients/go only
+/// ```
+///
+/// One source of truth and one version in the repo; N packages on the wire.
+/// A Java consumer downloads only Java bytes — the decisive advantage over
+/// shipping one fat artifact and slicing it at install time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TargetSection {
     /// Package-relative directory that is this ecosystem's package root, e.g.
     /// `python` or `clients/go`. Must be a safe relative path (no leading `/`,
     /// no `..`) so a target can never escape the package.
     pub dir: String,
+    /// Published package name for this target. Defaults to
+    /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to
+    /// break out of the suffix convention when an ecosystem expects a
+    /// different spelling.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Ecosystem adapter consumers of THIS target should use (`node`, `java`,
+    /// `none`). Recorded in the published per-target manifest so a consumer
+    /// gets the right wiring without configuring it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<String>,
 }
 
 /// A post-extract build step. Because compiled output is OS/arch-specific,
