@@ -468,6 +468,56 @@ impl Manifest {
             .unwrap_or(crate::paths::MODULES_DIR)
     }
 
+    /// The consumer's requested polyglot target, if it named one explicitly.
+    pub fn requested_target(&self) -> Option<&str> {
+        self.install
+            .target
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    }
+
+    /// True when this package ships per-ecosystem subtrees.
+    pub fn is_polyglot(&self) -> bool {
+        !self.targets.is_empty()
+    }
+
+    /// Resolve which subdirectory of *this* (dependency) package a consumer
+    /// asking for `requested` should get.
+    ///
+    /// * Not polyglot → `Ok(None)`: the whole tree, exactly as before.
+    /// * Polyglot + a matching target → `Ok(Some(dir))`.
+    /// * Polyglot + `requested` names a target this package does not publish
+    ///   → `Err` listing what it does publish. An explicit request that cannot
+    ///   be honored is a mistake worth surfacing, not something to paper over
+    ///   by installing a tree the consumer's toolchain cannot read.
+    /// * Polyglot + nothing requested → `Ok(None)` (whole tree), so a consumer
+    ///   that has not opted in keeps working.
+    pub fn target_subdir(&self, requested: Option<&str>) -> Result<Option<&str>, ManifestError> {
+        if self.targets.is_empty() {
+            return Ok(None);
+        }
+        let Some(requested) = requested else {
+            return Ok(None);
+        };
+        match self.targets.get(requested) {
+            Some(target) => Ok(Some(target.dir.as_str())),
+            None => {
+                let mut available: Vec<&str> = self.targets.keys().map(String::as_str).collect();
+                available.sort_unstable();
+                Err(ManifestError::InvalidTarget(
+                    requested.to_string(),
+                    format!(
+                        "package `{}/{}` publishes no such target; it provides: {}",
+                        self.package.org,
+                        self.package.name,
+                        available.join(", ")
+                    ),
+                ))
+            }
+        }
+    }
+
     /// True when this manifest declares a non-empty monorepo workspace.
     pub fn is_workspace_root(&self) -> bool {
         self.workspace
