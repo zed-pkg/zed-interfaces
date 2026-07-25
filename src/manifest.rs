@@ -510,6 +510,54 @@ impl Manifest {
         !self.targets.is_empty()
     }
 
+    /// The package name a target publishes under: its explicit `name`, else
+    /// the `<name>-<target>` convention (`fiducia-clients` + `java` →
+    /// `fiducia-clients-java`).
+    pub fn target_package_name(&self, target: &str) -> Option<String> {
+        self.targets.get(target).map(|t| {
+            t.name
+                .clone()
+                .unwrap_or_else(|| format!("{}-{}", self.package.name, target))
+        })
+    }
+
+    /// Every `(target, published name)` pair this manifest fans out to, sorted
+    /// by target for deterministic publish order and output.
+    pub fn target_package_names(&self) -> Vec<(String, String)> {
+        let mut names: Vec<(String, String)> = self
+            .targets
+            .keys()
+            .filter_map(|target| {
+                self.target_package_name(target)
+                    .map(|name| (target.clone(), name))
+            })
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Derive the per-target manifest that ships *inside* that target's
+    /// artifact: same org/version/repo, the target's own package name, its
+    /// adapter, and no `[targets]` (the slice is single-language by
+    /// construction). Dependencies are carried over so a target's own zed
+    /// deps still resolve.
+    pub fn manifest_for_target(&self, target: &str) -> Option<Manifest> {
+        let name = self.target_package_name(target)?;
+        let section = self.targets.get(target)?;
+        let mut derived = self.clone();
+        derived.package.name = name;
+        derived.package.description = Some(match &self.package.description {
+            Some(base) => format!("{base} ({target})"),
+            None => format!("{} ({target} client)", self.package.name),
+        });
+        derived.targets = BTreeMap::new();
+        derived.workspace = None;
+        // The consumer-facing wiring for this ecosystem.
+        derived.install.adapter = section.adapter.clone().or(self.install.adapter.clone());
+        derived.install.target = None;
+        Some(derived)
+    }
+
     /// Resolve which subdirectory of *this* (dependency) package a consumer
     /// asking for `requested` should get.
     ///
