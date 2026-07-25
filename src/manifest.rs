@@ -152,6 +152,28 @@ pub struct ScriptsSection {
     pub test: Option<String>,
 }
 
+/// Install-layout controls: where zed's dependency tree lands and which
+/// ecosystem adapter to emit so those deps are visible to the native toolchain.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct InstallSection {
+    /// Project-relative directory for the installed tree (`<dir>/<org>/<name>`).
+    /// Defaults to `zed_modules`. Common overrides: `.vendor/.zed`, `.deps/.zed`.
+    /// Must be a safe relative path (no leading `/`, no `..`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+    /// Force the ecosystem adapter: `node`, `java`, or `none`. Omitted =
+    /// auto-detect (or the CLI `--adapter`). Mirrors the CLI's values.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<String>,
+}
+
+impl InstallSection {
+    pub fn is_empty(&self) -> bool {
+        self.dir.is_none() && self.adapter.is_none()
+    }
+}
+
 /// A post-extract build step. Because compiled output is OS/arch-specific,
 /// zed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the
 /// source and caches the result in a build cache keyed by
