@@ -18,7 +18,16 @@ pub const DEFAULT_EXCLUDES: &[&str] = &[
     "**/*.test.*",
     "**/*.spec.*",
     "**/*_test.go",
+    // Python tests come in both spellings; `test_*.py` is what unittest
+    // discovers by default, so omitting it leaks tests into every published
+    // Python slice.
     "**/*_test.py",
+    "**/test_*.py",
+    "**/conftest.py",
+    // Ruby tests living outside `spec/` (minitest's `*_test.rb`, and RSpec
+    // files kept beside their subject).
+    "**/*_test.rb",
+    "**/*_spec.rb",
     ".github/**",
     ".gitlab/**",
     ".gitlab-ci.yml",

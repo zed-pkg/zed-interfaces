@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SemanticSearchRequest",
+  "description": "Body of `POST /v1/search/semantic` (RAG). The caller computes the query\nembedding with its model; the server ranks stored package embeddings from\nthe SAME model by cosine distance. Vectors up to 2050 dims are accepted and\nzero-padded server-side.",
+  "type": "object",
+  "properties": {
+    "embedding": {
+      "description": "The query embedding (native width; padded to 2050 server-side).",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "format": "float"
+      }
+    },
+    "limit": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 20,
+      "minimum": 0
+    },
+    "model": {
+      "description": "Embedding model id, e.g. `openai/text-embedding-3-small`. Only stored\nembeddings from this model are searched.",
+      "type": "string"
+    },
+    "tags": {
+      "description": "Optional tag filter: results must carry all of these tags.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "model",
+    "embedding"
+  ]
+}

@@ -38,4 +38,10 @@ fn main() {
     write::<zed_interfaces::sync::SyncWriteMode>(dir, "sync-write-mode");
     write::<zed_interfaces::sync::SyncErrorPolicy>(dir, "sync-error-policy");
     write::<zed_interfaces::sync::SyncConflictResolution>(dir, "sync-conflict-resolution");
+
+    // Registry list + RAG/embedding search DTOs.
+    write::<zed_interfaces::registry::PackageListResponse>(dir, "package-list-response");
+    write::<zed_interfaces::registry::SemanticSearchRequest>(dir, "semantic-search-request");
+    write::<zed_interfaces::registry::SemanticSearchResponse>(dir, "semantic-search-response");
+    write::<zed_interfaces::registry::EmbeddingUpsertRequest>(dir, "embedding-upsert-request");
 }

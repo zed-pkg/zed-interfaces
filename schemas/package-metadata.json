@@ -24,6 +24,13 @@
     "repo_url": {
       "type": "string"
     },
+    "tags": {
+      "description": "Free-form tags for filtering/discovery (multi-tag lookup).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "vcs": {
       "$ref": "#/$defs/Vcs"
     },

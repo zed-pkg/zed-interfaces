@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "SearchResponse",
+  "title": "PackageListResponse",
+  "description": "Response for `GET /v1/packages` (list all).",
   "type": "object",
   "properties": {
     "items": {
@@ -9,13 +10,16 @@
         "$ref": "#/$defs/PackageSummary"
       }
     },
-    "query": {
-      "type": "string"
+    "total": {
+      "description": "Total packages matching the filter (before limit/offset).",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
     }
   },
   "required": [
-    "query",
-    "items"
+    "items",
+    "total"
   ],
   "$defs": {
     "PackageSummary": {

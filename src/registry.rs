@@ -37,9 +37,28 @@ pub fn artifact_path(sha256: &str) -> String {
     format!("{API_V1}/artifacts/{sha256}")
 }
 
-/// `GET ?q=` — search packages.
+/// `GET ?q=` — search packages by name/description. Also accepts repeatable
+/// `?tag=` filters (a package must carry all given tags) and `?limit=`.
 pub fn search_path() -> String {
     format!("{API_V1}/search")
+}
+
+/// `GET` — list all packages, newest first. Accepts `?tag=` (repeatable),
+/// `?limit=`, and `?offset=` for pagination.
+pub fn packages_list_path() -> String {
+    format!("{API_V1}/packages")
+}
+
+/// `POST` — RAG / semantic search: nearest packages to a query embedding
+/// within one model's space. Body is [`SemanticSearchRequest`].
+pub fn semantic_search_path() -> String {
+    format!("{API_V1}/search/semantic")
+}
+
+/// `PUT` (bearer token) — upsert a package's embedding for one model. Body is
+/// [`EmbeddingUpsertRequest`].
+pub fn embedding_path(org: &str, name: &str) -> String {
+    format!("{API_V1}/packages/{org}/{name}/embedding")
 }
 
 /// `GET` — serve one file out of a published artifact, unpkg-style
@@ -80,6 +99,9 @@ pub struct PackageSummary {
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest: Option<String>,
+    /// Free-form tags for filtering/discovery.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -98,6 +120,9 @@ pub struct PackageMetadata {
     pub version_scheme: crate::version::VersionScheme,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest: Option<String>,
+    /// Free-form tags for filtering/discovery (multi-tag lookup).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
     /// All published, non-yanked versions, newest first.
     pub versions: Vec<String>,
 }
@@ -177,6 +202,64 @@ pub struct ClaimOrgResponse {
 pub struct SearchResponse {
     pub query: String,
     pub items: Vec<PackageSummary>,
+}
+
+/// Response for `GET /v1/packages` (list all).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PackageListResponse {
+    pub items: Vec<PackageSummary>,
+    /// Total packages matching the filter (before limit/offset).
+    pub total: u64,
+}
+
+/// Body of `POST /v1/search/semantic` (RAG). The caller computes the query
+/// embedding with its model; the server ranks stored package embeddings from
+/// the SAME model by cosine distance. Vectors up to 2050 dims are accepted and
+/// zero-padded server-side.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SemanticSearchRequest {
+    /// Embedding model id, e.g. `openai/text-embedding-3-small`. Only stored
+    /// embeddings from this model are searched.
+    pub model: String,
+    /// The query embedding (native width; padded to 2050 server-side).
+    pub embedding: Vec<f32>,
+    #[serde(default = "default_semantic_limit")]
+    pub limit: u32,
+    /// Optional tag filter: results must carry all of these tags.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+}
+
+fn default_semantic_limit() -> u32 {
+    20
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SemanticHit {
+    pub org: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Cosine distance (0 = identical direction, 2 = opposite). Lower is nearer.
+    pub distance: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SemanticSearchResponse {
+    pub items: Vec<SemanticHit>,
+}
+
+/// Body of `PUT /v1/packages/{org}/{name}/embedding` — upsert a package's
+/// embedding for one model (re-embedding replaces in place).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EmbeddingUpsertRequest {
+    pub model: String,
+    /// The embedding (native width; padded to 2050 server-side).
+    pub embedding: Vec<f32>,
+    /// The text that was embedded (kept for provenance / re-embedding).
+    pub content: String,
 }
 
 /// A state-changing action recorded in an org's audit log. Reads are never
