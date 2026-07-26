@@ -39,6 +39,7 @@ pub const DEFAULT_EXCLUDES: &[&str] = &[
     "CHANGELOG*",
     ".zedignore",
     ".zed/**",
+    ".zed-pack/**",
     ".zpkg.lock",
     "zed_modules/**",
     "node_modules/**",

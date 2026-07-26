@@ -124,6 +124,7 @@ fn excludes_respect_include_readme() {
     assert!(readme_kept.iter().any(|p| p == "extra/**"));
 
     assert!(DEFAULT_EXCLUDES.contains(&".github/**"));
+    assert!(DEFAULT_EXCLUDES.contains(&".zed-pack/**"));
     assert!(DEFAULT_EXCLUDES.contains(&"**/node_modules/**"));
     assert!(DEFAULT_EXCLUDES.contains(&"**/.dart_tool/**"));
     assert!(DEFAULT_EXCLUDES.contains(&"**/build/**"));
