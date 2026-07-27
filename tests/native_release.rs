@@ -41,20 +41,30 @@ dir = "clients/dart"
 [targets.dart.native]
 registry = "pub.dev"
 package = "acme_client"
+
+[targets.python]
+dir = "clients/python"
+
+[targets.python.native]
+registry = "pypi"
+package = "Acme.Client"
 "#,
     ))
     .unwrap();
 
     let routes = parsed.native_release_routes();
-    assert_eq!(routes.len(), 3);
+    assert_eq!(routes.len(), 4);
     assert_eq!(routes[0].target, "dart");
     assert_eq!(routes[0].registry, NativeRegistry::PubDev);
     assert_eq!(routes[0].package, "acme_client");
     assert_eq!(routes[1].target, "nodejs");
     assert_eq!(routes[1].registry, NativeRegistry::Npm);
     assert_eq!(routes[1].package, "@acme/client");
-    assert_eq!(routes[2].target, "rust");
-    assert_eq!(routes[2].registry, NativeRegistry::CratesIo);
+    assert_eq!(routes[2].target, "python");
+    assert_eq!(routes[2].registry, NativeRegistry::PyPi);
+    assert_eq!(routes[2].package, "Acme.Client");
+    assert_eq!(routes[3].target, "rust");
+    assert_eq!(routes[3].registry, NativeRegistry::CratesIo);
 
     let encoded = parsed.to_toml_string().unwrap();
     assert!(encoded.contains("[targets.nodejs.native]"));
@@ -117,6 +127,20 @@ dir = "clients/dart"
 registry = "pub.dev"
 package = "class"
 "#,
+        r#"
+[targets.python]
+dir = "clients/python"
+[targets.python.native]
+registry = "pypi"
+package = "-bad-name"
+"#,
+        r#"
+[targets.python]
+dir = "clients/python"
+[targets.python.native]
+registry = "pypi"
+package = "bad name"
+"#,
     ] {
         assert!(matches!(
             Manifest::parse(&manifest(targets)),
@@ -144,4 +168,26 @@ package = "@acme/client"
     ))
     .unwrap_err();
     assert!(matches!(error, ManifestError::InvalidNativeRoute(_, _)));
+}
+
+#[test]
+fn pypi_duplicate_destinations_use_normalized_names() {
+    let error = Manifest::parse(&manifest(
+        r#"
+[targets.python]
+dir = "clients/python"
+[targets.python.native]
+registry = "pypi"
+package = "Friendly_Bard"
+
+[targets.python-async]
+dir = "clients/python-async"
+[targets.python-async.native]
+registry = "pypi"
+package = "friendly...bard"
+"#,
+    ))
+    .unwrap_err();
+    let message = error.to_string();
+    assert!(message.contains("already routed"), "{message}");
 }

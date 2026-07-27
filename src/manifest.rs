@@ -245,6 +245,8 @@ pub enum NativeRegistry {
     CratesIo,
     #[serde(rename = "pub.dev")]
     PubDev,
+    #[serde(rename = "pypi")]
+    PyPi,
 }
 
 impl NativeRegistry {
@@ -253,6 +255,7 @@ impl NativeRegistry {
             Self::Npm => "npm",
             Self::CratesIo => "crates-io",
             Self::PubDev => "pub.dev",
+            Self::PyPi => "pypi",
         }
     }
 
@@ -261,6 +264,7 @@ impl NativeRegistry {
             Self::Npm => is_valid_npm_package(package),
             Self::CratesIo => is_valid_crates_package(package),
             Self::PubDev => is_valid_pubdev_package(package),
+            Self::PyPi => is_valid_pypi_package(package),
         };
         if valid {
             Ok(())
@@ -269,6 +273,13 @@ impl NativeRegistry {
                 "package `{package}` is not a valid {} package identity",
                 self.as_str()
             ))
+        }
+    }
+
+    fn canonical_package(self, package: &str) -> String {
+        match self {
+            Self::PyPi => normalize_pypi_package(package),
+            _ => package.to_string(),
         }
     }
 }
@@ -313,6 +324,32 @@ fn is_valid_crates_package(value: &str) -> bool {
         && value
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+}
+
+fn is_valid_pypi_package(value: &str) -> bool {
+    !value.is_empty()
+        && value.as_bytes()[0].is_ascii_alphanumeric()
+        && value.as_bytes()[value.len() - 1].is_ascii_alphanumeric()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+fn normalize_pypi_package(value: &str) -> String {
+    let mut normalized = String::with_capacity(value.len());
+    let mut separator = false;
+    for byte in value.bytes() {
+        if matches!(byte, b'.' | b'_' | b'-') {
+            separator = true;
+            continue;
+        }
+        if separator && !normalized.is_empty() {
+            normalized.push('-');
+        }
+        separator = false;
+        normalized.push((byte as char).to_ascii_lowercase());
+    }
+    normalized
 }
 
 fn is_valid_pubdev_package(value: &str) -> bool {
@@ -586,7 +623,8 @@ impl Manifest {
                     .registry
                     .validate_package(&native.package)
                     .map_err(|reason| ManifestError::InvalidNativeRoute(name.clone(), reason))?;
-                let route = (native.registry, native.package.clone());
+                let canonical_package = native.registry.canonical_package(&native.package);
+                let route = (native.registry, canonical_package);
                 if let Some(previous) = native_routes.insert(route, name.as_str()) {
                     return Err(ManifestError::InvalidNativeRoute(
                         name.clone(),
