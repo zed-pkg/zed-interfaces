@@ -25,27 +25,13 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
-      - name: Reuse and execute the reviewed patch body
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          source = Path('.github/workflows/apply-den-100-temporary.yml').read_text(encoding='utf-8')
-          marker = "          python3 - <<'PY'\n"
-          start = source.index(marker) + len(marker)
-          end = source.index("\n          PY", start)
-          block = source[start:end]
-          script = "\n".join(
-              line[10:] if line.startswith("          ") else line
-              for line in block.splitlines()
-          )
-          exec(compile(script, 'apply-den-100', 'exec'))
-          PY
+      - name: Apply typed native release routing
+        run: python3 scripts/apply_native_release_schema.py
       - name: Format and test
         run: |
           cargo fmt --all
           cargo test --locked
-      - name: Commit schema and tests to the feature branch
+      - name: Commit schema to the feature branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
