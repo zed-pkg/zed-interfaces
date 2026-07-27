@@ -137,7 +137,8 @@
       "enum": [
         "npm",
         "crates-io",
-        "pub.dev"
+        "pub.dev",
+        "pypi"
       ]
     },
     "NativeReleaseSection": {
