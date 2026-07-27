@@ -136,7 +136,8 @@
       "type": "string",
       "enum": [
         "npm",
-        "crates-io"
+        "crates-io",
+        "pub.dev"
       ]
     },
     "NativeReleaseSection": {

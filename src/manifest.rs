@@ -243,6 +243,8 @@ pub struct NativeReleaseSection {
 pub enum NativeRegistry {
     Npm,
     CratesIo,
+    #[serde(rename = "pub.dev")]
+    PubDev,
 }
 
 impl NativeRegistry {
@@ -250,6 +252,7 @@ impl NativeRegistry {
         match self {
             Self::Npm => "npm",
             Self::CratesIo => "crates-io",
+            Self::PubDev => "pub.dev",
         }
     }
 
@@ -257,6 +260,7 @@ impl NativeRegistry {
         let valid = match self {
             Self::Npm => is_valid_npm_package(package),
             Self::CratesIo => is_valid_crates_package(package),
+            Self::PubDev => is_valid_pubdev_package(package),
         };
         if valid {
             Ok(())
@@ -309,6 +313,21 @@ fn is_valid_crates_package(value: &str) -> bool {
         && value
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+}
+
+fn is_valid_pubdev_package(value: &str) -> bool {
+    const RESERVED: &[&str] = &[
+        "assert", "break", "case", "catch", "class", "const", "continue", "default", "do", "else",
+        "enum", "extends", "false", "final", "finally", "for", "if", "in", "is", "new", "null",
+        "rethrow", "return", "super", "switch", "this", "throw", "true", "try", "var", "void",
+        "while", "with", "async", "await", "yield",
+    ];
+    !value.is_empty()
+        && !value.as_bytes()[0].is_ascii_digit()
+        && !RESERVED.contains(&value)
+        && value
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 /// A post-extract build step. Because compiled output is OS/arch-specific,
