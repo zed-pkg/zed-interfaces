@@ -738,8 +738,7 @@ impl Manifest {
                         name.clone(),
                         format!(
                             "routes to {} (ecosystem `{outbound}`) but installs as `{inbound}`; \
-                             set `ecosystem` on the target if the mirror is right"
-                        ,
+                             set `ecosystem` on the target if the mirror is right",
                             native.registry.as_str()
                         ),
                     ));

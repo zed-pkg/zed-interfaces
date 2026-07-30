@@ -39,8 +39,20 @@ use serde::{Deserialize, Serialize};
 /// a human has to recall. The shorter spellings, and near-synonyms like
 /// `typescript`, are accepted by [`Language::from_token`] and by umbrella
 /// variant aliases, so both spellings resolve.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[derive(Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Language {
     /// Not language-specific: protocol schemas, docs, `.proto` files, an
@@ -93,8 +105,20 @@ pub enum Language {
 /// How a consumer's build system takes a dependency in: the resolution
 /// mechanism, not the language. Drives the install guard and which toolchain
 /// wiring file `zed install` writes.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[derive(Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Ecosystem {
     /// No ecosystem constraint. Installs into any project; never gated.

@@ -237,7 +237,10 @@ package = "{package}"
             .unwrap_or_else(|e| panic!("{target} -> {registry} must validate: {e}"));
         let route = &parsed.native_release_routes()[0];
         assert_eq!(route.target, target);
-        assert_eq!(route.registry.ecosystem(), parsed.targets[target].ecosystem_for(target));
+        assert_eq!(
+            route.registry.ecosystem(),
+            parsed.targets[target].ecosystem_for(target)
+        );
     }
 }
 
