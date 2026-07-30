@@ -1,8 +1,9 @@
 //! Publish-time exclusion rules.
 //!
-//! zed-pkg's core disk-space promise: published artifacts carry what runs,
-//! not what develops. Tests, CI configuration, VCS metadata, and READMEs
-//! are stripped by default; license files are always kept.
+//! zed-pkg's core disk-space promise: published artifacts carry runtime and
+//! release metadata, not development machinery. Tests, CI configuration, VCS
+//! metadata, and READMEs are stripped by default; changelogs and license files
+//! are kept.
 
 /// Glob patterns excluded from every published artifact by default.
 /// Matching is case-insensitive in the CLI.
@@ -36,7 +37,6 @@ pub const DEFAULT_EXCLUDES: &[&str] = &[
     ".travis.yml",
     "azure-pipelines.yml",
     "README*",
-    "CHANGELOG*",
     ".zedignore",
     ".zed/**",
     ".zed-pack/**",
