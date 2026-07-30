@@ -1,4 +1,4 @@
-use zed_interfaces::manifest::{Manifest, ManifestError, NativeRegistry};
+use zed_interfaces::manifest::{ForgeRegistry, Manifest, ManifestError, NativeRegistry};
 
 fn manifest(targets: &str) -> String {
     format!(
@@ -71,6 +71,63 @@ package = "Acme.Client"
     assert!(encoded.contains("registry = \"npm\""));
     assert!(encoded.contains("registry = \"pub.dev\""));
     Manifest::parse(&encoded).unwrap();
+}
+
+#[test]
+fn a_single_language_repository_can_declare_native_and_forge_routes() {
+    let parsed = Manifest::parse(&manifest(
+        r#"
+[publish.native]
+registry = "npm"
+package = "@acme/client"
+forge = ["github-packages", "gitlab-packages", "bitbucket-packages"]
+"#,
+    ))
+    .unwrap();
+
+    let native = parsed.native_release_routes();
+    assert_eq!(native.len(), 1);
+    assert_eq!(native[0].target, "repository");
+    assert_eq!(native[0].dir, ".");
+    assert_eq!(native[0].registry, NativeRegistry::Npm);
+    assert_eq!(native[0].package, "@acme/client");
+    assert_eq!(native[0].vcs_tag, "v1.2.3");
+
+    let forge = parsed.forge_release_routes();
+    assert_eq!(forge.len(), 3);
+    assert!(forge.iter().all(|route| route.target == "repository"));
+    assert!(forge.iter().all(|route| route.dir == "."));
+    assert_eq!(forge[0].registry, ForgeRegistry::GithubPackages);
+    assert_eq!(forge[1].registry, ForgeRegistry::GitlabPackages);
+    assert_eq!(forge[2].registry, ForgeRegistry::BitbucketPackages);
+    assert!(forge.iter().all(|route| route.vcs_tag == "v1.2.3"));
+
+    let encoded = parsed.to_toml_string().unwrap();
+    assert!(encoded.contains("[publish.native]"));
+    assert_eq!(Manifest::parse(&encoded).unwrap(), parsed);
+}
+
+#[test]
+fn a_polyglot_package_cannot_mix_root_and_target_native_routes() {
+    let error = Manifest::parse(&manifest(
+        r#"
+[publish.native]
+registry = "npm"
+package = "@acme/all-clients"
+
+[targets.nodejs]
+dir = "clients/typescript"
+
+[targets.nodejs.native]
+registry = "npm"
+package = "@acme/client"
+"#,
+    ))
+    .unwrap_err();
+
+    let message = error.to_string();
+    assert!(matches!(error, ManifestError::InvalidNativeRoute(_, _)));
+    assert!(message.contains("single-language"), "{message}");
 }
 
 #[test]
@@ -282,4 +339,140 @@ package = "acme-wasm3"
 "#,
     );
     assert!(Manifest::parse(&toml).is_ok());
+}
+
+#[test]
+fn forge_package_routes_roundtrip_and_flatten_deterministically() {
+    let parsed = Manifest::parse(&manifest(
+        r#"
+[targets.nodejs]
+dir = "clients/typescript"
+
+[targets.nodejs.native]
+registry = "npm"
+package = "@acme/client"
+forge = ["github-packages", "gitlab-packages", "bitbucket-packages"]
+
+[targets.python]
+dir = "clients/python"
+
+[targets.python.native]
+registry = "pypi"
+package = "acme-client"
+forge = ["gitlab-packages"]
+"#,
+    ))
+    .unwrap();
+
+    let routes = parsed.forge_release_routes();
+    assert_eq!(routes.len(), 4);
+    assert_eq!(routes[0].target, "nodejs");
+    assert_eq!(routes[0].registry, ForgeRegistry::GithubPackages);
+    assert_eq!(routes[0].format, NativeRegistry::Npm);
+    assert_eq!(routes[1].registry, ForgeRegistry::GitlabPackages);
+    assert_eq!(routes[2].registry, ForgeRegistry::BitbucketPackages);
+    assert_eq!(routes[3].target, "python");
+    assert_eq!(routes[3].registry, ForgeRegistry::GitlabPackages);
+    assert_eq!(routes[3].format, NativeRegistry::PyPi);
+
+    let encoded = parsed.to_toml_string().unwrap();
+    assert!(encoded.contains("github-packages"));
+    assert_eq!(Manifest::parse(&encoded).unwrap(), parsed);
+
+    let derived = parsed.manifest_for_target("nodejs").unwrap();
+    assert!(derived.targets.is_empty());
+    assert_eq!(derived.publish.native, parsed.targets["nodejs"].native);
+    assert_eq!(derived.native_release_routes()[0].target, "repository");
+    assert_eq!(
+        Manifest::parse(&derived.to_toml_string().unwrap()).unwrap(),
+        derived
+    );
+}
+
+#[test]
+fn unsupported_and_duplicate_forge_routes_are_rejected() {
+    for targets in [
+        r#"
+[targets.rust]
+dir = "clients/rust"
+[targets.rust.native]
+registry = "crates-io"
+package = "acme-client"
+forge = ["github-packages"]
+"#,
+        r#"
+[targets.python]
+dir = "clients/python"
+[targets.python.native]
+registry = "pypi"
+package = "acme-client"
+forge = ["bitbucket-packages"]
+"#,
+        r#"
+[targets.nodejs]
+dir = "clients/typescript"
+[targets.nodejs.native]
+registry = "npm"
+package = "@acme/client"
+forge = ["github-packages", "github-packages"]
+"#,
+    ] {
+        assert!(matches!(
+            Manifest::parse(&manifest(targets)),
+            Err(ManifestError::InvalidNativeRoute(_, _))
+        ));
+    }
+}
+
+#[test]
+fn major_native_registry_identities_and_ecosystems_validate() {
+    for (target, registry, package, ecosystem) in [
+        ("java", "maven-central", "com.acme:client", "jvm"),
+        ("ruby", "rubygems", "acme-client", "gem"),
+        ("csharp", "nuget", "Acme.Client", "nuget"),
+        ("php", "packagist", "acme/client", "composer"),
+        ("golang", "go-modules", "github.com/acme/client", "gomod"),
+    ] {
+        let tag_format = if registry == "go-modules" {
+            format!("tag_format = \"clients/{target}/v{{version}}\"")
+        } else {
+            String::new()
+        };
+        let parsed = Manifest::parse(&manifest(&format!(
+            r#"
+[targets.{target}]
+dir = "clients/{target}"
+
+[targets.{target}.native]
+registry = "{registry}"
+package = "{package}"
+{tag_format}
+"#
+        )))
+        .unwrap_or_else(|error| panic!("{registry} route must validate: {error}"));
+        let route = &parsed.native_release_routes()[0];
+        assert_eq!(route.registry.ecosystem().as_str(), ecosystem);
+        if registry == "go-modules" {
+            assert_eq!(route.vcs_tag, format!("clients/{target}/v1.2.3"));
+        }
+    }
+}
+
+#[test]
+fn a_subdirectory_go_module_requires_its_native_tag_prefix() {
+    for tag_format in ["", "tag_format = \"v{version}\""] {
+        let error = Manifest::parse(&manifest(&format!(
+            r#"
+[targets.golang]
+dir = "clients/go"
+
+[targets.golang.native]
+registry = "go-modules"
+package = "github.com/acme/client"
+{tag_format}
+"#
+        )))
+        .unwrap_err();
+        assert!(error.to_string().contains("clients/go/"));
+    }
 }
