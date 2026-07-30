@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::publish::PublishRegistry;
 use crate::vcs::Vcs;
 use crate::version::{Requirement, VersionScheme};
 
@@ -140,6 +141,20 @@ pub struct PublishSection {
     /// VCS tag template that must exist and point at the published commit.
     /// `{version}` is substituted with `package.version`.
     pub tag_format: String,
+    /// Native package-manager format (`npm`, `cargo`, `pypi`, `maven`, ...).
+    /// Zed stores its own deterministic artifact regardless of this value;
+    /// forge registries use it to reject unsupported routes before upload.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    /// Registries that should receive this package. Omitted preserves the
+    /// historical behavior: publish only to the configured Zed registry.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registries: Option<Vec<PublishRegistry>>,
+    /// Optional endpoint overrides, keyed by registry family. Secrets never
+    /// belong here; authentication comes from the environment/credential
+    /// store used by the relevant publisher.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub registry_urls: BTreeMap<PublishRegistry, String>,
 }
 
 impl Default for PublishSection {
@@ -149,6 +164,9 @@ impl Default for PublishSection {
             include_readme: false,
             smoke_test: None,
             tag_format: "v{version}".to_string(),
+            format: None,
+            registries: None,
+            registry_urls: BTreeMap::new(),
         }
     }
 }
@@ -223,6 +241,18 @@ pub struct TargetSection {
     /// gets the right wiring without configuring it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub adapter: Option<String>,
+    /// This target's native package-manager format. It overrides
+    /// `[publish].format` when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    /// This target's registry fan-out. It overrides `[publish].registries`
+    /// when present; omission inherits the package default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registries: Option<Vec<PublishRegistry>>,
+    /// Target-specific endpoint overrides layered over
+    /// `[publish.registry_urls]`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub registry_urls: BTreeMap<PublishRegistry, String>,
 }
 
 /// A post-extract build step. Because compiled output is OS/arch-specific,
@@ -290,6 +320,8 @@ pub enum ManifestError {
     InvalidInstallDir(String, String),
     #[error("invalid target `{0}`: {1}")]
     InvalidTarget(String, String),
+    #[error("invalid publish route `{0}`: {1}")]
+    InvalidPublishRoute(String, String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
@@ -350,6 +382,76 @@ fn is_allowed_repo_url(url: &str) -> bool {
         .any(|scheme| url.starts_with(scheme))
         // scp-like git syntax: git@github.com:org/repo.git
         || (url.contains('@') && url.contains(':') && !url.contains("://"))
+}
+
+fn is_allowed_registry_url(url: &str) -> bool {
+    (url.starts_with("https://") || url.starts_with("http://") || url.starts_with("file://"))
+        && !url.chars().any(char::is_whitespace)
+}
+
+fn validate_publish_route(
+    label: &str,
+    format: Option<&str>,
+    registries: Option<&[PublishRegistry]>,
+    registry_urls: &BTreeMap<PublishRegistry, String>,
+) -> Result<(), ManifestError> {
+    let selected = registries.unwrap_or(&[PublishRegistry::Zed]);
+    if selected.is_empty() {
+        return Err(ManifestError::InvalidPublishRoute(
+            label.to_string(),
+            "registries cannot be empty; omit the field for the default Zed registry".to_string(),
+        ));
+    }
+    let mut unique = std::collections::BTreeSet::new();
+    for registry in selected {
+        if !unique.insert(*registry) {
+            return Err(ManifestError::InvalidPublishRoute(
+                label.to_string(),
+                format!("registry `{registry}` is listed more than once"),
+            ));
+        }
+    }
+
+    let format = format.map(str::trim).filter(|value| !value.is_empty());
+    if let Some(format) = format
+        && !is_target_name(format)
+    {
+        return Err(ManifestError::InvalidPublishRoute(
+            label.to_string(),
+            format!("format `{format}` must use [a-z0-9][a-z0-9-]*"),
+        ));
+    }
+    for registry in selected {
+        if *registry != PublishRegistry::Zed && format.is_none() {
+            return Err(ManifestError::InvalidPublishRoute(
+                label.to_string(),
+                format!("registry `{registry}` requires an explicit package format"),
+            ));
+        }
+        if let Some(format) = format
+            && !registry.supports_format(format)
+        {
+            return Err(ManifestError::InvalidPublishRoute(
+                label.to_string(),
+                format!("registry `{registry}` does not support format `{format}`"),
+            ));
+        }
+    }
+    for (registry, url) in registry_urls {
+        if !selected.contains(registry) {
+            return Err(ManifestError::InvalidPublishRoute(
+                label.to_string(),
+                format!("URL override for `{registry}` has no matching entry in registries"),
+            ));
+        }
+        if !is_allowed_registry_url(url) {
+            return Err(ManifestError::InvalidPublishRoute(
+                label.to_string(),
+                format!("registry URL `{url}` must be an http(s) or file URL without whitespace"),
+            ));
+        }
+    }
+    Ok(())
 }
 
 impl Manifest {
@@ -465,6 +567,25 @@ impl Manifest {
                         "adapter `{adapter}` is unsupported; expected `node`, `java`, or `none`"
                     ),
                 ));
+            }
+        }
+        if self.targets.is_empty() {
+            validate_publish_route(
+                "package",
+                self.publish.format.as_deref(),
+                self.publish.registries.as_deref(),
+                &self.publish.registry_urls,
+            )?;
+        } else {
+            for (name, target) in &self.targets {
+                let format = target.format.as_deref().or(self.publish.format.as_deref());
+                let registries = target
+                    .registries
+                    .as_deref()
+                    .or(self.publish.registries.as_deref());
+                let mut urls = self.publish.registry_urls.clone();
+                urls.extend(target.registry_urls.clone());
+                validate_publish_route(name, format, registries, &urls)?;
             }
         }
         // A blank request means "no target", the same way a blank
@@ -604,7 +725,33 @@ impl Manifest {
         // The consumer-facing wiring for this ecosystem.
         derived.install.adapter = section.adapter.clone().or(self.install.adapter.clone());
         derived.install.target = None;
+        derived.publish.format = section.format.clone().or(self.publish.format.clone());
+        if section.registries.is_some() {
+            derived.publish.registries = section.registries.clone();
+        }
+        derived
+            .publish
+            .registry_urls
+            .extend(section.registry_urls.clone());
         Some(derived)
+    }
+
+    /// The effective registry fan-out for this package. Manifests written
+    /// before multi-registry support continue to resolve to Zed only.
+    pub fn publish_registries(&self) -> Vec<PublishRegistry> {
+        self.publish
+            .registries
+            .clone()
+            .unwrap_or_else(|| vec![PublishRegistry::Zed])
+    }
+
+    /// An endpoint override for a registry family, when the manifest names
+    /// one. The CLI's `--registry` remains the default for `zed`.
+    pub fn publish_registry_url(&self, registry: PublishRegistry) -> Option<&str> {
+        self.publish
+            .registry_urls
+            .get(&registry)
+            .map(String::as_str)
     }
 
     /// Resolve which subdirectory of *this* (dependency) package a consumer

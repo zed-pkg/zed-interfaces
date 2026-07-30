@@ -3,6 +3,7 @@ use zed_interfaces::excludes::{ALWAYS_INCLUDE, DEFAULT_EXCLUDES, effective_exclu
 use zed_interfaces::lockfile::{LockedPackage, Lockfile};
 use zed_interfaces::manifest::{Manifest, ManifestError};
 use zed_interfaces::paths::store_entry_rel;
+use zed_interfaces::publish::PublishRegistry;
 use zed_interfaces::vcs::Vcs;
 
 const SAMPLE: &str = r#"
@@ -423,4 +424,133 @@ fn derived_target_names_must_still_be_valid_package_names() {
             "derived name `{name}` is not a valid package name"
         );
     }
+}
+
+#[test]
+fn polyglot_targets_declare_registry_fanout_by_native_format() {
+    let source = CLIENTS
+        .replace(
+            "[targets.nodejs]\ndir = \"clients/ts\"\nadapter = \"node\"",
+            r#"[targets.nodejs]
+dir = "clients/ts"
+adapter = "node"
+format = "npm"
+registries = ["zed", "native", "github-packages", "gitlab-packages", "bitbucket-packages"]
+
+[targets.nodejs.registry_urls]
+gitlab-packages = "https://gitlab.example.com""#,
+        )
+        .replace(
+            "[targets.java]\ndir = \"clients/java\"\nadapter = \"java\"",
+            r#"[targets.java]
+dir = "clients/java"
+adapter = "java"
+format = "maven"
+registries = ["zed", "native", "github-packages", "gitlab-packages", "bitbucket-packages"]"#,
+        )
+        .replace(
+            "[targets.golang]\ndir = \"clients/go\"",
+            r#"[targets.golang]
+dir = "clients/go"
+format = "go"
+registries = ["zed", "native", "gitlab-packages"]"#,
+        );
+
+    let manifest = Manifest::parse(&source).expect("all declared host/format pairs are supported");
+    let node = manifest.manifest_for_target("nodejs").unwrap();
+    assert_eq!(node.publish.format.as_deref(), Some("npm"));
+    assert_eq!(
+        node.publish_registries(),
+        vec![
+            PublishRegistry::Zed,
+            PublishRegistry::Native,
+            PublishRegistry::GithubPackages,
+            PublishRegistry::GitlabPackages,
+            PublishRegistry::BitbucketPackages,
+        ]
+    );
+    assert_eq!(
+        node.publish_registry_url(PublishRegistry::GitlabPackages),
+        Some("https://gitlab.example.com")
+    );
+
+    let go = manifest.manifest_for_target("golang").unwrap();
+    assert_eq!(go.publish.format.as_deref(), Some("go"));
+    assert_eq!(
+        go.publish_registries(),
+        vec![
+            PublishRegistry::Zed,
+            PublishRegistry::Native,
+            PublishRegistry::GitlabPackages,
+        ]
+    );
+
+    assert_eq!(
+        Manifest::parse(&manifest.to_toml_string().unwrap()).unwrap(),
+        manifest
+    );
+}
+
+#[test]
+fn old_manifests_default_to_zed_only() {
+    let manifest = Manifest::parse(SAMPLE).unwrap();
+    assert_eq!(manifest.publish_registries(), vec![PublishRegistry::Zed]);
+    assert!(manifest.publish.format.is_none());
+}
+
+#[test]
+fn unsupported_forge_routes_fail_before_publish() {
+    let github_cargo = CLIENTS.replace(
+        "[targets.nodejs]\ndir = \"clients/ts\"\nadapter = \"node\"",
+        r#"[targets.nodejs]
+dir = "clients/ts"
+adapter = "node"
+format = "cargo"
+registries = ["zed", "github-packages"]"#,
+    );
+    assert!(matches!(
+        Manifest::parse(&github_cargo),
+        Err(ManifestError::InvalidPublishRoute(_, reason))
+            if reason.contains("github-packages") && reason.contains("cargo")
+    ));
+
+    let bitbucket_pypi = CLIENTS.replace(
+        "[targets.nodejs]\ndir = \"clients/ts\"\nadapter = \"node\"",
+        r#"[targets.nodejs]
+dir = "clients/ts"
+adapter = "node"
+format = "pypi"
+registries = ["bitbucket-packages"]"#,
+    );
+    assert!(matches!(
+        Manifest::parse(&bitbucket_pypi),
+        Err(ManifestError::InvalidPublishRoute(_, reason))
+            if reason.contains("bitbucket-packages") && reason.contains("pypi")
+    ));
+}
+
+#[test]
+fn external_registries_require_a_format_and_safe_endpoint() {
+    let missing_format = format!(
+        "{SAMPLE}\n[publish.registry_urls]\ngithub-packages = \"https://npm.pkg.github.com\"\n"
+    )
+    .replace(
+        "[publish]\n",
+        "[publish]\nregistries = [\"zed\", \"github-packages\"]\n",
+    );
+    assert!(matches!(
+        Manifest::parse(&missing_format),
+        Err(ManifestError::InvalidPublishRoute(_, reason))
+            if reason.contains("requires an explicit package format")
+    ));
+
+    let credential_url = SAMPLE.replace(
+        "[publish]\n",
+        "[publish]\nformat = \"npm\"\nregistries = [\"native\"]\nregistry_urls = { native = \"not a URL\" }\n",
+    );
+    assert!(matches!(
+        Manifest::parse(&credential_url),
+        Err(ManifestError::InvalidPublishRoute(_, reason))
+            if reason.contains("registry URL")
+    ));
 }
