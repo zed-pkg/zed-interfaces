@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::language::{Ecosystem, Language};
 use crate::vcs::Vcs;
 use crate::version::{Requirement, VersionScheme};
 
@@ -115,6 +116,38 @@ pub struct PackageSection {
     pub repository: RepositorySection,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keywords: Vec<String>,
+    /// The language this package's code targets. A multi-language repository
+    /// publishes one package per language, all at one version, and each names
+    /// its own — `acme-clients-java`, `acme-clients-nodejs`. Defaults to
+    /// `universal` (language-agnostic), which is never subject to the install
+    /// ecosystem guard.
+    #[serde(default, skip_serializing_if = "Language::is_default")]
+    pub language: Language,
+    /// How consumers take this package in: `jvm`, `npm`, `gomod`, … Drives the
+    /// install-time guard that refuses to drop a Java client into a Node
+    /// project, and picks the toolchain wiring `zed install` writes.
+    ///
+    /// Omit it and it is derived from `language` (see
+    /// [`Language::ecosystem`]) — declare it only when the language does not
+    /// determine consumption. Read through [`PackageSection::ecosystem`]
+    /// rather than touching this field, so the fallback always applies.
+    #[serde(default, skip_serializing_if = "Ecosystem::is_default")]
+    pub ecosystem: Ecosystem,
+}
+
+impl PackageSection {
+    /// The effective ecosystem: the explicit `ecosystem` when declared, else
+    /// the one implied by `language`.
+    ///
+    /// Always use this instead of reading the field directly — a manifest that
+    /// says only `language = "java"` must still guard as `jvm`.
+    pub fn ecosystem(&self) -> Ecosystem {
+        if self.ecosystem.is_default() {
+            self.language.ecosystem()
+        } else {
+            self.ecosystem
+        }
+    }
 }
 
 /// Where the package's source of truth lives. Any Git or Mercurial host
@@ -226,8 +259,39 @@ pub struct TargetSection {
     /// Optional routing to this target's native ecosystem registry. This is
     /// declarative metadata only: the native manifest remains authoritative,
     /// and arbitrary commands are intentionally not representable here.
+    ///
+    /// Note the difference from [`TargetSection::ecosystem`]: `native` is
+    /// **outbound** (where this slice is mirrored to — npm, crates.io), while
+    /// `ecosystem` is **inbound** (what toolchain a consumer must have to
+    /// install it from zed). They describe the same ecosystem from two sides,
+    /// so when both are set they must agree — see
+    /// [`NativeRegistry::ecosystem`] and the check in [`Manifest::validate`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<NativeReleaseSection>,
+    /// Override the ecosystem this target publishes into. Omit it (the normal
+    /// case) and it is derived from the target key via [`Language::ecosystem`].
+    /// Declare it when the key does not determine consumption — a `rust-wasm`
+    /// target is consumed by a JS bundler, not by Cargo.
+    #[serde(default, skip_serializing_if = "Ecosystem::is_default")]
+    pub ecosystem: Ecosystem,
+}
+
+impl TargetSection {
+    /// The language this target ships, from its explicit key. `universal` when
+    /// the key is not a language zed knows — such a target still publishes and
+    /// installs, it just is not ecosystem-gated.
+    pub fn language_for(&self, target_key: &str) -> Language {
+        Language::from_token(target_key).unwrap_or_default()
+    }
+
+    /// The ecosystem a consumer must have to install this target: the explicit
+    /// `ecosystem`, else the one implied by the target key.
+    pub fn ecosystem_for(&self, target_key: &str) -> Ecosystem {
+        if !self.ecosystem.is_default() {
+            return self.ecosystem;
+        }
+        self.language_for(target_key).ecosystem()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -280,6 +344,22 @@ impl NativeRegistry {
         match self {
             Self::PyPi => normalize_pypi_package(package),
             _ => package.to_string(),
+        }
+    }
+
+    /// The zed [`Ecosystem`] this native registry corresponds to.
+    ///
+    /// The two enums describe the same thing from opposite directions —
+    /// `NativeRegistry` is where a slice is *mirrored to*, `Ecosystem` is what a
+    /// consumer needs to *install* it — so a target declaring both must not
+    /// disagree. Mapping them here keeps that check in one place instead of
+    /// letting each caller re-derive it.
+    pub fn ecosystem(self) -> Ecosystem {
+        match self {
+            Self::Npm => Ecosystem::Npm,
+            Self::CratesIo => Ecosystem::Cargo,
+            Self::PubDev => Ecosystem::Pub,
+            Self::PyPi => Ecosystem::Pypi,
         }
     }
 }
@@ -437,6 +517,16 @@ pub enum ManifestError {
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
+
+/// Ecosystem adapter names accepted by `[install].adapter` and
+/// `[targets.*].adapter`. Kept here rather than in the CLI so a manifest is
+/// validated the same way by the CLI, the registry, and the web UI.
+///
+/// Each name is a toolchain zed can wire dependencies into. `none` opts out,
+/// installing to `zed_modules/` only. This is deliberately smaller than
+/// [`crate::language::Ecosystem`]: an ecosystem says what a package *is*, an
+/// adapter says what zed can *wire*, and the second list grows more slowly.
+pub const ADAPTERS: &[&str] = &["node", "java", "go", "python", "rust", "dart", "none"];
 
 /// True for the lowercase slugs zed-pkg accepts as org and package names.
 pub fn is_slug(s: &str) -> bool {
@@ -602,12 +692,13 @@ impl Manifest {
                 ));
             }
             if let Some(adapter) = target.adapter.as_deref()
-                && !matches!(adapter, "node" | "java" | "none")
+                && !ADAPTERS.contains(&adapter)
             {
                 return Err(ManifestError::InvalidTarget(
                     name.clone(),
                     format!(
-                        "adapter `{adapter}` is unsupported; expected `node`, `java`, or `none`"
+                        "adapter `{adapter}` is unsupported; expected one of {}",
+                        ADAPTERS.join(", ")
                     ),
                 ));
             }
@@ -632,6 +723,24 @@ impl Manifest {
                             "{} package `{}` is already routed by target `{previous}`",
                             native.registry.as_str(),
                             native.package
+                        ),
+                    ));
+                }
+                // The outbound mirror and the inbound install gate describe the
+                // same ecosystem. If they disagree, one of them is wrong and the
+                // slice would either be mirrored to the wrong registry or
+                // refused for the wrong consumers — both silent until someone
+                // hits it, so fail here instead.
+                let inbound = target.ecosystem_for(name);
+                let outbound = native.registry.ecosystem();
+                if !inbound.is_default() && inbound != outbound {
+                    return Err(ManifestError::InvalidNativeRoute(
+                        name.clone(),
+                        format!(
+                            "routes to {} (ecosystem `{outbound}`) but installs as `{inbound}`; \
+                             set `ecosystem` on the target if the mirror is right"
+                        ,
+                            native.registry.as_str()
                         ),
                     ));
                 }
@@ -790,7 +899,35 @@ impl Manifest {
         // The consumer-facing wiring for this ecosystem.
         derived.install.adapter = section.adapter.clone().or(self.install.adapter.clone());
         derived.install.target = None;
+        // Stamp the slice's identity so the *published* package self-describes
+        // as single-language. This is what lets a consumer's install refuse to
+        // drop `-java` into a Node-only project: the artifact says `jvm`, and
+        // the guard has something to compare against.
+        if let Some(language) = Language::from_token(target) {
+            derived.package.language = language;
+            derived.package.ecosystem = section.ecosystem_for(target);
+        }
         Some(derived)
+    }
+
+    /// The target key matching `requested`, honoring language synonyms.
+    ///
+    /// Target keys are chosen by the package author (`nodejs`, `node`, `ts`)
+    /// while a consumer's request comes from a flag, their manifest, or
+    /// inference — so the two spellings routinely differ for the same language.
+    /// Exact match wins; otherwise `requested` and each key are normalized
+    /// through [`Language::from_token`] and compared, which is what makes a
+    /// project detected as `node` resolve a `[targets.nodejs]` package (and
+    /// `go` reach `golang`).
+    pub fn resolve_target_key(&self, requested: &str) -> Option<&str> {
+        if let Some((key, _)) = self.targets.get_key_value(requested) {
+            return Some(key.as_str());
+        }
+        let wanted = Language::from_token(requested).filter(|l| !l.is_default())?;
+        self.targets
+            .keys()
+            .find(|key| Language::from_token(key) == Some(wanted))
+            .map(String::as_str)
     }
 
     /// Resolve which subdirectory of *this* (dependency) package a consumer
@@ -811,7 +948,13 @@ impl Manifest {
         let Some(requested) = requested else {
             return Ok(None);
         };
-        match self.targets.get(requested) {
+        // Synonym-aware: a project inferred as `node` must resolve a package
+        // that spells its target `nodejs`, or every such consumer would hit the
+        // error below despite the package shipping exactly what they need.
+        match self
+            .resolve_target_key(requested)
+            .and_then(|key| self.targets.get(key))
+        {
             Some(target) => Ok(Some(target.dir.as_str())),
             None => {
                 let mut available: Vec<&str> = self.targets.keys().map(String::as_str).collect();

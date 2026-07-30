@@ -191,3 +191,92 @@ package = "friendly...bard"
     let message = error.to_string();
     assert!(message.contains("already routed"), "{message}");
 }
+
+// --- the two ecosystem axes must agree ------------------------------------
+
+#[test]
+fn a_native_route_that_contradicts_the_install_ecosystem_is_rejected() {
+    // `native` is outbound (mirror to npm), `ecosystem` is inbound (what a
+    // consumer needs to install). A python slice routed to npm means one of the
+    // two is wrong, and either way it stays silent until someone hits it.
+    let err = Manifest::parse(&manifest(
+        r#"
+[targets.python]
+dir = "clients/python"
+
+[targets.python.native]
+registry = "npm"
+package = "acme-client"
+"#,
+    ))
+    .expect_err("a python target mirrored to npm must not validate");
+    let msg = err.to_string();
+    assert!(msg.contains("npm"), "{msg}");
+    assert!(msg.contains("pypi"), "{msg}");
+}
+
+#[test]
+fn a_native_route_matching_the_target_language_validates() {
+    for (target, dir, registry, package) in [
+        ("nodejs", "clients/ts", "npm", "@acme/client"),
+        ("rust", "clients/rust", "crates-io", "acme-client"),
+        ("python", "clients/python", "pypi", "acme-client"),
+        ("dart", "clients/dart", "pub.dev", "acme_client"),
+    ] {
+        let toml = manifest(&format!(
+            r#"
+[targets.{target}]
+dir = "{dir}"
+
+[targets.{target}.native]
+registry = "{registry}"
+package = "{package}"
+"#
+        ));
+        let parsed = Manifest::parse(&toml)
+            .unwrap_or_else(|e| panic!("{target} -> {registry} must validate: {e}"));
+        let route = &parsed.native_release_routes()[0];
+        assert_eq!(route.target, target);
+        assert_eq!(route.registry.ecosystem(), parsed.targets[target].ecosystem_for(target));
+    }
+}
+
+#[test]
+fn an_explicit_ecosystem_override_reconciles_a_deliberate_mismatch() {
+    // rust-wasm is Rust source consumed by a JS bundler: the mirror really is
+    // npm, so declaring the inbound ecosystem makes the pair consistent rather
+    // than requiring the check to be weakened.
+    let toml = manifest(
+        r#"
+[targets.rust-wasm]
+dir = "clients/rust-wasm"
+ecosystem = "npm"
+
+[targets.rust-wasm.native]
+registry = "npm"
+package = "@acme/client-wasm"
+"#,
+    );
+    let parsed = Manifest::parse(&toml).expect("an explicit npm ecosystem must reconcile");
+    assert_eq!(
+        parsed.targets["rust-wasm"].ecosystem_for("rust-wasm"),
+        NativeRegistry::Npm.ecosystem()
+    );
+}
+
+#[test]
+fn a_target_key_that_is_not_a_language_never_contradicts_its_route() {
+    // An arbitrary target slug carries no ecosystem claim, so there is nothing
+    // for the native route to disagree with.
+    let toml = manifest(
+        r#"
+[targets.wasm3]
+dir = "clients/wasm3"
+
+[targets.wasm3.native]
+registry = "npm"
+package = "acme-wasm3"
+"#,
+    );
+    assert!(Manifest::parse(&toml).is_ok());
+}

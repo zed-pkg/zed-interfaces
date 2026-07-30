@@ -1,6 +1,7 @@
 use zed_interfaces::ArtifactFormat;
 use zed_interfaces::excludes::{ALWAYS_INCLUDE, DEFAULT_EXCLUDES, effective_excludes};
 use zed_interfaces::lockfile::{LockedPackage, Lockfile};
+use zed_interfaces::language::{Ecosystem, Language};
 use zed_interfaces::manifest::{Manifest, ManifestError};
 use zed_interfaces::paths::store_entry_rel;
 use zed_interfaces::vcs::Vcs;
@@ -423,4 +424,165 @@ fn derived_target_names_must_still_be_valid_package_names() {
             "derived name `{name}` is not a valid package name"
         );
     }
+}
+
+// --- language / ecosystem tagging -----------------------------------------
+
+/// A repo naming its targets the way the published packages read — the
+/// colloquial `nodejs` / `golang` a human recalls — rather than the short
+/// tokens project inference produces.
+const COLLOQUIAL: &str = r#"
+[package]
+org = "fiducia"
+name = "fiducia-clients"
+version = "1.1.2"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/fiducia-cloud/fiducia-clients"
+
+[targets.nodejs]
+dir = "clients/ts"
+
+[targets.golang]
+dir = "clients/go"
+
+[targets.java]
+dir = "clients/java"
+
+[targets.kotlin]
+dir = "clients/kotlin"
+
+[targets.rust-wasm]
+dir = "clients/rust-wasm"
+ecosystem = "npm"
+"#;
+
+#[test]
+fn a_project_inferred_as_node_resolves_a_nodejs_target() {
+    // The decisive case for synonym resolution. Project inference yields
+    // `node`/`go` from package.json/go.mod, but these packages publish as
+    // `-nodejs`/`-golang` because that is what the names should read. Without
+    // synonym matching every such consumer would hit "publishes no such
+    // target" while the package ships exactly what they need.
+    let m = Manifest::parse(COLLOQUIAL).unwrap();
+    assert_eq!(m.target_subdir(Some("node")).unwrap(), Some("clients/ts"));
+    assert_eq!(m.target_subdir(Some("go")).unwrap(), Some("clients/go"));
+    // …and the spelling the author used keeps working too.
+    assert_eq!(m.target_subdir(Some("nodejs")).unwrap(), Some("clients/ts"));
+    assert_eq!(m.target_subdir(Some("golang")).unwrap(), Some("clients/go"));
+    // As do the ecosystem's own near-synonyms.
+    assert_eq!(
+        m.target_subdir(Some("typescript")).unwrap(),
+        Some("clients/ts")
+    );
+    assert_eq!(m.target_subdir(Some("ts")).unwrap(), Some("clients/ts"));
+}
+
+#[test]
+fn synonym_resolution_does_not_collapse_distinct_languages() {
+    // Java and Kotlin share an ecosystem but are separate packages; asking for
+    // one must never hand back the other.
+    let m = Manifest::parse(COLLOQUIAL).unwrap();
+    assert_eq!(m.target_subdir(Some("java")).unwrap(), Some("clients/java"));
+    assert_eq!(
+        m.target_subdir(Some("kotlin")).unwrap(),
+        Some("clients/kotlin")
+    );
+    // A JVM language the repo does not publish is still an error, not a
+    // silent substitution of a sibling JVM target.
+    assert!(m.target_subdir(Some("scala")).is_err());
+}
+
+#[test]
+fn an_exact_target_key_wins_over_a_synonym() {
+    // With both `node` and `nodejs` declared, `node` must mean the `node` one.
+    let both = COLLOQUIAL.replace(
+        "[targets.golang]\ndir = \"clients/go\"",
+        "[targets.node]\ndir = \"clients/js-legacy\"",
+    );
+    let m = Manifest::parse(&both).unwrap();
+    assert_eq!(
+        m.target_subdir(Some("node")).unwrap(),
+        Some("clients/js-legacy")
+    );
+    assert_eq!(m.target_subdir(Some("nodejs")).unwrap(), Some("clients/ts"));
+}
+
+#[test]
+fn an_unknown_target_is_still_an_error_after_synonym_expansion() {
+    // Synonyms must widen what resolves, never turn a real mistake into a
+    // silent whole-tree install.
+    let m = Manifest::parse(COLLOQUIAL).unwrap();
+    let err = m.target_subdir(Some("cobol")).expect_err("unknown language");
+    assert!(err.to_string().contains("cobol"), "{err}");
+}
+
+#[test]
+fn each_published_target_declares_its_own_language_and_ecosystem() {
+    // This is what the consumer-side guard reads: the artifact for `-java` must
+    // say `jvm` so an npm-only project can be told it is the wrong one.
+    let m = Manifest::parse(COLLOQUIAL).unwrap();
+
+    let java = m.manifest_for_target("java").unwrap();
+    assert_eq!(java.package.name, "fiducia-clients-java");
+    assert_eq!(java.package.language, Language::Java);
+    assert_eq!(java.package.ecosystem(), Ecosystem::Jvm);
+
+    let node = m.manifest_for_target("nodejs").unwrap();
+    assert_eq!(node.package.name, "fiducia-clients-nodejs");
+    assert_eq!(node.package.language, Language::Nodejs);
+    assert_eq!(node.package.ecosystem(), Ecosystem::Npm);
+
+    // Kotlin shares Java's ecosystem while keeping its own name — the reason
+    // language and ecosystem are separate axes.
+    let kotlin = m.manifest_for_target("kotlin").unwrap();
+    assert_eq!(kotlin.package.name, "fiducia-clients-kotlin");
+    assert_eq!(kotlin.package.language, Language::Kotlin);
+    assert_eq!(kotlin.package.ecosystem(), Ecosystem::Jvm);
+
+    // Each slice round-trips as a standalone single-language manifest.
+    for target in ["java", "nodejs", "kotlin"] {
+        let derived = m.manifest_for_target(target).unwrap();
+        let reparsed = Manifest::parse(&derived.to_toml_string().unwrap()).unwrap();
+        assert_eq!(reparsed, derived, "{target} manifest must round-trip");
+        assert!(!reparsed.is_polyglot());
+    }
+}
+
+#[test]
+fn an_explicit_target_ecosystem_overrides_the_language_default() {
+    // rust-wasm is Rust source consumed by a JS bundler, so the package must be
+    // gated as npm even though the language is a Rust dialect.
+    let m = Manifest::parse(COLLOQUIAL).unwrap();
+    let wasm = m.manifest_for_target("rust-wasm").unwrap();
+    assert_eq!(wasm.package.name, "fiducia-clients-rust-wasm");
+    assert_eq!(wasm.package.language, Language::RustWasm);
+    assert_eq!(wasm.package.ecosystem(), Ecosystem::Npm);
+}
+
+#[test]
+fn a_target_key_that_is_not_a_known_language_stays_ungated() {
+    // Arbitrary slugs remain legal target names (pre-existing behavior). Such a
+    // package publishes and installs, it just carries no ecosystem claim, so
+    // the guard cannot and must not reject it anywhere.
+    let custom = POLYGLOT.replace("[targets.go]\ndir = \"go\"", "[targets.wasm3]\ndir = \"w3\"");
+    let m = Manifest::parse(&custom).unwrap();
+    let derived = m.manifest_for_target("wasm3").unwrap();
+    assert_eq!(derived.package.name, "polyglot-lib-wasm3");
+    assert!(derived.package.language.is_default());
+    assert_eq!(derived.package.ecosystem(), Ecosystem::Universal);
+}
+
+#[test]
+fn untagged_manifests_keep_their_meaning() {
+    // Every manifest written before language tagging existed must parse and
+    // stay ungated — this is the backwards-compatibility contract.
+    let m = Manifest::parse(SAMPLE).unwrap();
+    assert!(m.package.language.is_default());
+    assert_eq!(m.package.ecosystem(), Ecosystem::Universal);
+    // …and must not gain the fields when serialized back out.
+    let toml = m.to_toml_string().unwrap();
+    assert!(!toml.contains("language"), "{toml}");
+    assert!(!toml.contains("ecosystem"), "{toml}");
 }
