@@ -1,8 +1,9 @@
 //! Publish-time exclusion rules.
 //!
-//! zed-pkg's core disk-space promise: published artifacts carry what runs,
-//! not what develops. Tests, CI configuration, VCS metadata, and READMEs
-//! are stripped by default; license files are always kept.
+//! zed-pkg's core disk-space promise: published artifacts carry runtime files,
+//! not development machinery. Tests, CI configuration, VCS metadata, and
+//! release documentation are stripped by default; packages can opt into their
+//! README and changelog together, while license files are always kept.
 
 /// Glob patterns excluded from every published artifact by default.
 /// Matching is case-insensitive in the CLI.
@@ -66,14 +67,24 @@ pub const DEFAULT_EXCLUDES: &[&str] = &[
 /// Shipping license texts with artifacts is non-negotiable.
 pub const ALWAYS_INCLUDE: &[&str] = &["LICENSE*", "LICENCE*", "COPYING*", "NOTICE*", ".zpkg.toml"];
 
-/// The effective exclusion list for a package: built-in defaults (minus
-/// README patterns when `include_readme` is set), plus the manifest's own
-/// `publish.exclude` globs. `.zedignore` lines are appended by the CLI on
-/// top of this.
+/// Doc patterns `include_readme` un-excludes: the human-facing files a package
+/// registry expects to find in a published artifact.
+///
+/// `CHANGELOG` is here rather than stripped because native registries ask for it
+/// by name — `dart pub publish` fails the package outright for its absence, and
+/// `publish.exclude` can only *add* patterns, so a repo has no way to keep it
+/// otherwise. A package that opted into shipping its README wants its changelog
+/// shipped too.
+const REGISTRY_DOC_PATTERNS: &[&str] = &["README", "CHANGELOG"];
+
+/// The effective exclusion list for a package: built-in defaults (minus the
+/// registry-facing doc patterns when `include_readme` is set), plus the
+/// manifest's own `publish.exclude` globs. `.zedignore` lines are appended by
+/// the CLI on top of this.
 pub fn effective_excludes(extra: &[String], include_readme: bool) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for pattern in DEFAULT_EXCLUDES {
-        if include_readme && pattern.starts_with("README") {
+        if include_readme && REGISTRY_DOC_PATTERNS.iter().any(|d| pattern.starts_with(d)) {
             continue;
         }
         out.push((*pattern).to_string());
