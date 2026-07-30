@@ -66,6 +66,56 @@
         "command"
       ]
     },
+    "Ecosystem": {
+      "description": "How a consumer's build system takes a dependency in: the resolution\nmechanism, not the language. Drives the install guard and which toolchain\nwiring file `zed install` writes.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "cargo",
+            "cmake",
+            "composer",
+            "cran",
+            "gem",
+            "gomod",
+            "hackage",
+            "julia",
+            "luarocks",
+            "matlab",
+            "nimble",
+            "npm",
+            "nuget",
+            "opam",
+            "psgallery",
+            "pypi",
+            "shards",
+            "shell",
+            "swiftpm",
+            "zig"
+          ]
+        },
+        {
+          "description": "No ecosystem constraint. Installs into any project; never gated.",
+          "type": "string",
+          "const": "universal"
+        },
+        {
+          "description": "Elixir, Erlang and Gleam share Hex and the BEAM.",
+          "type": "string",
+          "const": "hex"
+        },
+        {
+          "description": "Anything consumed off a JVM classpath: Java, Kotlin, Scala, Clojure.",
+          "type": "string",
+          "const": "jvm"
+        },
+        {
+          "description": "Dart and Flutter (`pub`).",
+          "type": "string",
+          "const": "pub"
+        }
+      ]
+    },
     "InstallSection": {
       "description": "Install-layout controls: where zed's dependency tree lands and which\necosystem adapter to emit so those deps are visible to the native toolchain.",
       "type": "object",
@@ -92,6 +142,65 @@
           ]
         }
       }
+    },
+    "Language": {
+      "description": "The language a package's code is written for. Names the published package\n(`<repo>-<language>`), and implies an [`Ecosystem`] via\n[`Language::ecosystem`].\n\nCanonical tokens are the colloquial names people search for — `nodejs`, not\n`node`; `golang`, not `go` — because that is what ends up in a package name\na human has to recall. The shorter spellings, and near-synonyms like\n`typescript`, are accepted by [`Language::from_token`] and by umbrella\nvariant aliases, so both spellings resolve.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "c",
+            "clojure",
+            "cpp",
+            "crystal",
+            "csharp",
+            "dart",
+            "elixir",
+            "erlang",
+            "fsharp",
+            "gleam",
+            "golang",
+            "haskell",
+            "java",
+            "julia",
+            "kotlin",
+            "lua",
+            "matlab",
+            "nim",
+            "ocaml",
+            "php",
+            "powershell",
+            "python",
+            "r",
+            "ruby",
+            "rust",
+            "scala",
+            "shell",
+            "swift",
+            "zig"
+          ]
+        },
+        {
+          "description": "Not language-specific: protocol schemas, docs, `.proto` files, an\numbrella package. Never subject to the install ecosystem guard.",
+          "type": "string",
+          "const": "universal"
+        },
+        {
+          "description": "Flutter is a framework rather than a language, but a Flutter client is a\nseparate package from a plain Dart one (different `pubspec.yaml`,\ndifferent deps), so it gets its own token.",
+          "type": "string",
+          "const": "flutter"
+        },
+        {
+          "description": "Covers JavaScript and TypeScript alike: for a client library they are\none artifact published to one ecosystem, so `typescript`, `javascript`,\n`ts`, `js` and `node` all resolve here rather than splitting the package.",
+          "type": "string",
+          "const": "nodejs"
+        },
+        {
+          "description": "Rust compiled to WebAssembly. Distinct from [`Language::Rust`] because\nthe artifact is consumed by a JS bundler, not by Cargo.",
+          "type": "string",
+          "const": "rust-wasm"
+        }
+      ]
     },
     "Manifest": {
       "description": "The `.zpkg.toml` manifest at the root of every package repository.\nTOML only — never YAML or JSON.\n\n```toml\n[package]\norg = \"acme\"\nname = \"http-kit\"\nversion = \"1.2.0\"\ndescription = \"Tiny HTTP helpers\"\nlicense = \"MIT\"\n\n[package.repository]\nvcs = \"git\"\nurl = \"https://github.com/acme/http-kit\"\n\n[dependencies]\n\"acme/logkit\" = \"^0.3\"\n\n[publish]\nexclude = [\"benches/**\"]\nsmoke_test = \"sh scripts/smoke.sh\"\n```",
@@ -200,11 +309,19 @@
             "null"
           ]
         },
+        "ecosystem": {
+          "description": "How consumers take this package in: `jvm`, `npm`, `gomod`, … Drives the\ninstall-time guard that refuses to drop a Java client into a Node\nproject, and picks the toolchain wiring `zed install` writes.\n\nOmit it and it is derived from `language` (see\n[`Language::ecosystem`]) — declare it only when the language does not\ndetermine consumption. Read through [`PackageSection::ecosystem`]\nrather than touching this field, so the fallback always applies.",
+          "$ref": "#/$defs/Ecosystem"
+        },
         "keywords": {
           "type": "array",
           "items": {
             "type": "string"
           }
+        },
+        "language": {
+          "description": "The language this package's code targets. A multi-language repository\npublishes one package per language, all at one version, and each names\nits own — `acme-clients-java`, `acme-clients-nodejs`. Defaults to\n`universal` (language-agnostic), which is never subject to the install\necosystem guard.",
+          "$ref": "#/$defs/Language"
         },
         "license": {
           "type": [
@@ -313,6 +430,10 @@
         "dir": {
           "description": "Package-relative directory that is this ecosystem's package root, e.g.\n`python` or `clients/go`. Must be a safe relative path (no leading `/`,\nno `..`) so a target can never escape the package.",
           "type": "string"
+        },
+        "ecosystem": {
+          "description": "Override the ecosystem this target publishes into. Omit it (the normal\ncase) and it is derived from the target key via [`Language::ecosystem`].\nDeclare it when the key does not determine consumption — a `rust-wasm`\ntarget is consumed by a JS bundler, not by Cargo.",
+          "$ref": "#/$defs/Ecosystem"
         },
         "name": {
           "description": "Published package name for this target. Defaults to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to\nbreak out of the suffix convention when an ecosystem expects a\ndifferent spelling.",

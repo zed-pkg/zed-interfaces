@@ -8,6 +8,7 @@
 
 pub mod artifact;
 pub mod excludes;
+pub mod language;
 pub mod lockfile;
 pub mod manifest;
 pub mod paths;
@@ -17,6 +18,7 @@ pub mod vcs;
 pub mod version;
 
 pub use artifact::ArtifactFormat;
+pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile};
 pub use manifest::{Manifest, ManifestError};
 pub use vcs::Vcs;
