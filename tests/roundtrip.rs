@@ -134,13 +134,6 @@ fn excludes_respect_include_readme() {
 }
 
 #[test]
-fn changelogs_are_release_metadata_not_development_artifacts() {
-    let excludes = effective_excludes(&[], false);
-    assert!(!excludes.iter().any(|pattern| pattern == "CHANGELOG*"));
-    assert!(!DEFAULT_EXCLUDES.contains(&"CHANGELOG*"));
-}
-
-#[test]
 fn store_paths_are_sharded() {
     let sha = "abcdef0123".to_string() + &"0".repeat(54);
     assert_eq!(store_entry_rel(&sha), format!("store/v1/ab/{sha}"));
