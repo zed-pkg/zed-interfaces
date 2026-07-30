@@ -1232,9 +1232,26 @@ impl Manifest {
             return Some(key.as_str());
         }
         let wanted = Language::from_token(requested).filter(|l| !l.is_default())?;
+        let mut matches = self
+            .targets
+            .keys()
+            .filter(|key| Language::from_token(key) == Some(wanted));
+        let first = matches.next()?;
+        if matches.next().is_none() {
+            return Some(first.as_str());
+        }
+        // Several targets share this language — a repo shipping separate `ts`
+        // and `js` clients has two `nodejs` targets. A synonym request like
+        // `node` must land somewhere predictable rather than on whichever key
+        // sorts first, so prefer the one named after the language itself.
         self.targets
             .keys()
-            .find(|key| Language::from_token(key) == Some(wanted))
+            .find(|key| key.as_str() == wanted.as_str())
+            .or_else(|| {
+                self.targets
+                    .keys()
+                    .find(|key| Language::from_token(key) == Some(wanted))
+            })
             .map(String::as_str)
     }
 

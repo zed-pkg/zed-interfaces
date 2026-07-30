@@ -614,3 +614,39 @@ fn include_readme_also_keeps_the_changelog_registries_ask_for() {
     // Everything else still goes.
     assert!(kept.iter().any(|p| p.contains("test")));
 }
+
+#[test]
+fn a_synonym_request_prefers_the_target_named_after_the_language() {
+    // shared-auth-clients ships separate TypeScript and JavaScript clients, so
+    // two targets are both `nodejs`. A consumer inferred as `node` must land on
+    // the canonical one, not on whichever key happens to sort first.
+    let two_node = r#"
+[package]
+org = "shared-auth"
+name = "shared-auth-clients"
+version = "0.1.0"
+
+[package.repository]
+url = "https://github.com/shared-auth/shared-auth-clients"
+
+[targets.javascript]
+dir = "clients/js"
+
+[targets.nodejs]
+dir = "clients/ts"
+"#;
+    let m = Manifest::parse(two_node).unwrap();
+    // `javascript` sorts before `nodejs`, so a naive first-match would pick it.
+    assert_eq!(m.resolve_target_key("node"), Some("nodejs"));
+    assert_eq!(m.target_subdir(Some("node")).unwrap(), Some("clients/ts"));
+    // An exact key still wins over the canonical preference.
+    assert_eq!(m.resolve_target_key("javascript"), Some("javascript"));
+    assert_eq!(
+        m.target_subdir(Some("javascript")).unwrap(),
+        Some("clients/js")
+    );
+    // And a single-match repo is unaffected.
+    let one = two_node.replace("[targets.javascript]\ndir = \"clients/js\"\n", "");
+    let m1 = Manifest::parse(&one).unwrap();
+    assert_eq!(m1.resolve_target_key("js"), Some("nodejs"));
+}
