@@ -591,3 +591,26 @@ fn untagged_manifests_keep_their_meaning() {
     assert!(!toml.contains("language"), "{toml}");
     assert!(!toml.contains("ecosystem"), "{toml}");
 }
+
+#[test]
+fn include_readme_also_keeps_the_changelog_registries_ask_for() {
+    // `dart pub publish` fails a package outright for a missing CHANGELOG, and
+    // `publish.exclude` can only add patterns — so if the default excludes strip
+    // it, no repo can ship one. A package that opted into its README wants its
+    // changelog too.
+    let stripped = effective_excludes(&[], false);
+    assert!(stripped.iter().any(|p| p.starts_with("README")));
+    assert!(stripped.iter().any(|p| p.starts_with("CHANGELOG")));
+
+    let kept = effective_excludes(&[], true);
+    assert!(
+        !kept.iter().any(|p| p.starts_with("README")),
+        "include_readme must un-exclude READMEs"
+    );
+    assert!(
+        !kept.iter().any(|p| p.starts_with("CHANGELOG")),
+        "include_readme must un-exclude CHANGELOGs: {kept:?}"
+    );
+    // Everything else still goes.
+    assert!(kept.iter().any(|p| p.contains("test")));
+}
