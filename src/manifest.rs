@@ -305,6 +305,12 @@ impl TargetSection {
 pub struct NativeReleaseSection {
     pub registry: NativeRegistry,
     pub package: String,
+    /// Optional VCS tag template for native ecosystems whose package is
+    /// resolved from a tag rather than uploaded. It must contain `{version}`.
+    /// Go modules below a repository subdirectory need the directory prefix,
+    /// for example `clients/go/v{version}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_format: Option<String>,
     /// Optional copies in package registries run by source forges. The native
     /// registry remains the canonical ecosystem destination; these mirrors
     /// use the same native package format and version.
@@ -459,6 +465,7 @@ pub struct NativeReleaseRoute {
     pub dir: String,
     pub registry: NativeRegistry,
     pub package: String,
+    pub vcs_tag: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -468,6 +475,7 @@ pub struct ForgeReleaseRoute {
     pub registry: ForgeRegistry,
     pub format: NativeRegistry,
     pub package: String,
+    pub vcs_tag: String,
 }
 
 fn is_valid_npm_component(value: &str) -> bool {
@@ -734,6 +742,7 @@ fn is_allowed_repo_url(url: &str) -> bool {
 fn validate_native_release_section(
     native: &NativeReleaseSection,
     route_name: &str,
+    route_dir: &str,
     inbound: Ecosystem,
 ) -> Result<(), ManifestError> {
     native
@@ -755,6 +764,43 @@ fn validate_native_release_section(
                 native.registry.as_str()
             ),
         ));
+    }
+
+    if let Some(tag_format) = &native.tag_format {
+        if !tag_format.contains("{version}") {
+            return Err(ManifestError::InvalidNativeRoute(
+                route_name.to_string(),
+                "native `tag_format` must contain `{version}`".to_string(),
+            ));
+        }
+        if tag_format.trim() != tag_format
+            || tag_format.is_empty()
+            || tag_format.chars().any(char::is_whitespace)
+        {
+            return Err(ManifestError::InvalidNativeRoute(
+                route_name.to_string(),
+                "native `tag_format` must be a non-empty VCS ref without whitespace".to_string(),
+            ));
+        }
+    }
+    if native.registry == NativeRegistry::GoModules && route_dir != "." {
+        let required_prefix = format!("{}/", route_dir.trim_end_matches('/'));
+        let Some(tag_format) = &native.tag_format else {
+            return Err(ManifestError::InvalidNativeRoute(
+                route_name.to_string(),
+                format!(
+                    "Go module in `{route_dir}` requires `tag_format = \"{required_prefix}v{{version}}\"`"
+                ),
+            ));
+        };
+        if !tag_format.starts_with(&required_prefix) {
+            return Err(ManifestError::InvalidNativeRoute(
+                route_name.to_string(),
+                format!(
+                    "Go module in `{route_dir}` requires a native tag prefixed by `{required_prefix}`"
+                ),
+            ));
+        }
     }
 
     let mut forge_registries = std::collections::BTreeSet::new();
@@ -842,7 +888,7 @@ impl Manifest {
                         .to_string(),
                 ));
             }
-            validate_native_release_section(native, "repository", self.package.ecosystem())?;
+            validate_native_release_section(native, "repository", ".", self.package.ecosystem())?;
             native_routes.insert(
                 (
                     native.registry,
@@ -920,7 +966,12 @@ impl Manifest {
                             .to_string(),
                     ));
                 }
-                validate_native_release_section(native, name, target.ecosystem_for(name))?;
+                validate_native_release_section(
+                    native,
+                    name,
+                    &target.dir,
+                    target.ecosystem_for(name),
+                )?;
                 let canonical_package = native.registry.canonical_package(&native.package);
                 let route = (native.registry, canonical_package);
                 if let Some(previous) = native_routes.insert(route, name.as_str()) {
@@ -1049,6 +1100,11 @@ impl Manifest {
                 dir: ".".to_string(),
                 registry: native.registry,
                 package: native.package.clone(),
+                vcs_tag: native
+                    .tag_format
+                    .as_deref()
+                    .unwrap_or(&self.publish.tag_format)
+                    .replace("{version}", &self.package.version),
             })
             .chain(self.targets.iter().filter_map(|(target, section)| {
                 section.native.as_ref().map(|native| NativeReleaseRoute {
@@ -1056,6 +1112,11 @@ impl Manifest {
                     dir: section.dir.clone(),
                     registry: native.registry,
                     package: native.package.clone(),
+                    vcs_tag: native
+                        .tag_format
+                        .as_deref()
+                        .unwrap_or(&self.publish.tag_format)
+                        .replace("{version}", &self.package.version),
                 })
             }))
             .collect()
@@ -1078,6 +1139,11 @@ impl Manifest {
                         registry,
                         format: native.registry,
                         package: native.package.clone(),
+                        vcs_tag: native
+                            .tag_format
+                            .as_deref()
+                            .unwrap_or(&self.publish.tag_format)
+                            .replace("{version}", &self.package.version),
                     })
             })
             .chain(self.targets.iter().flat_map(|(target, section)| {
@@ -1092,6 +1158,11 @@ impl Manifest {
                             registry,
                             format: native.registry,
                             package: native.package.clone(),
+                            vcs_tag: native
+                                .tag_format
+                                .as_deref()
+                                .unwrap_or(&self.publish.tag_format)
+                                .replace("{version}", &self.package.version),
                         })
                 })
             }))

@@ -278,6 +278,13 @@
         },
         "registry": {
           "$ref": "#/$defs/NativeRegistry"
+        },
+        "tag_format": {
+          "description": "Optional VCS tag template for native ecosystems whose package is\nresolved from a tag rather than uploaded. It must contain `{version}`.\nGo modules below a repository subdirectory need the directory prefix,\nfor example `clients/go/v{version}`.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

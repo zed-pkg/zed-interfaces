@@ -63,6 +63,11 @@ claim Cargo support in GitHub Packages or PyPI support in Bitbucket Packages;
 those combinations fail during manifest parsing, before any release job sees
 credentials.
 
+Tag-resolved ecosystems can override the repository release tag. A Go module
+below `clients/go`, for example, declares
+`tag_format = "clients/go/v{version}"`; validation rejects a subdirectory Go
+route without that prefix.
+
 A single-language package whose native manifest is at the repository root uses
 the same shape under `[publish.native]`:
 
