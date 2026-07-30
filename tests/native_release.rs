@@ -376,6 +376,15 @@ forge = ["gitlab-packages"]
     let encoded = parsed.to_toml_string().unwrap();
     assert!(encoded.contains("github-packages"));
     assert_eq!(Manifest::parse(&encoded).unwrap(), parsed);
+
+    let derived = parsed.manifest_for_target("nodejs").unwrap();
+    assert!(derived.targets.is_empty());
+    assert_eq!(derived.publish.native, parsed.targets["nodejs"].native);
+    assert_eq!(derived.native_release_routes()[0].target, "repository");
+    assert_eq!(
+        Manifest::parse(&derived.to_toml_string().unwrap()).unwrap(),
+        derived
+    );
 }
 
 #[test]

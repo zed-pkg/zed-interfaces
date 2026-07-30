@@ -1127,6 +1127,10 @@ impl Manifest {
             Some(base) => format!("{base} ({target})"),
             None => format!("{} ({target} client)", self.package.name),
         });
+        // Once re-rooted, a polyglot slice is a standalone package. Preserve
+        // its outbound native/forge routing under the single-package shape so
+        // the manifest inside the Zed artifact remains self-describing.
+        derived.publish.native = section.native.clone();
         derived.targets = BTreeMap::new();
         derived.workspace = None;
         // The consumer-facing wiring for this ecosystem.
