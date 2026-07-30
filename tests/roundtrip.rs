@@ -1,7 +1,7 @@
 use zed_interfaces::ArtifactFormat;
 use zed_interfaces::excludes::{ALWAYS_INCLUDE, DEFAULT_EXCLUDES, effective_excludes};
-use zed_interfaces::lockfile::{LockedPackage, Lockfile};
 use zed_interfaces::language::{Ecosystem, Language};
+use zed_interfaces::lockfile::{LockedPackage, Lockfile};
 use zed_interfaces::manifest::{Manifest, ManifestError};
 use zed_interfaces::paths::store_entry_rel;
 use zed_interfaces::vcs::Vcs;
@@ -514,7 +514,9 @@ fn an_unknown_target_is_still_an_error_after_synonym_expansion() {
     // Synonyms must widen what resolves, never turn a real mistake into a
     // silent whole-tree install.
     let m = Manifest::parse(COLLOQUIAL).unwrap();
-    let err = m.target_subdir(Some("cobol")).expect_err("unknown language");
+    let err = m
+        .target_subdir(Some("cobol"))
+        .expect_err("unknown language");
     assert!(err.to_string().contains("cobol"), "{err}");
 }
 
@@ -566,7 +568,10 @@ fn a_target_key_that_is_not_a_known_language_stays_ungated() {
     // Arbitrary slugs remain legal target names (pre-existing behavior). Such a
     // package publishes and installs, it just carries no ecosystem claim, so
     // the guard cannot and must not reject it anywhere.
-    let custom = POLYGLOT.replace("[targets.go]\ndir = \"go\"", "[targets.wasm3]\ndir = \"w3\"");
+    let custom = POLYGLOT.replace(
+        "[targets.go]\ndir = \"go\"",
+        "[targets.wasm3]\ndir = \"w3\"",
+    );
     let m = Manifest::parse(&custom).unwrap();
     let derived = m.manifest_for_target("wasm3").unwrap();
     assert_eq!(derived.package.name, "polyglot-lib-wasm3");

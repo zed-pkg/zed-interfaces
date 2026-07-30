@@ -173,6 +173,12 @@ pub struct PublishSection {
     /// VCS tag template that must exist and point at the published commit.
     /// `{version}` is substituted with `package.version`.
     pub tag_format: String,
+    /// Optional native-registry route for a single-language package whose
+    /// package-manager manifest lives at the repository root. Polyglot
+    /// packages declare this metadata on each `[targets.*.native]` section
+    /// instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native: Option<NativeReleaseSection>,
 }
 
 impl Default for PublishSection {
@@ -182,6 +188,7 @@ impl Default for PublishSection {
             include_readme: false,
             smoke_test: None,
             tag_format: "v{version}".to_string(),
+            native: None,
         }
     }
 }
@@ -298,6 +305,11 @@ impl TargetSection {
 pub struct NativeReleaseSection {
     pub registry: NativeRegistry,
     pub package: String,
+    /// Optional copies in package registries run by source forges. The native
+    /// registry remains the canonical ecosystem destination; these mirrors
+    /// use the same native package format and version.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub forge: Vec<ForgeRegistry>,
 }
 
 #[derive(
@@ -311,6 +323,67 @@ pub enum NativeRegistry {
     PubDev,
     #[serde(rename = "pypi")]
     PyPi,
+    MavenCentral,
+    #[serde(rename = "rubygems")]
+    RubyGems,
+    #[serde(rename = "nuget")]
+    NuGet,
+    Packagist,
+    GoModules,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum ForgeRegistry {
+    GithubPackages,
+    GitlabPackages,
+    BitbucketPackages,
+}
+
+impl ForgeRegistry {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::GithubPackages => "github-packages",
+            Self::GitlabPackages => "gitlab-packages",
+            Self::BitbucketPackages => "bitbucket-packages",
+        }
+    }
+
+    /// Package-manager protocols currently documented by each forge. Failing
+    /// closed here prevents a manifest from promising e.g. Cargo support in
+    /// GitHub Packages when that registry has no Cargo endpoint.
+    pub fn supports(self, native: NativeRegistry) -> bool {
+        match self {
+            Self::GithubPackages => matches!(
+                native,
+                NativeRegistry::Npm
+                    | NativeRegistry::MavenCentral
+                    | NativeRegistry::RubyGems
+                    | NativeRegistry::NuGet
+            ),
+            Self::GitlabPackages => matches!(
+                native,
+                NativeRegistry::Npm
+                    | NativeRegistry::PyPi
+                    | NativeRegistry::MavenCentral
+                    | NativeRegistry::RubyGems
+                    | NativeRegistry::NuGet
+                    | NativeRegistry::Packagist
+                    | NativeRegistry::GoModules
+            ),
+            Self::BitbucketPackages => {
+                matches!(native, NativeRegistry::Npm | NativeRegistry::MavenCentral)
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for ForgeRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 impl NativeRegistry {
@@ -320,6 +393,11 @@ impl NativeRegistry {
             Self::CratesIo => "crates-io",
             Self::PubDev => "pub.dev",
             Self::PyPi => "pypi",
+            Self::MavenCentral => "maven-central",
+            Self::RubyGems => "rubygems",
+            Self::NuGet => "nuget",
+            Self::Packagist => "packagist",
+            Self::GoModules => "go-modules",
         }
     }
 
@@ -329,6 +407,11 @@ impl NativeRegistry {
             Self::CratesIo => is_valid_crates_package(package),
             Self::PubDev => is_valid_pubdev_package(package),
             Self::PyPi => is_valid_pypi_package(package),
+            Self::MavenCentral => is_valid_maven_package(package),
+            Self::RubyGems => is_valid_rubygems_package(package),
+            Self::NuGet => is_valid_nuget_package(package),
+            Self::Packagist => is_valid_packagist_package(package),
+            Self::GoModules => is_valid_go_module(package),
         };
         if valid {
             Ok(())
@@ -343,6 +426,7 @@ impl NativeRegistry {
     fn canonical_package(self, package: &str) -> String {
         match self {
             Self::PyPi => normalize_pypi_package(package),
+            Self::NuGet => package.to_ascii_lowercase(),
             _ => package.to_string(),
         }
     }
@@ -360,6 +444,11 @@ impl NativeRegistry {
             Self::CratesIo => Ecosystem::Cargo,
             Self::PubDev => Ecosystem::Pub,
             Self::PyPi => Ecosystem::Pypi,
+            Self::MavenCentral => Ecosystem::Jvm,
+            Self::RubyGems => Ecosystem::Gem,
+            Self::NuGet => Ecosystem::Nuget,
+            Self::Packagist => Ecosystem::Composer,
+            Self::GoModules => Ecosystem::Gomod,
         }
     }
 }
@@ -369,6 +458,15 @@ pub struct NativeReleaseRoute {
     pub target: String,
     pub dir: String,
     pub registry: NativeRegistry,
+    pub package: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ForgeReleaseRoute {
+    pub target: String,
+    pub dir: String,
+    pub registry: ForgeRegistry,
+    pub format: NativeRegistry,
     pub package: String,
 }
 
@@ -445,6 +543,53 @@ fn is_valid_pubdev_package(value: &str) -> bool {
         && value
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
+fn is_valid_maven_component(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with(['.', '-'])
+        && !value.ends_with(['.', '-'])
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+}
+
+fn is_valid_maven_package(value: &str) -> bool {
+    let Some((group, artifact)) = value.split_once(':') else {
+        return false;
+    };
+    !artifact.contains(':') && is_valid_maven_component(group) && is_valid_maven_component(artifact)
+}
+
+fn is_valid_rubygems_package(value: &str) -> bool {
+    !value.is_empty()
+        && value.as_bytes()[0].is_ascii_alphanumeric()
+        && value.as_bytes()[value.len() - 1].is_ascii_alphanumeric()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+fn is_valid_nuget_package(value: &str) -> bool {
+    value.len() <= 100 && is_valid_rubygems_package(value)
+}
+
+fn is_valid_packagist_package(value: &str) -> bool {
+    let Some((vendor, package)) = value.split_once('/') else {
+        return false;
+    };
+    !package.contains('/') && is_valid_npm_component(vendor) && is_valid_npm_component(package)
+}
+
+fn is_valid_go_module(value: &str) -> bool {
+    !value.is_empty()
+        && value.contains('/')
+        && !value.starts_with('/')
+        && !value.ends_with('/')
+        && !value.contains("..")
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '/' | '-' | '_' | '~'))
 }
 
 /// A post-extract build step. Because compiled output is OS/arch-specific,
@@ -586,6 +731,53 @@ fn is_allowed_repo_url(url: &str) -> bool {
         || (url.contains('@') && url.contains(':') && !url.contains("://"))
 }
 
+fn validate_native_release_section(
+    native: &NativeReleaseSection,
+    route_name: &str,
+    inbound: Ecosystem,
+) -> Result<(), ManifestError> {
+    native
+        .registry
+        .validate_package(&native.package)
+        .map_err(|reason| ManifestError::InvalidNativeRoute(route_name.to_string(), reason))?;
+
+    // The outbound mirror and the inbound install gate describe the same
+    // ecosystem. If they disagree, one of them is wrong and the package would
+    // either be mirrored to the wrong registry or refused for the wrong
+    // consumers — both silent until someone hits it, so fail here instead.
+    let outbound = native.registry.ecosystem();
+    if !inbound.is_default() && inbound != outbound {
+        return Err(ManifestError::InvalidNativeRoute(
+            route_name.to_string(),
+            format!(
+                "routes to {} (ecosystem `{outbound}`) but installs as `{inbound}`; \
+                 set the package or target ecosystem if the mirror is right",
+                native.registry.as_str()
+            ),
+        ));
+    }
+
+    let mut forge_registries = std::collections::BTreeSet::new();
+    for forge in &native.forge {
+        if !forge_registries.insert(*forge) {
+            return Err(ManifestError::InvalidNativeRoute(
+                route_name.to_string(),
+                format!("forge registry `{forge}` is listed more than once"),
+            ));
+        }
+        if !forge.supports(native.registry) {
+            return Err(ManifestError::InvalidNativeRoute(
+                route_name.to_string(),
+                format!(
+                    "forge registry `{forge}` does not support {} packages",
+                    native.registry.as_str()
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl Manifest {
     /// Parse and validate a `.zpkg.toml` document.
     pub fn parse(input: &str) -> Result<Self, ManifestError> {
@@ -641,6 +833,24 @@ impl Manifest {
         let mut target_dirs = BTreeMap::<&str, &str>::new();
         let mut published_names = BTreeMap::<String, &str>::new();
         let mut native_routes = BTreeMap::<(NativeRegistry, String), &str>::new();
+        if let Some(native) = &self.publish.native {
+            if !self.targets.is_empty() {
+                return Err(ManifestError::InvalidNativeRoute(
+                    "repository".to_string(),
+                    "root `[publish.native]` is only valid for a single-language package; \
+                     polyglot packages declare `[targets.<language>.native]`"
+                        .to_string(),
+                ));
+            }
+            validate_native_release_section(native, "repository", self.package.ecosystem())?;
+            native_routes.insert(
+                (
+                    native.registry,
+                    native.registry.canonical_package(&native.package),
+                ),
+                "repository",
+            );
+        }
         for (name, target) in &self.targets {
             if !is_target_name(name) {
                 return Err(ManifestError::InvalidTarget(
@@ -710,10 +920,7 @@ impl Manifest {
                             .to_string(),
                     ));
                 }
-                native
-                    .registry
-                    .validate_package(&native.package)
-                    .map_err(|reason| ManifestError::InvalidNativeRoute(name.clone(), reason))?;
+                validate_native_release_section(native, name, target.ecosystem_for(name))?;
                 let canonical_package = native.registry.canonical_package(&native.package);
                 let route = (native.registry, canonical_package);
                 if let Some(previous) = native_routes.insert(route, name.as_str()) {
@@ -723,24 +930,6 @@ impl Manifest {
                             "{} package `{}` is already routed by target `{previous}`",
                             native.registry.as_str(),
                             native.package
-                        ),
-                    ));
-                }
-                // The outbound mirror and the inbound install gate describe the
-                // same ecosystem. If they disagree, one of them is wrong and the
-                // slice would either be mirrored to the wrong registry or
-                // refused for the wrong consumers — both silent until someone
-                // hits it, so fail here instead.
-                let inbound = target.ecosystem_for(name);
-                let outbound = native.registry.ecosystem();
-                if !inbound.is_default() && inbound != outbound {
-                    return Err(ManifestError::InvalidNativeRoute(
-                        name.clone(),
-                        format!(
-                            "routes to {} (ecosystem `{outbound}`) but installs as `{inbound}`; \
-                             set `ecosystem` on the target if the mirror is right"
-                        ,
-                            native.registry.as_str()
                         ),
                     ));
                 }
@@ -852,16 +1041,60 @@ impl Manifest {
     /// Native release routes sorted by target name, suitable for deterministic
     /// credential-free planning before any registry adapter executes.
     pub fn native_release_routes(&self) -> Vec<NativeReleaseRoute> {
-        self.targets
+        self.publish
+            .native
             .iter()
-            .filter_map(|(target, section)| {
+            .map(|native| NativeReleaseRoute {
+                target: "repository".to_string(),
+                dir: ".".to_string(),
+                registry: native.registry,
+                package: native.package.clone(),
+            })
+            .chain(self.targets.iter().filter_map(|(target, section)| {
                 section.native.as_ref().map(|native| NativeReleaseRoute {
                     target: target.clone(),
                     dir: section.dir.clone(),
                     registry: native.registry,
                     package: native.package.clone(),
                 })
+            }))
+            .collect()
+    }
+
+    /// Forge package-registry mirrors, flattened and sorted by target then
+    /// registry for deterministic release plans and CI matrices.
+    pub fn forge_release_routes(&self) -> Vec<ForgeReleaseRoute> {
+        self.publish
+            .native
+            .iter()
+            .flat_map(|native| {
+                native
+                    .forge
+                    .iter()
+                    .copied()
+                    .map(move |registry| ForgeReleaseRoute {
+                        target: "repository".to_string(),
+                        dir: ".".to_string(),
+                        registry,
+                        format: native.registry,
+                        package: native.package.clone(),
+                    })
             })
+            .chain(self.targets.iter().flat_map(|(target, section)| {
+                section.native.iter().flat_map(move |native| {
+                    native
+                        .forge
+                        .iter()
+                        .copied()
+                        .map(move |registry| ForgeReleaseRoute {
+                            target: target.clone(),
+                            dir: section.dir.clone(),
+                            registry,
+                            format: native.registry,
+                            package: native.package.clone(),
+                        })
+                })
+            }))
             .collect()
     }
 

@@ -116,6 +116,14 @@
         }
       ]
     },
+    "ForgeRegistry": {
+      "type": "string",
+      "enum": [
+        "github-packages",
+        "gitlab-packages",
+        "bitbucket-packages"
+      ]
+    },
     "InstallSection": {
       "description": "Install-layout controls: where zed's dependency tree lands and which\necosystem adapter to emit so those deps are visible to the native toolchain.",
       "type": "object",
@@ -293,12 +301,24 @@
         "npm",
         "crates-io",
         "pub.dev",
-        "pypi"
+        "pypi",
+        "maven-central",
+        "rubygems",
+        "nuget",
+        "packagist",
+        "go-modules"
       ]
     },
     "NativeReleaseSection": {
       "type": "object",
       "properties": {
+        "forge": {
+          "description": "Optional copies in package registries run by source forges. The native\nregistry remains the canonical ecosystem destination; these mirrors\nuse the same native package format and version.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ForgeRegistry"
+          }
+        },
         "package": {
           "type": "string"
         },
@@ -395,6 +415,17 @@
           "description": "Keep README files in the published artifact (stripped by default).",
           "type": "boolean",
           "default": false
+        },
+        "native": {
+          "description": "Optional native-registry route for a single-language package whose\npackage-manager manifest lives at the repository root. Polyglot\npackages declare this metadata on each `[targets.*.native]` section\ninstead.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeReleaseSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "smoke_test": {
           "description": "Command run by `zed r2g` (alias `zed test-local`) inside a throwaway\nconsumer project that has this package installed the same way a real\nconsumer would.",
