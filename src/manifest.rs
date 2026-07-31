@@ -986,6 +986,25 @@ impl Manifest {
                 }
             }
         }
+        if self.targets.is_empty() {
+            validate_publish_route(
+                "package",
+                self.publish.format.as_deref(),
+                self.publish.registries.as_deref(),
+                &self.publish.registry_urls,
+            )?;
+        } else {
+            for (name, target) in &self.targets {
+                let format = target.format.as_deref().or(self.publish.format.as_deref());
+                let registries = target
+                    .registries
+                    .as_deref()
+                    .or(self.publish.registries.as_deref());
+                let mut urls = self.publish.registry_urls.clone();
+                urls.extend(target.registry_urls.clone());
+                validate_publish_route(name, format, registries, &urls)?;
+            }
+        }
         // A blank request means "no target", the same way a blank
         // `[install].dir` falls back to the default rather than erroring.
         if let Some(requested) = self.requested_target()
