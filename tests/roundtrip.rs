@@ -4,7 +4,6 @@ use zed_interfaces::language::{Ecosystem, Language};
 use zed_interfaces::lockfile::{LockedPackage, Lockfile};
 use zed_interfaces::manifest::{Manifest, ManifestError};
 use zed_interfaces::paths::store_entry_rel;
-use zed_interfaces::publish::PublishRegistry;
 use zed_interfaces::vcs::Vcs;
 
 const SAMPLE: &str = r#"
