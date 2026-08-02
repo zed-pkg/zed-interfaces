@@ -1,25 +1,47 @@
 name: ci
+
 on:
   push:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          components: rustfmt
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          components: rustfmt,clippy
+
       - name: Format
         run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
       - name: Test
-        run: cargo test
-      # The generated JSON schemas are committed for the non-Rust SDKs to
-      # mirror; fail if they drift from the source types.
+        run: cargo test --locked
+
+      - name: Doctest
+        run: cargo test --locked --doc
+
       - name: Schemas are up to date
         run: |
-          cargo run --example generate_schemas
+          cargo run --locked --example generate_schemas
           git diff --exit-code schemas/ \
-            || (echo "schemas/ is stale; run 'cargo run --example generate_schemas' and commit" && exit 1)
+            || (echo "schemas/ is stale; run 'cargo run --locked --example generate_schemas' and commit" && exit 1)
