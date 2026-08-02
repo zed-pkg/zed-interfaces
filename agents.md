@@ -18,8 +18,29 @@ This crate is the shared contract boundary for Zed manifests, lockfiles, registr
 - Update interface consumers and monorepo pins in contract-first order when a change spans repositories.
 - Keep the crate free of service-specific network, credential, database, and deployment policy.
 - Never commit registry tokens, cloud credentials, generated secrets, or production environment files.
-- Run formatting, compilation, tests, doctests, and Clippy using the repository's pinned toolchain and lockfile.
+- Keep `Cargo.lock` and `flake.lock` committed; do not allow CI to update either lock implicitly.
+- Pin GitHub Actions by immutable commit SHA and keep workflow permissions read-only unless a documented write is required.
+- Resolve conflicts by preserving serialization compatibility, validation strength, generated-schema determinism, and consumer expectations rather than selecting an entire side.
+
+## Reproducible validation
+
+Use the pinned shell rather than mutable host toolchains:
+
+```sh
+nix develop -c agent-check
+```
+
+Focused stages are available while iterating:
+
+```sh
+nix develop -c agent-check format
+nix develop -c agent-check lint
+nix develop -c agent-check test
+nix develop -c agent-check schemas
+```
+
+The default command runs Nix/workflow preflight, rustfmt, Clippy with warnings denied, unit tests, doctests, schema generation, and a clean-tree schema drift check.
 
 ## Validation
 
-The pinned `agents policy` workflow validates this hierarchy and the three tool pointers. Run the repository checks documented in `README.md` and existing CI before requesting review.
+The pinned `agents policy` workflow validates this hierarchy and the three tool pointers. Run `nix develop -c agent-check` before requesting review.
