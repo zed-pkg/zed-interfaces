@@ -16,19 +16,22 @@
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
       pkgsFor = system: import nixpkgs { inherit system; };
-      toolchainFor = pkgs: with pkgs; [
-        actionlint
-        bash
-        cargo
-        clippy
-        git
-        nix
-        nixfmt
-        rustc
-        rustfmt
-        shellcheck
-        shfmt
-      ];
+      toolchainFor =
+        pkgs:
+        with pkgs;
+        [
+          actionlint
+          bash
+          cargo
+          clippy
+          git
+          nix
+          nixfmt
+          rustc
+          rustfmt
+          shellcheck
+          shfmt
+        ];
     in
     {
       formatter = forAllSystems (system: (pkgsFor system).nixfmt);
