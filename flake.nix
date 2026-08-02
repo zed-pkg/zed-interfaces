@@ -17,9 +17,7 @@
       forAllSystems = nixpkgs.lib.genAttrs systems;
       pkgsFor = system: import nixpkgs { inherit system; };
       toolchainFor =
-        pkgs:
-        with pkgs;
-        [
+        pkgs: with pkgs; [
           actionlint
           bash
           cargo
