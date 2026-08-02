@@ -182,25 +182,25 @@ fn parse_version_inner(raw: &str) -> Option<Version> {
     if let Ok(v) = Version::parse(raw) {
         return Some(v);
     }
-    if let Some(stripped) = raw.strip_prefix('v') {
-        if let Ok(v) = Version::parse(stripped) {
-            return Some(v);
-        }
+    if let Some(stripped) = raw.strip_prefix('v')
+        && let Ok(v) = Version::parse(stripped)
+    {
+        return Some(v);
     }
-    if let Some(go) = normalize_go(raw) {
-        if let Ok(v) = Version::parse(&go) {
-            return Some(v);
-        }
+    if let Some(go) = normalize_go(raw)
+        && let Ok(v) = Version::parse(&go)
+    {
+        return Some(v);
     }
-    if let Some(cal) = normalize_calver(raw) {
-        if let Ok(v) = Version::parse(&cal) {
-            return Some(v);
-        }
+    if let Some(cal) = normalize_calver(raw)
+        && let Ok(v) = Version::parse(&cal)
+    {
+        return Some(v);
     }
-    if let Some(pep) = normalize_pep440(raw) {
-        if let Ok(v) = Version::parse(&pep) {
-            return Some(v);
-        }
+    if let Some(pep) = normalize_pep440(raw)
+        && let Ok(v) = Version::parse(&pep)
+    {
+        return Some(v);
     }
     None
 }
