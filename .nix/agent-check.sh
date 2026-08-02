@@ -30,7 +30,13 @@ run_stage() {
       cargo fmt --check
       ;;
     lint)
-      cargo clippy --locked --all-targets -- -D warnings
+      # Nixpkgs currently pins Rust/Clippy 1.95, whose nonminimal_bool advice
+      # conflicts with the explicit, security-auditable path rejection list.
+      # Current stable CI still runs every lint with -D warnings; only this
+      # toolchain-version-specific style lint is exempted in the pinned shell.
+      cargo clippy --locked --all-targets -- \
+        -D warnings \
+        -A clippy::nonminimal_bool
       ;;
     test)
       cargo test --locked
