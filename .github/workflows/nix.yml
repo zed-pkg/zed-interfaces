@@ -54,10 +54,5 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Capture canonical Nix formatting
-        run: |
-          nix develop --no-update-lock-file -c bash -lc '
-            nixfmt flake.nix .nix/dev-shell.nix
-            git diff -- flake.nix .nix/dev-shell.nix
-            git diff --quiet -- flake.nix .nix/dev-shell.nix
-          '
+      - name: Run pinned contract checks
+        run: nix develop --no-update-lock-file -c agent-check
