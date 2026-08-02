@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuditIntegrityResponse",
+  "description": "The result of walking an org's audit chain end to end.",
+  "type": "object",
+  "properties": {
+    "entries_checked": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "first_bad_seq": {
+      "description": "The `seq` where verification first failed, if any.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "head_hash": {
+      "description": "The newest entry's hash — an anchor an operator can record externally\nso that later truncation of the whole tail is also detectable.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "intact": {
+      "description": "True only when every entry's hash recomputes and every link matches.",
+      "type": "boolean"
+    },
+    "org": {
+      "type": "string"
+    },
+    "problem": {
+      "description": "Machine-readable failure kind: `hash_mismatch` (an entry was edited),\n`broken_link` (an entry's `prev_hash` does not match its predecessor),\nor `sequence_gap` (an entry was deleted).",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "org",
+    "intact",
+    "entries_checked"
+  ]
+}

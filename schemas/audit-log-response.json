@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuditLogResponse",
+  "type": "object",
+  "properties": {
+    "entries": {
+      "description": "Most recent first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AuditEntry"
+      }
+    },
+    "org": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "org",
+    "entries"
+  ],
+  "$defs": {
+    "AuditAction": {
+      "description": "A state-changing action recorded in an org's audit log. Reads are never\naudited — only mutations of published state and of the namespace itself, so\nthe log answers \"who changed what\" without drowning in traffic.",
+      "oneOf": [
+        {
+          "description": "A version was published.",
+          "type": "string",
+          "const": "publish"
+        },
+        {
+          "description": "A version was yanked (hidden from fresh resolution).",
+          "type": "string",
+          "const": "yank"
+        },
+        {
+          "description": "A previously yanked version was restored.",
+          "type": "string",
+          "const": "unyank"
+        },
+        {
+          "description": "The org namespace was claimed.",
+          "type": "string",
+          "const": "org_claim"
+        }
+      ]
+    },
+    "AuditEntry": {
+      "description": "One audit-log record. The actor is identified by the *token* that acted —\nits name and role, never its secret — which is the identity a registry\nactually has (zed-docs issue #7 governance).",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "Raw action string; `action_kind` is the parsed form when recognized.",
+          "type": "string"
+        },
+        "action_kind": {
+          "description": "Parsed action, absent when this server build doesn't recognize it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuditAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "actor_role": {
+          "description": "The acting token's role (`owner`/`publisher`/`reader`, or `admin` for\nunscoped tokens).",
+          "type": "string"
+        },
+        "actor_token_name": {
+          "description": "Human-readable name of the token that acted.",
+          "type": "string"
+        },
+        "at": {
+          "description": "RFC 3339 timestamp of the action.",
+          "type": "string"
+        },
+        "detail": {
+          "description": "Extra context, e.g. the artifact sha256 for a publish.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entry_hash": {
+          "description": "`sha256(audit_chain_preimage(..))` for this entry, lowercase hex. Empty\nfrom a pre-chain server.",
+          "type": "string"
+        },
+        "prev_hash": {
+          "description": "The previous entry's `entry_hash`; `None` for the first entry in an\norg's chain. Linking each entry to its predecessor is what makes a\nsilent deletion or edit detectable.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seq": {
+          "description": "Position in the org's append-only chain, starting at 1. Gaps mean\nentries were deleted. Defaults to 0 when read from a server that\npredates the chain.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "subject": {
+          "description": "What was acted on, e.g. `acme/http-kit@1.2.0` or the org slug.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "action",
+        "subject",
+        "actor_token_name",
+        "actor_role"
+      ]
+    }
+  }
+}

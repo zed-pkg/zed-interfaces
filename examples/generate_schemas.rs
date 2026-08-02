@@ -31,6 +31,10 @@ fn main() {
     write::<zed_interfaces::registry::ClaimOrgResponse>(dir, "claim-org-response");
     write::<zed_interfaces::registry::YankRequest>(dir, "yank-request");
     write::<zed_interfaces::registry::YankResponse>(dir, "yank-response");
+    // Governance/audit reads, so non-Rust clients can consume the trail and
+    // verify the chain against the same shape the server serves.
+    write::<zed_interfaces::registry::AuditLogResponse>(dir, "audit-log-response");
+    write::<zed_interfaces::registry::AuditIntegrityResponse>(dir, "audit-integrity-response");
     write::<zed_interfaces::registry::ApiError>(dir, "api-error");
 
     // Sync contract types shared with zed-sync + zed-clients.

@@ -80,10 +80,18 @@ pub fn orgs_path() -> String {
     format!("{API_V1}/orgs")
 }
 
-/// `GET ?limit=` (bearer token, org `owner` or admin) — the org's audit log:
-/// who changed published state, what, and when (zed-docs issue #7 governance).
+/// `GET ?limit=&action=&before=` (bearer token, org `owner` or admin) — the
+/// org's audit log: who changed published state, what, and when (zed-docs
+/// issue #7 governance). `action` filters to one action; `before` pages
+/// backwards by taking entries with a lower `seq` than the one given.
 pub fn audit_path(org: &str) -> String {
     format!("{API_V1}/orgs/{org}/audit")
+}
+
+/// `GET` (bearer token, org `owner` or admin) — walk the org's audit chain and
+/// report whether it is intact. See [`audit_chain_preimage`].
+pub fn audit_verify_path(org: &str) -> String {
+    format!("{API_V1}/orgs/{org}/audit/verify")
 }
 
 /// `GET` — liveness probe.
@@ -323,6 +331,76 @@ pub struct AuditEntry {
     /// Extra context, e.g. the artifact sha256 for a publish.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// Position in the org's append-only chain, starting at 1. Gaps mean
+    /// entries were deleted. Defaults to 0 when read from a server that
+    /// predates the chain.
+    #[serde(default)]
+    pub seq: u64,
+    /// `sha256(audit_chain_preimage(..))` for this entry, lowercase hex. Empty
+    /// from a pre-chain server.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub entry_hash: String,
+    /// The previous entry's `entry_hash`; `None` for the first entry in an
+    /// org's chain. Linking each entry to its predecessor is what makes a
+    /// silent deletion or edit detectable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prev_hash: Option<String>,
+}
+
+/// The exact bytes an audit entry's `entry_hash` is computed over.
+///
+/// Defined here, in the shared contract, so the server and *any* client derive
+/// byte-identical input and a client can verify the chain itself rather than
+/// trusting the server's own verdict — the point of a tamper-evident log is
+/// that the party who could tamper is not the only party who can check.
+///
+/// Every field is length-prefixed (`<byte-len>:<value>`). A plain separator
+/// would be forgeable: a token named `x|publish` could otherwise shift field
+/// boundaries and reproduce another entry's digest. Length prefixes make the
+/// encoding unambiguous, so distinct entries can never share a preimage.
+///
+/// `at` must be the RFC 3339 timestamp exactly as stored/serialized, and
+/// `prev_hash` is the empty string for the first entry in a chain.
+///
+/// The fields are named rather than positional on purpose: with ten strings in
+/// a row, transposing `subject` and `actor_token_name` would compile silently
+/// and quietly change every digest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuditChainInput<'a> {
+    pub org_id: &'a str,
+    pub seq: u64,
+    /// RFC 3339, exactly as stored and serialized.
+    pub at: &'a str,
+    pub action: &'a str,
+    pub subject: &'a str,
+    pub actor_token_id: Option<&'a str>,
+    pub actor_token_name: &'a str,
+    pub actor_role: &'a str,
+    pub detail: Option<&'a str>,
+    /// The previous entry's hash; empty for the first entry in a chain.
+    pub prev_hash: &'a str,
+}
+
+/// Build the canonical preimage for [`AuditChainInput`]. See the module note
+/// on why every field is length-prefixed.
+pub fn audit_chain_preimage(input: &AuditChainInput<'_>) -> String {
+    fn field(out: &mut String, value: &str) {
+        out.push_str(&value.len().to_string());
+        out.push(':');
+        out.push_str(value);
+    }
+    let mut out = String::new();
+    field(&mut out, input.org_id);
+    field(&mut out, &input.seq.to_string());
+    field(&mut out, input.at);
+    field(&mut out, input.action);
+    field(&mut out, input.subject);
+    field(&mut out, input.actor_token_id.unwrap_or(""));
+    field(&mut out, input.actor_token_name);
+    field(&mut out, input.actor_role);
+    field(&mut out, input.detail.unwrap_or(""));
+    field(&mut out, input.prev_hash);
+    out
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -330,6 +408,27 @@ pub struct AuditLogResponse {
     pub org: String,
     /// Most recent first.
     pub entries: Vec<AuditEntry>,
+}
+
+/// The result of walking an org's audit chain end to end.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AuditIntegrityResponse {
+    pub org: String,
+    /// True only when every entry's hash recomputes and every link matches.
+    pub intact: bool,
+    pub entries_checked: u64,
+    /// The `seq` where verification first failed, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_bad_seq: Option<u64>,
+    /// Machine-readable failure kind: `hash_mismatch` (an entry was edited),
+    /// `broken_link` (an entry's `prev_hash` does not match its predecessor),
+    /// or `sequence_gap` (an entry was deleted).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+    /// The newest entry's hash — an anchor an operator can record externally
+    /// so that later truncation of the whole tail is also detectable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_hash: Option<String>,
 }
 
 /// Error body returned with any non-2xx status.

@@ -650,3 +650,187 @@ dir = "clients/ts"
     let m1 = Manifest::parse(&one).unwrap();
     assert_eq!(m1.resolve_target_key("js"), Some("nodejs"));
 }
+
+// --- Audit chain (tamper-evident log) -----------------------------------
+
+/// New chain fields must not break deserialization of a body produced by a
+/// server that predates them: `seq` defaults to 0 and the hashes to empty.
+#[test]
+fn audit_entry_from_a_pre_chain_server_still_parses() {
+    let legacy = r#"{
+        "at": "2026-07-25T00:00:00Z",
+        "action": "publish",
+        "subject": "acme/http-kit@1.0.0",
+        "actor_token_name": "ci",
+        "actor_role": "publisher"
+    }"#;
+    let entry: zed_interfaces::registry::AuditEntry = serde_json::from_str(legacy).unwrap();
+    assert_eq!(entry.seq, 0);
+    assert_eq!(entry.entry_hash, "");
+    assert_eq!(entry.prev_hash, None);
+    assert_eq!(entry.subject, "acme/http-kit@1.0.0");
+}
+
+/// A full entry round-trips, and the empty chain fields stay off the wire so
+/// the serialized shape is unchanged for servers that do not set them.
+#[test]
+fn audit_entry_roundtrips_and_omits_empty_chain_fields() {
+    use zed_interfaces::registry::{AuditAction, AuditEntry};
+    let entry = AuditEntry {
+        at: "2026-07-25T00:00:00Z".to_string(),
+        action: "yank".to_string(),
+        action_kind: Some(AuditAction::Yank),
+        subject: "acme/http-kit@1.0.0".to_string(),
+        actor_token_name: "ci".to_string(),
+        actor_role: "owner".to_string(),
+        detail: None,
+        seq: 7,
+        entry_hash: "ab".repeat(32),
+        prev_hash: Some("cd".repeat(32)),
+    };
+    let json = serde_json::to_string(&entry).unwrap();
+    assert_eq!(serde_json::from_str::<AuditEntry>(&json).unwrap(), entry);
+
+    let bare = AuditEntry {
+        entry_hash: String::new(),
+        prev_hash: None,
+        ..entry
+    };
+    let value: serde_json::Value = serde_json::to_value(&bare).unwrap();
+    assert!(
+        value.get("entry_hash").is_none(),
+        "empty hash must be omitted"
+    );
+    assert!(
+        value.get("prev_hash").is_none(),
+        "absent prev must be omitted"
+    );
+}
+
+/// The preimage must be injective. A separator-joined encoding would let a
+/// crafted field (a token literally named `x|publish`) shift boundaries and
+/// collide with a different entry; length prefixes must prevent that.
+#[test]
+fn audit_preimage_resists_field_injection() {
+    use zed_interfaces::registry::{AuditChainInput, audit_chain_preimage};
+
+    let base = AuditChainInput {
+        org_id: "org",
+        seq: 1,
+        at: "t",
+        action: "publish",
+        subject: "s",
+        actor_token_id: Some("tok"),
+        actor_token_name: "ci",
+        actor_role: "owner",
+        detail: Some("d"),
+        prev_hash: "prev",
+    };
+    let digest = |i: &AuditChainInput| audit_chain_preimage(i);
+
+    // Same characters, different field boundaries, must not collide.
+    let honest = digest(&AuditChainInput {
+        actor_role: "owner",
+        detail: None,
+        ..base
+    });
+    let shifted = digest(&AuditChainInput {
+        actor_role: "own",
+        detail: Some("er"),
+        ..base
+    });
+    assert_ne!(honest, shifted, "field boundaries must be unambiguous");
+
+    // A value that mimics the length-prefix syntax cannot fake a layout.
+    let sneaky = digest(&AuditChainInput {
+        actor_token_name: "5:owner",
+        actor_role: "x",
+        detail: None,
+        ..base
+    });
+    assert_ne!(honest, sneaky);
+
+    // Every distinguishing field must actually participate in the digest.
+    let reference = digest(&base);
+    let variants = [
+        (
+            "org_id",
+            AuditChainInput {
+                org_id: "OTHER",
+                ..base
+            },
+        ),
+        ("seq", AuditChainInput { seq: 2, ..base }),
+        ("at", AuditChainInput { at: "T", ..base }),
+        (
+            "action",
+            AuditChainInput {
+                action: "yank",
+                ..base
+            },
+        ),
+        (
+            "subject",
+            AuditChainInput {
+                subject: "S",
+                ..base
+            },
+        ),
+        (
+            "actor_token_id",
+            AuditChainInput {
+                actor_token_id: Some("TOK"),
+                ..base
+            },
+        ),
+        (
+            "actor_token_name",
+            AuditChainInput {
+                actor_token_name: "CI",
+                ..base
+            },
+        ),
+        (
+            "actor_role",
+            AuditChainInput {
+                actor_role: "reader",
+                ..base
+            },
+        ),
+        (
+            "detail",
+            AuditChainInput {
+                detail: Some("D"),
+                ..base
+            },
+        ),
+        (
+            "prev_hash",
+            AuditChainInput {
+                prev_hash: "PREV",
+                ..base
+            },
+        ),
+    ];
+    for (field, variant) in variants {
+        assert_ne!(
+            reference,
+            digest(&variant),
+            "changing {field} must change the preimage"
+        );
+    }
+
+    // None and the empty string are deliberately the same absence.
+    assert_eq!(
+        digest(&AuditChainInput {
+            actor_token_id: None,
+            detail: None,
+            ..base
+        }),
+        digest(&AuditChainInput {
+            actor_token_id: Some(""),
+            detail: Some(""),
+            ..base
+        }),
+    );
+}
