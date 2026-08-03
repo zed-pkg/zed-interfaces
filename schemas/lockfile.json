@@ -93,6 +93,7 @@
         "size",
         "format",
         "vcs_tag",
+        "vcs_commit",
         "source"
       ]
     },

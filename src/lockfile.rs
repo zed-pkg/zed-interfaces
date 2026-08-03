@@ -52,6 +52,7 @@ pub struct LockedPackage {
     /// all require this value to be explicitly present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(
+        !default,
         required,
         length(min = 7, max = 128),
         regex(pattern = r"^[A-Za-z0-9._+:/-]+$")
@@ -368,7 +369,6 @@ source = "file:///tmp/registry"
 
     #[test]
     fn mutable_malformed_and_zero_vcs_revisions_are_rejected() {
-        let original = "0123456789abcdef0123456789abcdef01234567";
         for replacement in [
             "main",
             "refs/heads/main",
@@ -378,7 +378,11 @@ source = "file:///tmp/registry"
             "revision with spaces",
             "revision@host",
         ] {
-            let input = VALID_LOCK.replacen(original, replacement, 1);
+            let input = VALID_LOCK.replacen(
+                "vcs_commit = \"0123456789abcdef0123456789abcdef01234567\"",
+                &format!("vcs_commit = \"{replacement}\""),
+                1,
+            );
             let error = Lockfile::parse(&input).unwrap_err().to_string();
             assert!(error.contains("vcs_commit"), "unexpected error: {error}");
         }
@@ -391,8 +395,11 @@ source = "file:///tmp/registry"
             "hg/0123456789abcdef0123456789abcdef01234567",
             "pijul+ABCdef0123456789_-",
         ] {
-            let input =
-                VALID_LOCK.replacen("0123456789abcdef0123456789abcdef01234567", revision, 1);
+            let input = VALID_LOCK.replacen(
+                "vcs_commit = \"0123456789abcdef0123456789abcdef01234567\"",
+                &format!("vcs_commit = \"{revision}\""),
+                1,
+            );
             assert!(
                 Lockfile::parse(&input).is_ok(),
                 "revision rejected: {revision}"
