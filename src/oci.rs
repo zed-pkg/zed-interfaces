@@ -18,26 +18,19 @@ use serde_json::Value;
 pub const OCI_ADAPTER_SCHEMA_V1: &str = "zed.oci-adapter/v1";
 
 /// OCI image-manifest media type used by OCI 1.1 artifact manifests.
-pub const OCI_IMAGE_MANIFEST_MEDIA_TYPE: &str =
-    "application/vnd.oci.image.manifest.v1+json";
+pub const OCI_IMAGE_MANIFEST_MEDIA_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
 /// Zed package metadata stored as the OCI manifest's config descriptor.
-pub const ZED_OCI_CONFIG_MEDIA_TYPE_V1: &str =
-    "application/vnd.zed.package.config.v1+json";
+pub const ZED_OCI_CONFIG_MEDIA_TYPE_V1: &str = "application/vnd.zed.package.config.v1+json";
 /// A deterministic Zed `tar.gz` package artifact.
-pub const ZED_OCI_PACKAGE_TAR_GZ_MEDIA_TYPE_V1: &str =
-    "application/vnd.zed.package.v1.tar+gzip";
+pub const ZED_OCI_PACKAGE_TAR_GZ_MEDIA_TYPE_V1: &str = "application/vnd.zed.package.v1.tar+gzip";
 /// A deterministic Zed ZIP package artifact.
-pub const ZED_OCI_PACKAGE_ZIP_MEDIA_TYPE_V1: &str =
-    "application/vnd.zed.package.v1+zip";
+pub const ZED_OCI_PACKAGE_ZIP_MEDIA_TYPE_V1: &str = "application/vnd.zed.package.v1+zip";
 /// The exact `.zpkg.toml` bytes associated with a package artifact.
-pub const ZED_OCI_MANIFEST_MEDIA_TYPE_V1: &str =
-    "application/vnd.zed.package.manifest.v1+toml";
+pub const ZED_OCI_MANIFEST_MEDIA_TYPE_V1: &str = "application/vnd.zed.package.manifest.v1+toml";
 /// The exact `.zpkg.lock` bytes associated with a package artifact.
-pub const ZED_OCI_LOCK_MEDIA_TYPE_V1: &str =
-    "application/vnd.zed.package.lock.v1+toml";
+pub const ZED_OCI_LOCK_MEDIA_TYPE_V1: &str = "application/vnd.zed.package.lock.v1+toml";
 /// A platform-specific or portable executable/library payload.
-pub const ZED_OCI_BINARY_MEDIA_TYPE_V1: &str =
-    "application/vnd.zed.package.binary.v1";
+pub const ZED_OCI_BINARY_MEDIA_TYPE_V1: &str = "application/vnd.zed.package.binary.v1";
 /// SPDX JSON SBOM media type.
 pub const SPDX_JSON_MEDIA_TYPE: &str = "application/spdx+json";
 /// CycloneDX JSON SBOM media type.
@@ -84,8 +77,7 @@ impl OciDigest {
                 .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
         {
             return Err(OciInteropError::InvalidDigest(
-                "SHA-256 digest payload must be 64 lowercase hexadecimal characters"
-                    .to_string(),
+                "SHA-256 digest payload must be 64 lowercase hexadecimal characters".to_string(),
             ));
         }
         Ok(())
@@ -155,8 +147,7 @@ impl OciReference {
 
         let Some((registry, repository_and_tag)) = name.split_once('/') else {
             return Err(OciInteropError::InvalidReference(
-                "OCI reference must include both a registry and repository path"
-                    .to_string(),
+                "OCI reference must include both a registry and repository path".to_string(),
             ));
         };
         let (repository, tag) = match repository_and_tag.rsplit_once(':') {
@@ -269,9 +260,7 @@ impl OciPackageIdentity {
 }
 
 /// OCI platform selector for multi-platform package payloads.
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 pub struct OciPlatform {
     pub os: String,
     pub architecture: String,
@@ -497,8 +486,7 @@ impl OciAdapterRecord {
         }
         if !has_primary_package {
             return Err(OciInteropError::InvalidAdapter(
-                "a finalized OCI artifact requires a package archive or binary layer"
-                    .to_string(),
+                "a finalized OCI artifact requires a package archive or binary layer".to_string(),
             ));
         }
         Ok(())
@@ -570,8 +558,7 @@ fn validate_registry(registry: &str) -> Result<(), OciInteropError> {
     let colon_count = registry.bytes().filter(|byte| *byte == b':').count();
     if colon_count > 1 {
         return Err(OciInteropError::InvalidReference(
-            "contract v1 does not accept bracketed or ambiguous IPv6 registry literals"
-                .to_string(),
+            "contract v1 does not accept bracketed or ambiguous IPv6 registry literals".to_string(),
         ));
     }
     let (host, port) = match registry.split_once(':') {
@@ -602,7 +589,11 @@ fn validate_registry(registry: &str) -> Result<(), OciInteropError> {
     if let Some(port) = port
         && (port.is_empty()
             || !port.bytes().all(|byte| byte.is_ascii_digit())
-            || port.parse::<u16>().ok().filter(|value| *value > 0).is_none())
+            || port
+                .parse::<u16>()
+                .ok()
+                .filter(|value| *value > 0)
+                .is_none())
     {
         return Err(OciInteropError::InvalidReference(format!(
             "registry port `{port}` must be an integer from 1 through 65535"
@@ -617,11 +608,11 @@ fn validate_repository(repository: &str) -> Result<(), OciInteropError> {
         || repository != repository.to_ascii_lowercase()
         || repository.split('/').any(|component| {
             component.is_empty()
-                || !component
-                    .bytes()
-                    .all(|byte| byte.is_ascii_lowercase()
+                || !component.bytes().all(|byte| {
+                    byte.is_ascii_lowercase()
                         || byte.is_ascii_digit()
-                        || matches!(byte, b'.' | b'_' | b'-'))
+                        || matches!(byte, b'.' | b'_' | b'-')
+                })
                 || !component
                     .as_bytes()
                     .first()
@@ -647,9 +638,9 @@ fn validate_tag(tag: &str) -> Result<(), OciInteropError> {
     };
     if tag.len() > 128
         || !first.is_ascii_alphanumeric() && *first != b'_'
-        || !tag.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-')
-        })
+        || !tag
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
     {
         return Err(OciInteropError::InvalidReference(format!(
             "OCI tag `{tag}` does not match `[A-Za-z0-9_][A-Za-z0-9_.-]{{0,127}}`"
@@ -694,7 +685,10 @@ fn is_media_type(value: &str) -> bool {
         && kind.bytes().chain(subtype.bytes()).all(|byte| {
             byte.is_ascii_lowercase()
                 || byte.is_ascii_digit()
-                || matches!(byte, b'!' | b'#' | b'$' | b'&' | b'^' | b'_' | b'.' | b'+' | b'-')
+                || matches!(
+                    byte,
+                    b'!' | b'#' | b'$' | b'&' | b'^' | b'_' | b'.' | b'+' | b'-'
+                )
         })
 }
 
@@ -725,9 +719,7 @@ fn is_platform_token(value: &str) -> bool {
             .last()
             .is_some_and(u8::is_ascii_alphanumeric)
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'_' | b'.' | b'-')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'.' | b'-')
         })
 }
 
@@ -742,9 +734,7 @@ fn canonicalize_json(value: Value) -> Value {
             }
             Value::Object(sorted)
         }
-        Value::Array(values) => {
-            Value::Array(values.into_iter().map(canonicalize_json).collect())
-        }
+        Value::Array(values) => Value::Array(values.into_iter().map(canonicalize_json).collect()),
         scalar => scalar,
     }
 }
@@ -783,10 +773,7 @@ mod tests {
     fn record(layers: Vec<OciLayer>) -> OciAdapterRecord {
         OciAdapterRecord::new(
             package(),
-            OciReference::parse(&format!(
-                "oci://ghcr.io/acme/tool:1.2.3@{DIGEST_A}"
-            ))
-            .unwrap(),
+            OciReference::parse(&format!("oci://ghcr.io/acme/tool:1.2.3@{DIGEST_A}")).unwrap(),
             descriptor(OCI_IMAGE_MANIFEST_MEDIA_TYPE, DIGEST_A, 512),
             descriptor(ZED_OCI_CONFIG_MEDIA_TYPE_V1, DIGEST_B, 128),
             layers,
@@ -811,7 +798,10 @@ mod tests {
         assert_eq!(reference.repository, "team/tool");
         assert_eq!(reference.tag.as_deref(), Some("1.2.3"));
         assert!(reference.is_immutable());
-        assert_eq!(reference.to_string(), format!("oci://registry.example:5000/team/tool:1.2.3@{DIGEST_A}"));
+        assert_eq!(
+            reference.to_string(),
+            format!("oci://registry.example:5000/team/tool:1.2.3@{DIGEST_A}")
+        );
     }
 
     #[test]
