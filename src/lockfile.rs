@@ -312,9 +312,20 @@ sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 size = 42
 format = "tar.gz"
 vcs_tag = "v1.2.3"
-vcs_commit = "0123456789abcdef0123456789abcdef01234567"
+vcs_commit = "fedcba9876543210fedcba9876543210fedcba98"
 source = "file:///tmp/registry"
 "#;
+
+    const VALID_COMMIT_LINE: &str =
+        "vcs_commit = \"fedcba9876543210fedcba9876543210fedcba98\"";
+
+    fn lock_with_commit(revision: &str) -> String {
+        VALID_LOCK.replacen(
+            VALID_COMMIT_LINE,
+            &format!("vcs_commit = \"{revision}\""),
+            1,
+        )
+    }
 
     #[test]
     fn complete_package_metadata_round_trips() {
@@ -332,10 +343,7 @@ source = "file:///tmp/registry"
 
     #[test]
     fn missing_vcs_commit_is_rejected() {
-        let input = VALID_LOCK.replace(
-            "vcs_commit = \"0123456789abcdef0123456789abcdef01234567\"\n",
-            "",
-        );
+        let input = VALID_LOCK.replace(&format!("{VALID_COMMIT_LINE}\n"), "");
         let error = Lockfile::parse(&input).unwrap_err().to_string();
         assert!(error.contains("vcs_commit"), "unexpected error: {error}");
     }
@@ -369,7 +377,7 @@ source = "file:///tmp/registry"
 
     #[test]
     fn mutable_malformed_and_zero_vcs_revisions_are_rejected() {
-        for replacement in [
+        for revision in [
             "main",
             "refs/heads/main",
             "latest",
@@ -378,11 +386,7 @@ source = "file:///tmp/registry"
             "revision with spaces",
             "revision@host",
         ] {
-            let input = VALID_LOCK.replacen(
-                "vcs_commit = \"0123456789abcdef0123456789abcdef01234567\"",
-                &format!("vcs_commit = \"{replacement}\""),
-                1,
-            );
+            let input = lock_with_commit(revision);
             let error = Lockfile::parse(&input).unwrap_err().to_string();
             assert!(error.contains("vcs_commit"), "unexpected error: {error}");
         }
@@ -395,11 +399,7 @@ source = "file:///tmp/registry"
             "hg/0123456789abcdef0123456789abcdef01234567",
             "pijul+ABCdef0123456789_-",
         ] {
-            let input = VALID_LOCK.replacen(
-                "vcs_commit = \"0123456789abcdef0123456789abcdef01234567\"",
-                &format!("vcs_commit = \"{revision}\""),
-                1,
-            );
+            let input = lock_with_commit(revision);
             assert!(
                 Lockfile::parse(&input).is_ok(),
                 "revision rejected: {revision}"
