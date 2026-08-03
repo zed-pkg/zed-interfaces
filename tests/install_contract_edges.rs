@@ -43,10 +43,7 @@ post-install = ["echo node-post"]
     assert_eq!(native["apt"], vec!["pkg-config", "nodejs"]);
 
     let hooks = parsed.effective_install_hooks(Some("node")).unwrap();
-    assert_eq!(
-        hooks.pre_install,
-        vec!["echo package-pre", "echo node-pre"]
-    );
+    assert_eq!(hooks.pre_install, vec!["echo package-pre", "echo node-pre"]);
     assert_eq!(hooks.post_install, vec!["echo node-post"]);
 }
 
@@ -111,7 +108,10 @@ post-install = ["echo target-post"]
         vec!["echo package-pre", "echo target-pre"]
     );
     assert_eq!(
-        projected.effective_install_hooks(None).unwrap().post_install,
+        projected
+            .effective_install_hooks(None)
+            .unwrap()
+            .post_install,
         vec!["echo package-post", "echo target-post"]
     );
     assert!(projected.manifest_for_target("rust").is_none());
