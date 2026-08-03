@@ -1,9 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Lockfile",
-  "description": "The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.\n\nSerialized as TOML with one `[[package]]` table per locked package,\nCargo.lock-style. Every entry pins the exact artifact hash and the VCS\ntag it was published from, so installs are reproducible and every\nartifact is traceable back to source.",
+  "description": "The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.\n\nSerialized as TOML with one `[[package]]` table per locked Zed package,\noptional `[[native-dependency]]` tables for exact npm/Cargo resolutions,\nand optional `[[nix-adapter]]` tables for completed Nix translations.\nEvery entry pins exact immutable identity so frozen restore never needs to\nreinterpret a native range or repeat an environment translation.",
   "type": "object",
   "properties": {
+    "native-dependency": {
+      "description": "Exact source-aware npm/Cargo resolutions. This additive field keeps\nexisting lockfile version 1 documents readable while newer writers can\npreserve native requirement translation and immutable artifact identity.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NativeDependencyLock"
+      }
+    },
     "nix-adapter": {
       "description": "Optional immutable provenance for completed Nix interoperability\ntranslations. This additive field keeps lockfile version 1 readable by\ncurrent consumers while allowing newer writers to preserve evidence.",
       "type": "array",
@@ -84,6 +91,101 @@
         "size",
         "vcs_tag",
         "source"
+      ]
+    },
+    "NativeArtifact": {
+      "description": "Exact immutable bytes published under one native package identity.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/ArtifactFormat",
+          "default": "tar.gz"
+        },
+        "sha256": {
+          "description": "Lowercase hexadecimal SHA-256 of the exact uploaded archive bytes.",
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sha256",
+        "size"
+      ]
+    },
+    "NativeDependencyLock": {
+      "description": "Frozen native dependency identity. The declaration remains auditable, while\n`package.version` and `artifact` are the only restore-time identities.",
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/NativeArtifact"
+        },
+        "package": {
+          "$ref": "#/$defs/NativePackageIdentity"
+        },
+        "requirement": {
+          "$ref": "#/$defs/NativeVersionRequirement"
+        },
+        "schema": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "requirement",
+        "package",
+        "artifact"
+      ]
+    },
+    "NativePackageIdentity": {
+      "description": "Public identity selected in npm or a Cargo-compatible registry.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ]
+    },
+    "NativeRegistry": {
+      "description": "Native registries with a first-class publication identity contract.",
+      "type": "string",
+      "enum": [
+        "npm",
+        "cargo"
+      ]
+    },
+    "NativeVersionRequirement": {
+      "description": "One source-aware native requirement and its canonical SemVer translation.",
+      "type": "object",
+      "properties": {
+        "canonical": {
+          "description": "Deterministic `semver::VersionReq` representation used by Zed.",
+          "type": "string"
+        },
+        "declared": {
+          "description": "Exact project declaration before translation.",
+          "type": "string"
+        },
+        "registry": {
+          "$ref": "#/$defs/NativeRegistry"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "declared",
+        "canonical"
       ]
     },
     "NixAdapterRecord": {

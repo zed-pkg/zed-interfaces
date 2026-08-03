@@ -138,8 +138,7 @@ impl Lockfile {
         package_name: &str,
     ) -> Option<&NativeDependencyLock> {
         self.native_dependencies.iter().find(|dependency| {
-            dependency.requirement.registry == registry
-                && dependency.package.name == package_name
+            dependency.requirement.registry == registry && dependency.package.name == package_name
         })
     }
 

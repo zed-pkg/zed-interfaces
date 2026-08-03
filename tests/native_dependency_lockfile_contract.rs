@@ -57,20 +57,8 @@ source = "file:///tmp/registry"
 
 #[test]
 fn native_locks_round_trip_and_serialize_independent_of_insertion_order() {
-    let npm = exact_lock(
-        NativeRegistry::Npm,
-        "@fiducia/core",
-        "^1.2.3",
-        "1.9.0",
-        'a',
-    );
-    let cargo = exact_lock(
-        NativeRegistry::Cargo,
-        "fiducia_core",
-        "1.2.3",
-        "1.9.0",
-        'b',
-    );
+    let npm = exact_lock(NativeRegistry::Npm, "@fiducia/core", "^1.2.3", "1.9.0", 'a');
+    let cargo = exact_lock(NativeRegistry::Cargo, "fiducia_core", "1.2.3", "1.9.0", 'b');
 
     let mut forward = Lockfile::default();
     forward.upsert_native_dependency(cargo.clone()).unwrap();
@@ -109,27 +97,9 @@ fn native_locks_round_trip_and_serialize_independent_of_insertion_order() {
 
 #[test]
 fn upsert_replaces_only_the_same_registry_and_package_identity() {
-    let npm_123 = exact_lock(
-        NativeRegistry::Npm,
-        "core",
-        "1.2.3",
-        "1.2.3",
-        'a',
-    );
-    let npm_124 = exact_lock(
-        NativeRegistry::Npm,
-        "core",
-        "1.2.4",
-        "1.2.4",
-        'b',
-    );
-    let cargo = exact_lock(
-        NativeRegistry::Cargo,
-        "core",
-        "1.2.3",
-        "1.9.0",
-        'c',
-    );
+    let npm_123 = exact_lock(NativeRegistry::Npm, "core", "1.2.3", "1.2.3", 'a');
+    let npm_124 = exact_lock(NativeRegistry::Npm, "core", "1.2.4", "1.2.4", 'b');
+    let cargo = exact_lock(NativeRegistry::Cargo, "core", "1.2.3", "1.9.0", 'c');
 
     let mut lockfile = Lockfile::default();
     lockfile.upsert_native_dependency(npm_123).unwrap();
@@ -157,20 +127,8 @@ fn upsert_replaces_only_the_same_registry_and_package_identity() {
 
 #[test]
 fn duplicate_native_keys_fail_during_write_and_parse() {
-    let first = exact_lock(
-        NativeRegistry::Npm,
-        "@fiducia/core",
-        "1.2.3",
-        "1.2.3",
-        'a',
-    );
-    let second = exact_lock(
-        NativeRegistry::Npm,
-        "@fiducia/core",
-        "1.2.4",
-        "1.2.4",
-        'b',
-    );
+    let first = exact_lock(NativeRegistry::Npm, "@fiducia/core", "1.2.3", "1.2.3", 'a');
+    let second = exact_lock(NativeRegistry::Npm, "@fiducia/core", "1.2.4", "1.2.4", 'b');
     let duplicate = Lockfile {
         version: Lockfile::CURRENT_VERSION,
         packages: Vec::new(),
@@ -192,13 +150,7 @@ fn duplicate_native_keys_fail_during_write_and_parse() {
 
 #[test]
 fn invalid_embedded_provenance_fails_during_upsert_write_and_parse() {
-    let mut drift = exact_lock(
-        NativeRegistry::Npm,
-        "@fiducia/core",
-        "^1.2.3",
-        "1.9.0",
-        'a',
-    );
+    let mut drift = exact_lock(NativeRegistry::Npm, "@fiducia/core", "^1.2.3", "1.9.0", 'a');
     drift.requirement.canonical = "^1.3.0".to_string();
 
     let mut lockfile = Lockfile::default();
@@ -222,13 +174,7 @@ fn invalid_embedded_provenance_fails_during_upsert_write_and_parse() {
 
 #[test]
 fn embedded_lock_preserves_native_validation_errors() {
-    let mut invalid = exact_lock(
-        NativeRegistry::Cargo,
-        "fiducia_core",
-        "1.2.3",
-        "1.9.0",
-        'a',
-    );
+    let mut invalid = exact_lock(NativeRegistry::Cargo, "fiducia_core", "1.2.3", "1.9.0", 'a');
     invalid.schema = "zed.native-dependency-lock/v2".to_string();
     assert!(matches!(
         invalid.validate(),
