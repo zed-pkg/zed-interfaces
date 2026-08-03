@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - agent/native-registry-semver-contract
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
   workflow_dispatch:
 
 permissions:
@@ -11,7 +18,7 @@ permissions:
 
 concurrency:
   group: bootstrap-native-registry-contract
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   validate-and-materialize:
@@ -21,6 +28,7 @@ jobs:
       - name: Check out exact branch head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: agent/native-registry-semver-contract
           fetch-depth: 0
           persist-credentials: true
 
