@@ -25,6 +25,7 @@ fn main() {
     write::<zed_interfaces::NixExportSection>(dir, "nix-export-section");
     write::<zed_interfaces::NixAdapterRecord>(dir, "nix-adapter-record");
     write::<zed_interfaces::NativeRegistryAdapterRecord>(dir, "native-registry-adapter-record");
+    write::<zed_interfaces::NativeDependencyLock>(dir, "native-dependency-lock");
     write::<zed_interfaces::registry::PackageMetadata>(dir, "package-metadata");
     write::<zed_interfaces::registry::VersionMetadata>(dir, "version-metadata");
     write::<zed_interfaces::registry::PublishMeta>(dir, "publish-meta");
