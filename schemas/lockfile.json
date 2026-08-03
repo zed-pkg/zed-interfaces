@@ -69,7 +69,7 @@
           "minLength": 1
         },
         "vcs_commit": {
-          "description": "Exact immutable source revision associated with the published artifact.\nThe optional Rust representation preserves API compatibility for\nbuilders, but lockfile parsing, schema generation, and serialization\nall require this value to be explicitly present.",
+          "description": "Exact immutable source revision associated with the published artifact.\nThe optional Rust representation preserves API compatibility for\nbuilders. Parsing and JSON Schema validation require an explicit value;\nthe canonical writer upgrades a legacy in-memory `None` to the exact\ncontent-addressed `artifact-sha256:<digest>` revision before emission.",
           "type": "string",
           "maxLength": 128,
           "minLength": 7,
