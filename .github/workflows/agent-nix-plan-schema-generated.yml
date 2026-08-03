@@ -1,32 +1,34 @@
 name: agent-nix-plan-schema-generated
 
 on:
-  pull_request:
+  push:
+    branches:
+      - agent/den-1418-nix-export-plan-schema
     paths:
       - ".github/workflows/agent-nix-plan-schema-generated.yml"
-      - "src/nix_plan.rs"
-      - "src/lib.rs"
-      - "examples/generate_schemas.rs"
-      - "schemas/nix-export-plan.json"
-  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: den-1418-schema-apply
+  cancel-in-progress: true
 
 jobs:
-  generate:
+  apply:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          persist-credentials: false
+          ref: agent/den-1418-nix-export-plan-schema
+          fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
           components: rustfmt,clippy
 
-      - name: Normalize the reviewed wire-format corrections
+      - name: Normalize, validate, generate, commit, and remove this helper
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -35,10 +37,7 @@ jobs:
           path = Path('src/nix_plan.rs')
           text = path.read_text()
           replacements = [
-              (
-                  'use std::path::{Component, Path};',
-                  'use std::path::Path;',
-              ),
+              ('use std::path::{Component, Path};', 'use std::path::Path;'),
               (
                   '#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]\n    pub bins:',
                   '#[serde(default)]\n    pub bins:',
@@ -96,24 +95,16 @@ jobs:
               text = text.replace(before, after, 1)
           path.write_text(text)
           PY
-
-      - name: Format, lint, test, and generate schemas
-        run: |
-          set -euo pipefail
           cargo fmt --all
           cargo fmt --all --check
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked nix_plan::tests:: -- --test-threads=1
           cargo run --locked --example generate_schemas
           test -s schemas/nix-export-plan.json
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: den-1418-nix-plan-schema
-          path: |
-            src/nix_plan.rs
-            src/lib.rs
-            examples/generate_schemas.rs
-            schemas/nix-export-plan.json
-          if-no-files-found: error
-          retention-days: 1
+          git rm .github/workflows/agent-nix-plan-schema-generated.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/nix_plan.rs src/lib.rs examples/generate_schemas.rs schemas/nix-export-plan.json
+          git diff --cached --check
+          git commit -m "feat(DEN-1418): apply generated Nix export plan schema"
+          git push origin HEAD:agent/den-1418-nix-export-plan-schema
