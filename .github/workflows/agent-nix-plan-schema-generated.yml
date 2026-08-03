@@ -26,6 +26,73 @@ jobs:
         with:
           components: rustfmt,clippy
 
+      - name: Normalize the reviewed wire-format corrections
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/nix_plan.rs')
+          text = path.read_text()
+          replacements = [
+              (
+                  '#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]\n    pub bins:',
+                  '#[serde(default)]\n    pub bins:',
+              ),
+              (
+                  '#[serde(default, skip_serializing_if = "Vec::is_empty")]\n    pub dependencies:',
+                  '#[serde(default)]\n    pub dependencies:',
+              ),
+              (
+                  '''fn is_safe_relative_path(value: &str) -> bool {
+              let path = Path::new(value);
+              !value.is_empty()
+                  && !path.is_absolute()
+                  && path.components().all(|component| {
+                      matches!(component, Component::Normal(_))
+                          && component.as_os_str().to_str().is_some_and(|part| {
+                              !part.is_empty()
+                                  && part != "."
+                                  && part != ".."
+                                  && !part.chars().any(char::is_control)
+                          })
+                  })
+          }''',
+                  '''fn is_safe_relative_path(value: &str) -> bool {
+              !value.is_empty()
+                  && !value.starts_with('/')
+                  && !value.ends_with('/')
+                  && !value.contains('\\\\')
+                  && value.split('/').all(|part| {
+                      !part.is_empty()
+                          && part != "."
+                          && part != ".."
+                          && !part.chars().any(char::is_control)
+                  })
+          }''',
+              ),
+              (
+                  '''        && !value.starts_with(['-', '.'])
+                  && !value.ends_with(['-', '.'])''',
+                  '''        && !matches!(value.chars().next(), Some('-' | '.'))
+                  && !matches!(value.chars().last(), Some('-' | '.'))''',
+              ),
+              (
+                  '''        assert_eq!(decoded["schema"], NIX_EXPORT_PLAN_SCHEMA_V1);
+                  assert!(!encoded.contains("registry"));''',
+                  '''        assert_eq!(decoded["schema"], NIX_EXPORT_PLAN_SCHEMA_V1);
+                  assert_eq!(decoded["bins"], serde_json::json!({}));
+                  assert_eq!(decoded["dependencies"], serde_json::json!([]));
+                  assert!(!encoded.contains("registry"));''',
+              ),
+          ]
+          for before, after in replacements:
+              if before not in text:
+                  raise SystemExit(f'normalization anchor not found: {before[:80]!r}')
+              text = text.replace(before, after, 1)
+          path.write_text(text)
+          PY
+
       - name: Format, lint, test, and generate schemas
         run: |
           set -euo pipefail
