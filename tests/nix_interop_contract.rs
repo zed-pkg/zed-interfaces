@@ -1,7 +1,6 @@
 use zed_interfaces::{
     ArtifactFormat, NixAdapterRecord, NixBuilderNetwork, NixInteropArtifact, NixOutputOrigin,
-    NixPackageIdentity, NixPolicyEvidence, NixPolicyProfile, NixRealizedOutput,
-    NixStoreReference,
+    NixPackageIdentity, NixPolicyEvidence, NixPolicyProfile, NixRealizedOutput, NixStoreReference,
 };
 
 const HEX_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -60,12 +59,8 @@ fn artifact() -> NixInteropArtifact {
 
 #[test]
 fn public_contract_round_trips_canonical_json() {
-    let record = NixAdapterRecord::nix_to_zed(
-        package(),
-        source(Vec::new()),
-        artifact(),
-        strict_policy(),
-    );
+    let record =
+        NixAdapterRecord::nix_to_zed(package(), source(Vec::new()), artifact(), strict_policy());
 
     let canonical = record.canonical_json_string().unwrap();
     let parsed: NixAdapterRecord = serde_json::from_str(&canonical).unwrap();
