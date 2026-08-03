@@ -16,9 +16,7 @@ pub const NIX_ADAPTER_SCHEMA_V1: &str = "zed.nix-adapter/v1";
 /// versioned independently of this crate.
 pub const SUPPORTED_STORE_INFO_JSON_VERSIONS: &[u32] = &[1, 2, 3];
 
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum NixExportMode {
     /// Export the exact immutable Zed artifact. Source-builder translation is
@@ -772,9 +770,7 @@ fn canonicalize_json(value: Value) -> Value {
             }
             Value::Object(sorted)
         }
-        Value::Array(values) => {
-            Value::Array(values.into_iter().map(canonicalize_json).collect())
-        }
+        Value::Array(values) => Value::Array(values.into_iter().map(canonicalize_json).collect()),
         scalar => scalar,
     }
 }
@@ -960,7 +956,9 @@ mod tests {
             serde_json::to_value(record).unwrap()
         );
         assert!(canonical.starts_with("{\"artifact\":"));
-        assert!(canonical.ends_with("}") && canonical.contains("\"schema\":\"zed.nix-adapter/v1\""));
+        assert!(
+            canonical.ends_with("}") && canonical.contains("\"schema\":\"zed.nix-adapter/v1\"")
+        );
     }
 
     #[test]

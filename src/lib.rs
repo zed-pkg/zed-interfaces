@@ -23,10 +23,9 @@ pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile};
 pub use manifest::{Manifest, ManifestError};
 pub use nix::{
-    NIX_ADAPTER_SCHEMA_V1, NixAdapterRecord, NixBuilderNetwork, NixExportMode,
-    NixExportSection, NixInteropArtifact, NixInteropError, NixOutputOrigin,
-    NixPackageIdentity, NixPolicyEvidence, NixPolicyProfile, NixRealizedOutput,
-    NixStoreReference, ZedArtifactOrigin,
+    NIX_ADAPTER_SCHEMA_V1, NixAdapterRecord, NixBuilderNetwork, NixExportMode, NixExportSection,
+    NixInteropArtifact, NixInteropError, NixOutputOrigin, NixPackageIdentity, NixPolicyEvidence,
+    NixPolicyProfile, NixRealizedOutput, NixStoreReference, ZedArtifactOrigin,
 };
 pub use vcs::Vcs;
 pub use version::{Requirement, VersionScheme};
