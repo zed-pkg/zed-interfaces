@@ -267,7 +267,10 @@ fn validate_package(package: &NixAdapterPackage) -> Result<(), NixAdapterError> 
         && is_slug(&package.name)
         && !package.version.is_empty()
         && !package.version.chars().any(char::is_whitespace)
-        && package.target.as_ref().map_or(true, |target| is_slug(target))
+        && package
+            .target
+            .as_ref()
+            .map_or(true, |target| is_slug(target))
     {
         Ok(())
     } else {
@@ -337,9 +340,9 @@ fn validate_immutable_reference(value: &str) -> Result<(), NixAdapterError> {
 
 fn validate_system(value: &str) -> Result<(), NixAdapterError> {
     if value.contains('-')
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_+.-".contains(&byte))
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_+.-".contains(&byte)
+        })
     {
         Ok(())
     } else {
@@ -401,16 +404,15 @@ mod tests {
                 vcs_commit: "0".repeat(40),
                 artifact_url: "https://registry.example/artifact".to_string(),
                 artifact_sha256: "a".repeat(64),
-                artifact_hash_sri:
-                    "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string(),
+                artifact_hash_sri: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+                    .to_string(),
                 format: ArtifactFormat::TarGz,
             },
             nix: NixExport {
                 nixpkgs_url: "github:NixOS/nixpkgs/0000000000000000000000000000000000000000"
                     .to_string(),
                 nixpkgs_revision: "0".repeat(40),
-                nixpkgs_nar_hash:
-                    "sha256-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=".to_string(),
+                nixpkgs_nar_hash: "sha256-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=".to_string(),
                 systems: vec!["x86_64-linux".to_string()],
                 attribute: "packages.${system}.portable".to_string(),
                 install_layout: "share/zed-pkg/acme/portable".to_string(),
