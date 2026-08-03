@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::language::{Ecosystem, Language};
+use crate::nix::NixExportSection;
 use crate::vcs::Vcs;
 use crate::version::{Requirement, VersionScheme};
 
@@ -179,6 +180,11 @@ pub struct PublishSection {
     /// instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub native: Option<NativeReleaseSection>,
+    /// Optional deterministic export of this single-language package as a
+    /// standalone Nix flake. Nix is a typed interop adapter, not a native
+    /// registry destination, so its intent remains separate from `native`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nix: Option<NixExportSection>,
 }
 
 impl Default for PublishSection {
@@ -189,6 +195,7 @@ impl Default for PublishSection {
             smoke_test: None,
             tag_format: "v{version}".to_string(),
             native: None,
+            nix: None,
         }
     }
 }
@@ -275,6 +282,9 @@ pub struct TargetSection {
     /// [`NativeRegistry::ecosystem`] and the check in [`Manifest::validate`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native: Option<NativeReleaseSection>,
+    /// Optional deterministic Nix export intent for this isolated target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nix: Option<NixExportSection>,
     /// Override the ecosystem this target publishes into. Omit it (the normal
     /// case) and it is derived from the target key via [`Language::ecosystem`].
     /// Declare it when the key does not determine consumption — a `rust-wasm`
@@ -478,6 +488,14 @@ pub struct ForgeReleaseRoute {
     pub vcs_tag: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct NixExportRoute {
+    pub target: String,
+    pub dir: String,
+    pub package: String,
+    pub intent: NixExportSection,
+}
+
 fn is_valid_npm_component(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 214
@@ -667,6 +685,8 @@ pub enum ManifestError {
     InvalidTarget(String, String),
     #[error("invalid native release route for target `{0}`: {1}")]
     InvalidNativeRoute(String, String),
+    #[error("invalid Nix export route for target `{0}`: {1}")]
+    InvalidNixRoute(String, String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
@@ -879,6 +899,7 @@ impl Manifest {
         let mut target_dirs = BTreeMap::<&str, &str>::new();
         let mut published_names = BTreeMap::<String, &str>::new();
         let mut native_routes = BTreeMap::<(NativeRegistry, String), &str>::new();
+        let mut nix_attributes = BTreeMap::<String, &str>::new();
         if let Some(native) = &self.publish.native {
             if !self.targets.is_empty() {
                 return Err(ManifestError::InvalidNativeRoute(
@@ -896,6 +917,19 @@ impl Manifest {
                 ),
                 "repository",
             );
+        }
+        if let Some(nix) = &self.publish.nix {
+            if !self.targets.is_empty() {
+                return Err(ManifestError::InvalidNixRoute(
+                    "repository".to_string(),
+                    "root `[publish.nix]` is only valid for a single-language package;                      polyglot packages declare `[targets.<language>.nix]`"
+                        .to_string(),
+                ));
+            }
+            nix.validate(&self.package.name).map_err(|error| {
+                ManifestError::InvalidNixRoute("repository".to_string(), error.to_string())
+            })?;
+            nix_attributes.insert(nix.resolved_attribute(&self.package.name), "repository");
         }
         for (name, target) in &self.targets {
             if !is_target_name(name) {
@@ -946,6 +980,20 @@ impl Manifest {
                         "published name `{published_name}` is already used by target `{previous}`"
                     ),
                 ));
+            }
+            if let Some(nix) = &target.nix {
+                nix.validate(&published_name).map_err(|error| {
+                    ManifestError::InvalidNixRoute(name.clone(), error.to_string())
+                })?;
+                let attribute = nix.resolved_attribute(&published_name);
+                if let Some(previous) = nix_attributes.insert(attribute.clone(), name.as_str()) {
+                    return Err(ManifestError::InvalidNixRoute(
+                        name.clone(),
+                        format!(
+                            "Nix attribute `{attribute}` is already used by target `{previous}`"
+                        ),
+                    ));
+                }
             }
             if let Some(adapter) = target.adapter.as_deref()
                 && !ADAPTERS.contains(&adapter)
@@ -1089,6 +1137,34 @@ impl Manifest {
         })
     }
 
+    /// Nix export routes sorted by target name. These contain author intent only;
+    /// realization hashes and store paths live in versioned lock provenance.
+    pub fn nix_export_routes(&self) -> Vec<NixExportRoute> {
+        let mut routes = Vec::new();
+        if let Some(intent) = &self.publish.nix {
+            routes.push(NixExportRoute {
+                target: "repository".to_string(),
+                dir: ".".to_string(),
+                package: self.package.name.clone(),
+                intent: intent.clone(),
+            });
+        }
+        for (target, section) in &self.targets {
+            if let Some(intent) = &section.nix {
+                routes.push(NixExportRoute {
+                    target: target.clone(),
+                    dir: section.dir.clone(),
+                    package: section
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| format!("{}-{target}", self.package.name)),
+                    intent: intent.clone(),
+                });
+            }
+        }
+        routes
+    }
+
     /// Native release routes sorted by target name, suitable for deterministic
     /// credential-free planning before any registry adapter executes.
     pub fn native_release_routes(&self) -> Vec<NativeReleaseRoute> {
@@ -1202,6 +1278,7 @@ impl Manifest {
         // its outbound native/forge routing under the single-package shape so
         // the manifest inside the Zed artifact remains self-describing.
         derived.publish.native = section.native.clone();
+        derived.publish.nix = section.nix.clone();
         derived.targets = BTreeMap::new();
         derived.workspace = None;
         // The consumer-facing wiring for this ecosystem.

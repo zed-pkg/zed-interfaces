@@ -27,8 +27,8 @@ pub use environment::{
     validate_semver_export,
 };
 pub use language::{Ecosystem, Language, detect_ecosystems};
-pub use lockfile::{LockedPackage, Lockfile};
-pub use manifest::{Manifest, ManifestError};
+pub use lockfile::{LockedPackage, Lockfile, LockfileError};
+pub use manifest::{Manifest, ManifestError, NixExportRoute};
 pub use nix::{
     NIX_ADAPTER_SCHEMA_V1, NixAdapterRecord, NixBuilderNetwork, NixExportMode, NixExportSection,
     NixInteropArtifact, NixInteropError, NixOutputOrigin, NixPackageIdentity, NixPolicyEvidence,
