@@ -5,6 +5,8 @@ on:
     paths:
       - src/oci.rs
       - src/lib.rs
+      - examples/generate_schemas.rs
+      - schemas/oci-adapter-record.json
       - .github/workflows/oci-bootstrap.yml
 
 permissions:
@@ -26,7 +28,9 @@ jobs:
         run: cargo test oci --all-targets
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
-      - name: Preserve formatted sources
+      - name: Generate JSON schemas
+        run: cargo run --example generate_schemas
+      - name: Preserve formatted sources and schema
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -35,3 +39,5 @@ jobs:
           path: |
             src/oci.rs
             src/lib.rs
+            examples/generate_schemas.rs
+            schemas/oci-adapter-record.json
