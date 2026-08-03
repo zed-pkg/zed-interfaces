@@ -40,11 +40,12 @@ pub struct LockedPackage {
     pub format: ArtifactFormat,
     /// VCS tag the version was published from, e.g. `v1.2.0`.
     pub vcs_tag: String,
-    /// Exact source revision associated with the published artifact. The
-    /// optional Rust representation preserves API compatibility for builders,
-    /// but parsing and serialization reject `None` so committed lockfiles are
-    /// always complete.
+    /// Exact immutable source revision associated with the published artifact.
+    /// The optional Rust representation preserves API compatibility for
+    /// builders, but lockfile parsing, schema generation, and serialization
+    /// all require this value to be explicitly present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(required)]
     pub vcs_commit: Option<String>,
     /// Base URL of the registry the artifact was resolved from.
     pub source: String,
@@ -162,14 +163,13 @@ impl Lockfile {
             if package.vcs_tag.trim().is_empty() {
                 return invalid_package(&label, "vcs_tag must not be empty");
             }
-            if package
-                .vcs_commit
-                .as_deref()
-                .is_none_or(|commit| commit.trim().is_empty())
-            {
+            let Some(commit) = package.vcs_commit.as_deref() else {
+                return invalid_package(&label, "vcs_commit must be explicitly present");
+            };
+            if !is_immutable_vcs_revision(commit) {
                 return invalid_package(
                     &label,
-                    "vcs_commit must be explicitly present and non-empty",
+                    "vcs_commit must be a bounded immutable revision, not a mutable ref",
                 );
             }
             if package.source.trim().is_empty() {
@@ -214,6 +214,28 @@ fn is_canonical_sha256(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// VCS backends do not all use Git's 40-hex object IDs, so lockfiles accept a
+/// conservative printable revision alphabet while rejecting branch-like or
+/// otherwise mutable names. The published tag is retained separately; this
+/// field must identify one immutable source state.
+fn is_immutable_vcs_revision(value: &str) -> bool {
+    if value != value.trim() || !(7..=128).contains(&value.len()) {
+        return false;
+    }
+    if value.bytes().all(|byte| byte == b'0') {
+        return false;
+    }
+    if !value.bytes().all(|byte| {
+        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+' | b':' | b'/')
+    }) {
+        return false;
+    }
+    let lower = value.to_ascii_lowercase();
+    !matches!(lower.as_str(), "head" | "main" | "master" | "trunk" | "latest")
+        && !lower.starts_with("refs/heads/")
+        && !lower.starts_with("heads/")
 }
 
 fn nix_adapter_key(adapter: &NixAdapterRecord) -> NixAdapterKey {
@@ -332,6 +354,40 @@ source = "file:///tmp/registry"
     }
 
     #[test]
+    fn mutable_malformed_and_zero_vcs_revisions_are_rejected() {
+        let original = "0123456789abcdef0123456789abcdef01234567";
+        for replacement in [
+            "main",
+            "refs/heads/main",
+            "latest",
+            "0000000",
+            "short",
+            "revision with spaces",
+            "revision@host",
+        ] {
+            let input = VALID_LOCK.replacen(original, replacement, 1);
+            let error = Lockfile::parse(&input).unwrap_err().to_string();
+            assert!(error.contains("vcs_commit"), "unexpected error: {error}");
+        }
+    }
+
+    #[test]
+    fn non_git_immutable_revisions_remain_supported() {
+        for revision in [
+            "fossil:0123456789abcdef",
+            "hg/0123456789abcdef0123456789abcdef01234567",
+            "pijul+ABCdef0123456789_-",
+        ] {
+            let input = VALID_LOCK.replacen(
+                "0123456789abcdef0123456789abcdef01234567",
+                revision,
+                1,
+            );
+            assert!(Lockfile::parse(&input).is_ok(), "revision rejected: {revision}");
+        }
+    }
+
+    #[test]
     fn duplicate_package_identities_are_rejected() {
         let package = VALID_LOCK.split_once("[[package]]").unwrap().1;
         let input = format!("{VALID_LOCK}\n[[package]]{package}");
@@ -359,5 +415,19 @@ source = "file:///tmp/registry"
         };
         let error = lock.to_toml_string().unwrap_err().to_string();
         assert!(error.contains("vcs_commit"));
+    }
+
+    #[test]
+    fn public_schema_requires_format_and_vcs_commit() {
+        let schema = schemars::schema_for!(Lockfile);
+        let value = serde_json::to_value(schema).unwrap();
+        let required = value["$defs"]["LockedPackage"]["required"]
+            .as_array()
+            .unwrap();
+        let names = required.iter().filter_map(|item| item.as_str()).collect::<BTreeSet<_>>();
+        assert!(names.contains("format"));
+        assert!(names.contains("vcs_commit"));
+        let commit_type = &value["$defs"]["LockedPackage"]["properties"]["vcs_commit"]["type"];
+        assert_eq!(commit_type, "string");
     }
 }
