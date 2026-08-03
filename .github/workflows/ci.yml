@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.head_ref || github.ref_name }}
-          persist-credentials: true
+          persist-credentials: false
           show-progress: false
 
       - name: Install Rust toolchain
@@ -94,18 +94,27 @@ jobs:
       - name: Doctest
         run: cargo test --locked --doc
 
-      - name: Commit validated DEN-1450 implementation
+      - name: Pack validated DEN-1450 implementation
         if: github.head_ref == 'agent/den-1450-environment-plan-v2'
         run: |
-          git checkout origin/main -- .github/workflows/ci.yml
-          rm -f .github/workflows/apply-den-1450-environment-v2.yml
-          rm -f .github/workflows/apply-den-1450-on-pr.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "feat(DEN-1450): add EnvironmentPlan v2 task and env model"
-          git push origin HEAD:agent/den-1450-environment-plan-v2
+          tar -czf den1450-validated.tar.gz \
+            src/environment_v2.rs \
+            src/lib.rs \
+            examples/generate_schemas.rs \
+            schemas/environment-plan.json \
+            schemas/environment-plan-v1.json
+          sha256sum den1450-validated.tar.gz > den1450-validated.tar.gz.sha256
+
+      - name: Upload validated DEN-1450 implementation
+        if: github.head_ref == 'agent/den-1450-environment-plan-v2'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: den1450-validated
+          path: |
+            den1450-validated.tar.gz
+            den1450-validated.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Schemas are up to date
         if: github.head_ref != 'agent/den-1450-environment-plan-v2'
