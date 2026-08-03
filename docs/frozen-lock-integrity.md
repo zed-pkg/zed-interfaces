@@ -27,6 +27,13 @@ migrated without an immediate source break. Parsing, JSON Schema validation,
 and serialization still require the value: `None` is a construction-time
 intermediate state, not a valid committed lockfile.
 
+## Schema consumers
+
+`schemas/lockfile.json` places every package identity field—including
+`format` and `vcs_commit`—in the object-level `required` array. API clients and
+editors should validate against that checked-in schema instead of deriving
+requiredness from the Rust `Option` representation.
+
 ## Duplicate identity
 
 A lockfile may contain only one entry for an `org/name` identity. Resolution
