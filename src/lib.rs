@@ -13,6 +13,7 @@ pub mod language;
 pub mod lockfile;
 pub mod manifest;
 pub mod nix;
+pub mod oci;
 pub mod paths;
 pub mod registry;
 pub mod sync;
@@ -33,6 +34,14 @@ pub use nix::{
     NIX_ADAPTER_SCHEMA_V1, NixAdapterRecord, NixBuilderNetwork, NixExportMode, NixExportSection,
     NixInteropArtifact, NixInteropError, NixOutputOrigin, NixPackageIdentity, NixPolicyEvidence,
     NixPolicyProfile, NixRealizedOutput, NixStoreReference, ZedArtifactOrigin,
+};
+pub use oci::{
+    CYCLONEDX_JSON_MEDIA_TYPE, IN_TOTO_JSON_MEDIA_TYPE, OCI_ADAPTER_SCHEMA_V1,
+    OCI_IMAGE_MANIFEST_MEDIA_TYPE, OciAdapterRecord, OciDescriptor, OciDigest, OciInteropError,
+    OciLayer, OciLayerKind, OciPackageIdentity, OciPlatform, OciReference, SPDX_JSON_MEDIA_TYPE,
+    ZED_OCI_BINARY_MEDIA_TYPE_V1, ZED_OCI_CONFIG_MEDIA_TYPE_V1,
+    ZED_OCI_LOCK_MEDIA_TYPE_V1, ZED_OCI_MANIFEST_MEDIA_TYPE_V1,
+    ZED_OCI_PACKAGE_TAR_GZ_MEDIA_TYPE_V1, ZED_OCI_PACKAGE_ZIP_MEDIA_TYPE_V1,
 };
 pub use vcs::Vcs;
 pub use version::{Requirement, VersionScheme};
