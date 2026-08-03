@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Component, Path};
+use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -141,10 +141,10 @@ pub struct NixExportPlan {
     pub intent: ResolvedNixExportIntent,
     pub source: PlannedZedExportArtifact,
     /// Command name → artifact-relative executable path.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     pub bins: BTreeMap<String, String>,
     /// Contract v1 requires this list to be empty.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub dependencies: Vec<PlannedNixExportDependency>,
     pub policy: NixPolicyEvidence,
 }
@@ -240,8 +240,7 @@ impl NixExportPlan {
         let mut canonical = self.clone();
         canonical.normalize();
         canonical.validate()?;
-        serde_json::to_vec(&canonical)
-            .map_err(|error| NixExportPlanError::Json(error.to_string()))
+        serde_json::to_vec(&canonical).map_err(|error| NixExportPlanError::Json(error.to_string()))
     }
 
     pub fn canonical_json_string(&self) -> Result<String, NixExportPlanError> {
@@ -288,28 +287,23 @@ fn is_safe_basename(value: &str) -> bool {
 }
 
 fn is_safe_relative_path(value: &str) -> bool {
-    let path = Path::new(value);
     !value.is_empty()
-        && !path.is_absolute()
-        && path.components().all(|component| {
-            matches!(component, Component::Normal(_))
-                && component.as_os_str().to_str().is_some_and(|part| {
-                    !part.is_empty()
-                        && part != "."
-                        && part != ".."
-                        && !part.chars().any(char::is_control)
-                })
+        && !value.starts_with('/')
+        && !value.ends_with('/')
+        && !value.contains('\\')
+        && value.split('/').all(|part| {
+            !part.is_empty() && part != "." && part != ".." && !part.chars().any(char::is_control)
         })
 }
 
 fn is_bin_name(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
-        && !value.starts_with(['-', '.'])
-        && !value.ends_with(['-', '.'])
-        && value
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
+        && !matches!(value.chars().next(), Some('-' | '.'))
+        && !matches!(value.chars().last(), Some('-' | '.'))
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        })
 }
 
 fn ensure_sorted_unique<T>(values: &[T], field: &str) -> Result<(), NixExportPlanError>
@@ -396,6 +390,8 @@ mod tests {
             serde_json::json!(["aarch64-linux", "x86_64-linux"])
         );
         assert_eq!(decoded["schema"], NIX_EXPORT_PLAN_SCHEMA_V1);
+        assert_eq!(decoded["bins"], serde_json::json!({}));
+        assert_eq!(decoded["dependencies"], serde_json::json!([]));
         assert!(!encoded.contains("registry"));
         assert!(!encoded.contains("token"));
         assert!(!encoded.contains("/tmp/"));
