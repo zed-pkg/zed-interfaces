@@ -22,10 +22,23 @@ may identify an immutable revision from Git, Mercurial, Fossil, Pijul, or
 another VCS. Moving names such as `HEAD`, `main`, `master`, `trunk`, `latest`,
 `refs/heads/*`, and `heads/*` are invalid.
 
-The public Rust field remains `Option<String>` so existing lock builders can be
-migrated without an immediate source break. Parsing, JSON Schema validation,
-and serialization still require the value: `None` is a construction-time
-intermediate state, not a valid committed lockfile.
+The public Rust field remains `Option<String>` so existing lock builders and
+legacy registry responses can be migrated without an immediate source break.
+Parsing and JSON Schema validation still require the value to be explicitly
+present in every committed lockfile.
+
+`Lockfile::to_toml_string` is the one compatibility boundary: when an in-memory
+package has no stronger source revision, the writer emits
+`artifact-sha256:<sha256>`. This is not a guessed Git commit. It is an explicit,
+content-addressed revision that identifies the exact published archive bytes.
+The writer derives it only from a canonical, nonzero artifact digest and leaves
+the caller's in-memory structure unchanged. Empty, malformed, all-zero, or
+mutable revisions still fail.
+
+This fallback supports packages published by older registries or through an
+explicit VCS-check bypass while preserving the stronger invariant that every
+serialized and frozen lock carries immutable provenance. Publishers with a
+verified source revision continue to retain that exact revision unchanged.
 
 ## Schema consumers
 
@@ -43,9 +56,10 @@ duplicate tables are rejected rather than resolved by order.
 ## Migration
 
 Regenerate an older or incomplete lockfile with a non-frozen resolution command
-that can retrieve the registry artifact metadata and immutable source revision.
-Do not repair a frozen lock by guessing an archive format, size, checksum, or
-revision.
+that can retrieve the registry artifact metadata. The canonical writer may use
+the exact artifact digest as the immutable revision only when no stronger
+source revision exists. Do not repair a frozen lock by guessing an archive
+format, size, checksum, tag, source, or revision.
 
 Consumers should validate with `Lockfile::parse` before beginning any install
 transaction and should emit committed lockfiles only through
