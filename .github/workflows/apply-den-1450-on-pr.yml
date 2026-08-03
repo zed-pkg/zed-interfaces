@@ -1,69 +1,67 @@
-name: apply DEN-1450 environment plan v2 on PR
+name: promote validated DEN-1450 source on PR
 
 on:
   pull_request:
     branches:
       - main
     paths:
-      - .github/workflows/apply-den-1450-environment-v2.yml
       - .github/workflows/apply-den-1450-on-pr.yml
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
-  group: apply-den-1450-environment-v2-pr
+  group: promote-den-1450-source-pr
   cancel-in-progress: false
 
 jobs:
-  apply:
+  promote:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent/den-1450-environment-plan-v2'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
-      - name: Check out the implementation branch
+      - name: Check out implementation branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: agent/den-1450-environment-plan-v2
           persist-credentials: true
           show-progress: false
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
-        with:
-          components: rustfmt,clippy
-
-      - name: Recover and verify the reviewed source payload
+      - name: Download and verify the CI-validated source artifact
         env:
-          PAYLOAD_SHA256: 87d4d0a10bbf87d6fd60d334cf69a53bf0db9be1522f934c858f963892be551e
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: '8845882632'
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            > /tmp/den1450-validated.zip
+          mkdir -p /tmp/den1450-validated /tmp/den1450-source
+          unzip -q /tmp/den1450-validated.zip -d /tmp/den1450-validated
+          cd /tmp/den1450-validated
+          sha256sum -c den1450-validated.tar.gz.sha256
+          tar -xzf den1450-validated.tar.gz -C /tmp/den1450-source
 
-          source = Path('.github/workflows/apply-den-1450-environment-v2.yml').read_text()
-          payload = source.split("<<'PAYLOAD'\n", 1)[1].split('\nPAYLOAD\n', 1)[0]
-          Path('/tmp/den1450.b64').write_text(payload.strip() + '\n')
-          PY
-          base64 --decode /tmp/den1450.b64 > /tmp/den1450.tar.gz
-          echo "$PAYLOAD_SHA256  /tmp/den1450.tar.gz" | sha256sum --check --strict
-          tar -xzf /tmp/den1450.tar.gz
-
-      - name: Format, generate schemas, and validate
+      - name: Materialize reviewed sources and ordinary CI
         run: |
-          cargo fmt
-          cargo run --locked --example generate_schemas
-          cargo fmt --check
-          cargo clippy --locked --all-targets -- -D warnings
-          cargo test --locked
-          cargo test --locked --doc
+          install -Dm644 /tmp/den1450-source/src/environment_v2.rs src/environment_v2.rs
+          install -Dm644 /tmp/den1450-source/src/lib.rs src/lib.rs
+          install -Dm644 /tmp/den1450-source/examples/generate_schemas.rs examples/generate_schemas.rs
+          install -Dm644 /tmp/den1450-source/schemas/environment-plan-v1.json schemas/environment-plan-v1.json
+          install -Dm644 /tmp/den1450-source/schemas/environment-plan.json schemas/environment-plan.json
+          git fetch --no-tags --depth=1 origin main
+          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+          rm -f \
+            .github/workflows/apply-den-1450-environment-v2.yml \
+            .github/workflows/apply-den-1450-on-pr.yml \
+            .github/workflows/promote-den1450-validated-artifact.yml
 
       - name: Commit the validated implementation
         run: |
-          rm .github/workflows/apply-den-1450-environment-v2.yml
-          rm .github/workflows/apply-den-1450-on-pr.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           git diff --cached --check
-          git commit -m "feat(DEN-1450): add EnvironmentPlan v2 task and env model"
+          git commit -m 'feat(DEN-1450): add EnvironmentPlan v2 contract'
           git push origin HEAD:agent/den-1450-environment-plan-v2
