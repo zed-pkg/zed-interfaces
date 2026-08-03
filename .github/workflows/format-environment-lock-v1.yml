@@ -1,23 +1,29 @@
-name: format environment lock v1
+name: refresh environment lock v1
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/environment-lock-v1
+      - main
     paths:
+      - Cargo.toml
+      - Cargo.lock
+      - src/environment_lock.rs
+      - src/lib.rs
+      - examples/generate_environment_lock_schema.rs
       - .github/workflows/format-environment-lock-v1.yml
 
 permissions:
   contents: write
 
 concurrency:
-  group: format-environment-lock-v1
+  group: refresh-environment-lock-v1
   cancel-in-progress: false
 
 jobs:
-  format:
+  refresh:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent/environment-lock-v1'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out implementation branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -26,22 +32,32 @@ jobs:
           persist-credentials: true
           show-progress: false
 
-      - name: Install rustfmt
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
           toolchain: stable
-          components: rustfmt
+          components: rustfmt,clippy
 
-      - name: Format and commit ordinary source
+      - name: Refresh lock, format, and validate
         run: |
           set -euo pipefail
+          cargo update -p zed-interfaces
           cargo fmt --all
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+          cargo test --locked --doc
+          cargo run --locked --example generate_environment_lock_schema
+          test -s schemas/environment-lock-v1.json
+
+      - name: Commit generated state
+        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/environment_lock.rs src/lib.rs examples/generate_environment_lock_schema.rs
+          git add Cargo.lock src/environment_lock.rs src/lib.rs examples/generate_environment_lock_schema.rs schemas/environment-lock-v1.json
           if git diff --cached --quiet; then
             exit 0
           fi
           git diff --cached --check
-          git commit -m 'style: format environment lock contract'
+          git commit -m 'fix: lock and validate environment digest dependencies'
           git push origin HEAD:agent/environment-lock-v1
