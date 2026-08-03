@@ -347,9 +347,8 @@ source = "file:///tmp/registry"
                 org: "zed-pkg".to_string(),
                 name: "fixture".to_string(),
                 version: "1.2.3".to_string(),
-                sha256:
-                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-                        .to_string(),
+                sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    .to_string(),
                 size: 42,
                 format: ArtifactFormat::TarGz,
                 vcs_tag: "v1.2.3".to_string(),
