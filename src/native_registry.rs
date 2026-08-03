@@ -105,11 +105,7 @@ pub struct NativePackageIdentity {
 }
 
 impl NativePackageIdentity {
-    fn validate(
-        &self,
-        registry: NativeRegistry,
-        field: &str,
-    ) -> Result<(), NativeRegistryError> {
+    fn validate(&self, registry: NativeRegistry, field: &str) -> Result<(), NativeRegistryError> {
         validate_native_package_name(registry, &self.name)?;
         validate_native_version(&format!("{field}.version"), &self.version).map(|_| ())
     }
@@ -148,20 +144,14 @@ impl NativeArtifact {
 }
 
 /// One platform-to-package edge emitted by a generic wrapper package.
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 pub struct NativePlatformPackage {
     pub platform: NativePlatform,
     pub package: String,
 }
 
 impl NativePlatformPackage {
-    fn validate(
-        &self,
-        registry: NativeRegistry,
-        field: &str,
-    ) -> Result<(), NativeRegistryError> {
+    fn validate(&self, registry: NativeRegistry, field: &str) -> Result<(), NativeRegistryError> {
         self.platform.validate(&format!("{field}.platform"))?;
         validate_native_package_name(registry, &self.package)
     }
@@ -195,7 +185,8 @@ impl NativePublication {
         index: usize,
     ) -> Result<(), NativeRegistryError> {
         let field = format!("publications[{index}]");
-        self.package.validate(registry, &format!("{field}.package"))?;
+        self.package
+            .validate(registry, &format!("{field}.package"))?;
         if self.package.version != source_version {
             return Err(NativeRegistryError::VersionDrift {
                 package: self.package.name.clone(),
@@ -345,10 +336,9 @@ impl NativeRegistryAdapterRecord {
                         .as_ref()
                         .expect("platform publication validated above")
                         .clone();
-                    if let Some(existing) = platform_publications.insert(
-                        platform.clone(),
-                        publication.package.name.clone(),
-                    ) {
+                    if let Some(existing) = platform_publications
+                        .insert(platform.clone(), publication.package.name.clone())
+                    {
                         return Err(NativeRegistryError::DuplicatePlatformPublication {
                             platform: platform.selector(),
                             first: existing,
@@ -396,21 +386,19 @@ impl NativeRegistryAdapterRecord {
 /// Native adapters can use this before planning a publication set to detect
 /// collisions such as `1.0.0+linux` and `1.0.0+darwin`.
 pub fn semver_precedence_identity(version: &str) -> Result<String, NativeRegistryError> {
-    let mut version = Version::parse(version).map_err(|error| NativeRegistryError::InvalidSemver {
-        field: "version".to_string(),
-        version: version.to_string(),
-        detail: error.to_string(),
-    })?;
+    let mut version =
+        Version::parse(version).map_err(|error| NativeRegistryError::InvalidSemver {
+            field: "version".to_string(),
+            version: version.to_string(),
+            detail: error.to_string(),
+        })?;
     version.build = BuildMetadata::EMPTY;
     Ok(version.to_string())
 }
 
 /// Whether two valid SemVer strings identify the same native-registry version
 /// after build metadata is ignored.
-pub fn native_versions_collide(
-    left: &str,
-    right: &str,
-) -> Result<bool, NativeRegistryError> {
+pub fn native_versions_collide(left: &str, right: &str) -> Result<bool, NativeRegistryError> {
     Ok(semver_precedence_identity(left)? == semver_precedence_identity(right)?)
 }
 
@@ -504,14 +492,12 @@ fn validate_npm_name(name: &str) -> Result<(), NativeRegistryError> {
             });
         }
         if !component.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'-' | b'_' | b'.')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')
         }) {
             return Err(NativeRegistryError::InvalidPackageName {
                 registry: NativeRegistry::Npm,
                 name: name.to_string(),
-                detail: "name components may contain lowercase letters, digits, `-`, `_`, or `."
+                detail: "name components may contain lowercase letters, digits, `-`, `_`, or `.`"
                     .to_string(),
             });
         }
@@ -521,9 +507,9 @@ fn validate_npm_name(name: &str) -> Result<(), NativeRegistryError> {
 
 fn validate_identity_component(field: &str, value: &str) -> Result<(), NativeRegistryError> {
     if value.is_empty()
-        || !value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
-        })
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
     {
         return Err(NativeRegistryError::InvalidIdentityComponent {
             field: field.to_string(),
@@ -536,9 +522,7 @@ fn validate_identity_component(field: &str, value: &str) -> Result<(), NativeReg
 fn validate_lower_token(field: &str, value: &str) -> Result<(), NativeRegistryError> {
     if value.is_empty()
         || !value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'-' | b'_' | b'.')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')
         })
     {
         return Err(NativeRegistryError::InvalidPlatformToken {
@@ -673,12 +657,7 @@ mod tests {
     fn record() -> NativeRegistryAdapterRecord {
         let linux = platform("linux", "arm64", Some("musl"));
         let darwin = platform("darwin", "arm64", None);
-        let mut meta = publication(
-            "@fiducia/core",
-            NativePublicationKind::Meta,
-            None,
-            'a',
-        );
+        let mut meta = publication("@fiducia/core", NativePublicationKind::Meta, None, 'a');
         meta.platform_packages = vec![
             NativePlatformPackage {
                 platform: linux.clone(),
@@ -822,17 +801,17 @@ mod tests {
 
     #[test]
     fn artifact_and_version_drift_are_rejected() {
-        let mut record = record();
-        record.publications[0].artifact.sha256 = "A".repeat(64);
+        let mut invalid_artifact = record();
+        invalid_artifact.publications[0].artifact.sha256 = "A".repeat(64);
         assert!(matches!(
-            record.validate(),
+            invalid_artifact.validate(),
             Err(NativeRegistryError::InvalidSha256 { .. })
         ));
 
-        let mut record = record();
-        record.publications[0].package.version = "1.2.4".to_string();
+        let mut version_drift = record();
+        version_drift.publications[0].package.version = "1.2.4".to_string();
         assert!(matches!(
-            record.validate(),
+            version_drift.validate(),
             Err(NativeRegistryError::VersionDrift { .. })
         ));
     }
