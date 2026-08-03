@@ -1,11 +1,6 @@
 name: agent-nix-plan-schema-generated
 
 on:
-  push:
-    branches:
-      - agent/den-1418-nix-export-plan-schema
-    paths:
-      - ".github/workflows/agent-nix-plan-schema-generated.yml"
   pull_request:
     branches:
       - main
@@ -21,7 +16,7 @@ concurrency:
 
 jobs:
   apply:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
