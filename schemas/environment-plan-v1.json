@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnvironmentPlan",
+  "description": "Manager-neutral desired and resolved developer-environment state.",
+  "type": "object",
+  "properties": {
+    "activation": {
+      "$ref": "#/$defs/ActivationPolicy",
+      "default": "none"
+    },
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "schema": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 1,
+      "minimum": 0
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EnvironmentSource"
+      }
+    },
+    "system-packages": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/SystemPackageRequirement"
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ToolRequirement"
+      }
+    }
+  },
+  "$defs": {
+    "ActivationPolicy": {
+      "description": "The only activation behavior a Zed environment adapter may add.",
+      "type": "string",
+      "enum": [
+        "none",
+        "frozen-install"
+      ]
+    },
+    "Checksum": {
+      "description": "One lowercase hexadecimal content checksum in canonical output.",
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/ChecksumAlgorithm"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "value"
+      ]
+    },
+    "ChecksumAlgorithm": {
+      "description": "Supported checksum algorithms in environment provenance.",
+      "type": "string",
+      "enum": [
+        "sha256",
+        "sha512",
+        "blake3"
+      ]
+    },
+    "EnvironmentManager": {
+      "description": "Environment managers with a first-class adapter contract.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "mise",
+            "asdf",
+            "devbox",
+            "flox"
+          ]
+        },
+        {
+          "description": "Development-shell provenance only. Nix package/derivation import and\nexport is a separate interoperability boundary.",
+          "type": "string",
+          "const": "nix"
+        }
+      ]
+    },
+    "EnvironmentSource": {
+      "description": "Provenance for one manager-native input and optional lock file.",
+      "type": "object",
+      "properties": {
+        "digest": {
+          "description": "Digest of the normalized manager-native lock/input state.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Checksum"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lock_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manager": {
+          "$ref": "#/$defs/EnvironmentManager"
+        },
+        "path": {
+          "description": "Project-relative manager input path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manager",
+        "path"
+      ]
+    },
+    "ImmutableSource": {
+      "description": "A source whose immutable revision is part of environment identity.",
+      "type": "object",
+      "properties": {
+        "checksums": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Checksum"
+          }
+        },
+        "revision": {
+          "description": "A full immutable commit or content digest. Moving tags and branches are\nrejected in frozen validation.",
+          "type": "string"
+        },
+        "subdir": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "revision"
+      ]
+    },
+    "SystemPackageRequirement": {
+      "description": "Desired and resolved identity for one system package supplied by an\nenvironment manager rather than by the Zed dependency graph.",
+      "type": "object",
+      "properties": {
+        "checksums": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Checksum"
+          }
+        },
+        "package_ref": {
+          "description": "Exact provider-native attribute/reference when it differs from the\nnormalized package name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provider": {
+          "description": "Manager/catalog provider, such as `nixpkgs`, a Flox catalog, or a flake.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requirement": {
+          "type": "string"
+        },
+        "resolved": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImmutableSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "requirement"
+      ]
+    },
+    "ToolRequirement": {
+      "description": "Desired and resolved identity for one runtime or developer tool.",
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "checksums": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Checksum"
+          }
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requirement": {
+          "description": "Author-authored requirement. It may be a range in authoring mode.",
+          "type": "string"
+        },
+        "resolved": {
+          "description": "Exact manager-native result. Required in frozen modes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImmutableSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "requirement"
+      ]
+    }
+  }
+}

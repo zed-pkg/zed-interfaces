@@ -22,6 +22,8 @@ fn main() {
 
     write::<zed_interfaces::Manifest>(dir, "manifest");
     write::<zed_interfaces::Lockfile>(dir, "lockfile");
+    write::<zed_interfaces::EnvironmentPlan>(dir, "environment-plan-v1");
+    write::<zed_interfaces::EnvironmentPlanV2>(dir, "environment-plan");
     write::<zed_interfaces::NixExportSection>(dir, "nix-export-section");
     write::<zed_interfaces::NixAdapterRecord>(dir, "nix-adapter-record");
     write::<zed_interfaces::registry::PackageMetadata>(dir, "package-metadata");
