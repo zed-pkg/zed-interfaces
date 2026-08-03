@@ -574,7 +574,7 @@ fn validate_relative_path(field: &str, value: &str) -> Result<(), EnvironmentPla
     let trimmed = value.trim();
     let has_drive_prefix = trimmed.as_bytes().get(1) == Some(&b':');
     let has_unsafe_segment = trimmed
-        .split(|character| character == '/' || character == '\\')
+        .split(['/', '\\'])
         .any(|segment| segment.is_empty() || segment == "." || segment == "..");
     if trimmed.is_empty()
         || trimmed != value
@@ -654,11 +654,7 @@ fn is_moving_selector(value: &str) -> bool {
         return true;
     }
 
-    let precedence_core = value
-        .split_once('-')
-        .map_or(value.as_str(), |(core, _)| core)
-        .split_once('+')
-        .map_or(value.as_str(), |(core, _)| core);
+    let precedence_core = value.split(['-', '+']).next().unwrap_or(value.as_str());
     precedence_core.split('.').any(|segment| segment == "x")
 }
 
@@ -851,8 +847,10 @@ mod tests {
 
     #[test]
     fn canonical_json_roundtrips() {
-        let mut plan = EnvironmentPlan::default();
-        plan.activation = ActivationPolicy::FrozenInstall;
+        let mut plan = EnvironmentPlan {
+            activation: ActivationPolicy::FrozenInstall,
+            ..EnvironmentPlan::default()
+        };
         plan.tools.insert("node".to_string(), exact_tool("22.11.0"));
         let bytes = plan.canonical_json_bytes().unwrap();
         let parsed: EnvironmentPlan = serde_json::from_slice(&bytes).unwrap();
