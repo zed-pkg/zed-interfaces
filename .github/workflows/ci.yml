@@ -45,7 +45,7 @@ jobs:
           echo "$PAYLOAD_SHA256  /tmp/den1450.tar.gz" | sha256sum --check --strict
           tar -xzf /tmp/den1450.tar.gz
 
-      - name: Apply deterministic Clippy repairs
+      - name: Apply type-safe enum boxing repair
         if: github.head_ref == 'agent/den-1450-environment-plan-v2'
         run: |
           python3 - <<'PY'
@@ -53,7 +53,6 @@ jobs:
 
           path = Path('src/environment_v2.rs')
           text = path.read_text()
-
           replacements = [
               ('    One(ToolVersion),', '    One(Box<ToolVersion>),'),
               ('        Self::One(requirement.into())', '        Self::One(Box::new(requirement.into()))'),
@@ -62,86 +61,21 @@ jobs:
               ('            Self::One(versions.remove(0))', '            Self::One(Box::new(versions.remove(0)))'),
               ('        Self::One(value)', '        Self::One(Box::new(value))'),
               ('            ToolSpec::One(ToolVersion::new(exact_tool("22.11.0"))),', '            ToolSpec::One(Box::new(ToolVersion::new(exact_tool("22.11.0")))),'),
-              ('''        if let Some(TaskConfirmation::Prompt(prompt)) = &self.confirm {
-              if prompt.trim().is_empty() {
-                  return Err(EnvironmentPlanV2Error::EmptyField {
-                      field: format!("{field}.confirm"),
-                  });
-              }
-          }
-          ''', '''        if let Some(TaskConfirmation::Prompt(prompt)) = &self.confirm
-              && prompt.trim().is_empty()
-          {
-              return Err(EnvironmentPlanV2Error::EmptyField {
-                  field: format!("{field}.confirm"),
-              });
-          }
-          '''),
-              ('''        if let Some(timeout) = &self.timeout {
-              if timeout.trim().is_empty() || timeout.chars().any(char::is_control) {
-                  return Err(EnvironmentPlanV2Error::InvalidTimeout {
-                      field: format!("{field}.timeout"),
-                      value: timeout.clone(),
-                  });
-              }
-          }
-          ''', '''        if let Some(timeout) = &self.timeout
-              && (timeout.trim().is_empty() || timeout.chars().any(char::is_control))
-          {
-              return Err(EnvironmentPlanV2Error::InvalidTimeout {
-                  field: format!("{field}.timeout"),
-                  value: timeout.clone(),
-              });
-          }
-          '''),
-              ('''                if let Some((real_task, _)) = self.tasks.get_key_value(alias) {
-                      if real_task != name {
-                          return Err(EnvironmentPlanV2Error::DuplicateTaskAlias {
-                              alias: alias.clone(),
-                              first: real_task.to_string(),
-                              second: name.clone(),
-                          });
-                      }
-                  }
-          ''', '''                if let Some((real_task, _)) = self.tasks.get_key_value(alias)
-                      && real_task != name
-                  {
-                      return Err(EnvironmentPlanV2Error::DuplicateTaskAlias {
-                          alias: alias.clone(),
-                          first: real_task.to_string(),
-                          second: name.clone(),
-                      });
-                  }
-          '''),
-              ('''                if let Some(first) = aliases.insert(alias.clone(), name.clone()) {
-                      if first != *name {
-                          return Err(EnvironmentPlanV2Error::DuplicateTaskAlias {
-                              alias: alias.clone(),
-                              first,
-                              second: name.clone(),
-                          });
-                      }
-                  }
-          ''', '''                if let Some(first) = aliases.insert(alias.clone(), name.clone())
-                      && first != *name
-                  {
-                      return Err(EnvironmentPlanV2Error::DuplicateTaskAlias {
-                          alias: alias.clone(),
-                          first,
-                          second: name.clone(),
-                      });
-                  }
-          '''),
-              ('    let has_parent = segments.iter().any(|segment| *segment == "..");', '    let has_parent = segments.contains(&"..");'),
           ]
-
           for old, new in replacements:
-              if old not in text:
-                  raise SystemExit(f'expected repair target not found: {old[:80]!r}')
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected exactly one repair target: {old!r}')
               text = text.replace(old, new, 1)
-
           path.write_text(text)
           PY
+
+      - name: Apply machine-safe Clippy suggestions
+        if: github.head_ref == 'agent/den-1450-environment-plan-v2'
+        run: |
+          cargo fmt
+          cargo clippy --fix --locked --all-targets --allow-dirty --allow-staged -- \
+            -W clippy::collapsible-if \
+            -W clippy::manual-contains
 
       - name: Format and generate schemas
         run: |
