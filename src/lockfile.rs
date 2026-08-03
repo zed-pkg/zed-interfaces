@@ -244,8 +244,10 @@ fn is_immutable_vcs_revision(value: &str) -> bool {
         return false;
     }
     let lower = value.to_ascii_lowercase();
-    !matches!(lower.as_str(), "head" | "main" | "master" | "trunk" | "latest")
-        && !lower.starts_with("refs/heads/")
+    !matches!(
+        lower.as_str(),
+        "head" | "main" | "master" | "trunk" | "latest"
+    ) && !lower.starts_with("refs/heads/")
         && !lower.starts_with("heads/")
 }
 
@@ -389,12 +391,12 @@ source = "file:///tmp/registry"
             "hg/0123456789abcdef0123456789abcdef01234567",
             "pijul+ABCdef0123456789_-",
         ] {
-            let input = VALID_LOCK.replacen(
-                "0123456789abcdef0123456789abcdef01234567",
-                revision,
-                1,
+            let input =
+                VALID_LOCK.replacen("0123456789abcdef0123456789abcdef01234567", revision, 1);
+            assert!(
+                Lockfile::parse(&input).is_ok(),
+                "revision rejected: {revision}"
             );
-            assert!(Lockfile::parse(&input).is_ok(), "revision rejected: {revision}");
         }
     }
 

@@ -43,38 +43,46 @@
           "$ref": "#/$defs/ArtifactFormat"
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "org": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "sha256": {
           "description": "Canonical lowercase hex sha256 of the artifact archive; also its store address.",
-          "type": "string"
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
         },
         "size": {
           "description": "Artifact size in bytes. Zero-byte package artifacts are invalid.",
           "type": "integer",
           "format": "uint64",
-          "minimum": 0
+          "minimum": 1
         },
         "source": {
           "description": "Base URL of the registry the artifact was resolved from.",
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "vcs_commit": {
-          "description": "Exact source revision associated with the published artifact. The\noptional Rust representation preserves API compatibility for builders,\nbut parsing and serialization reject `None` so committed lockfiles are\nalways complete.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "description": "Exact immutable source revision associated with the published artifact.\nThe optional Rust representation preserves API compatibility for\nbuilders, but lockfile parsing, schema generation, and serialization\nall require this value to be explicitly present.",
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 7,
+          "pattern": "^[A-Za-z0-9._+:/-]+$"
         },
         "vcs_tag": {
           "description": "VCS tag the version was published from, e.g. `v1.2.0`.",
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "version": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
