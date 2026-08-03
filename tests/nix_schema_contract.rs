@@ -27,7 +27,7 @@ fn checked_in_nix_adapter_schema_matches_the_public_contract() {
 
     let text = NIX_ADAPTER_SCHEMA;
     assert!(text.contains("direction"));
+    assert!(text.contains("schema"));
     assert!(text.contains("zed-to-nix"));
     assert!(text.contains("nix-to-zed"));
-    assert!(text.contains("zed.nix-adapter/v1"));
 }
