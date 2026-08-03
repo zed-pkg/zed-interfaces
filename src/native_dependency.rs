@@ -243,7 +243,11 @@ fn validate_requirement_input(
         "github:",
         "npm:",
     ];
-    if declared.contains("://") || source_prefixes.iter().any(|prefix| lower.starts_with(prefix)) {
+    if declared.contains("://")
+        || source_prefixes
+            .iter()
+            .any(|prefix| lower.starts_with(prefix))
+    {
         return Err(unsupported(
             registry,
             declared,
@@ -358,7 +362,11 @@ fn split_operator(token: &str) -> (&str, &str) {
 
 fn strip_numeric_v_prefix(body: &str) -> &str {
     body.strip_prefix('v')
-        .filter(|rest| rest.bytes().next().is_some_and(|byte| byte.is_ascii_digit()))
+        .filter(|rest| {
+            rest.bytes()
+                .next()
+                .is_some_and(|byte| byte.is_ascii_digit())
+        })
         .unwrap_or(body)
 }
 
@@ -401,10 +409,12 @@ fn parse_canonical_requirement(
     registry: NativeRegistry,
     canonical: &str,
 ) -> Result<VersionReq, NativeDependencyError> {
-    VersionReq::parse(canonical).map_err(|error| NativeDependencyError::InvalidCanonicalRequirement {
-        registry,
-        canonical: canonical.to_string(),
-        detail: error.to_string(),
+    VersionReq::parse(canonical).map_err(|error| {
+        NativeDependencyError::InvalidCanonicalRequirement {
+            registry,
+            canonical: canonical.to_string(),
+            detail: error.to_string(),
+        }
     })
 }
 
@@ -479,13 +489,15 @@ fn validate_npm_package_name(name: &str) -> Result<(), NativeDependencyError> {
     };
 
     for component in components {
-        let first = component.bytes().next().ok_or_else(|| {
-            NativeDependencyError::InvalidPackageName {
-                registry: NativeRegistry::Npm,
-                name: name.to_string(),
-                detail: "name components must not be empty".to_string(),
-            }
-        })?;
+        let first =
+            component
+                .bytes()
+                .next()
+                .ok_or_else(|| NativeDependencyError::InvalidPackageName {
+                    registry: NativeRegistry::Npm,
+                    name: name.to_string(),
+                    detail: "name components must not be empty".to_string(),
+                })?;
         if !first.is_ascii_lowercase() && !first.is_ascii_digit() {
             return Err(NativeDependencyError::InvalidPackageName {
                 registry: NativeRegistry::Npm,
@@ -494,9 +506,7 @@ fn validate_npm_package_name(name: &str) -> Result<(), NativeDependencyError> {
             });
         }
         if !component.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'-' | b'_' | b'.')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')
         }) {
             return Err(NativeDependencyError::InvalidPackageName {
                 registry: NativeRegistry::Npm,
@@ -533,11 +543,7 @@ fn validate_native_artifact(
     Ok(())
 }
 
-fn unsupported(
-    registry: NativeRegistry,
-    declared: &str,
-    reason: &str,
-) -> NativeDependencyError {
+fn unsupported(registry: NativeRegistry, declared: &str, reason: &str) -> NativeDependencyError {
     NativeDependencyError::UnsupportedRequirement {
         registry,
         declared: declared.to_string(),
@@ -597,9 +603,7 @@ pub enum NativeDependencyError {
         canonical: String,
         detail: String,
     },
-    #[error(
-        "canonical requirement drift for `{declared}`: expected `{expected}`, found `{found}`"
-    )]
+    #[error("canonical requirement drift for `{declared}`: expected `{expected}`, found `{found}`")]
     CanonicalRequirementDrift {
         declared: String,
         expected: String,
@@ -627,9 +631,7 @@ pub enum NativeDependencyError {
         package: String,
         requirement: String,
     },
-    #[error(
-        "resolved native package `{package}@{version}` does not satisfy `{requirement}`"
-    )]
+    #[error("resolved native package `{package}@{version}` does not satisfy `{requirement}`")]
     ResolvedVersionDoesNotMatch {
         package: String,
         version: String,
@@ -692,16 +694,9 @@ mod tests {
 
     #[test]
     fn native_wildcards_and_comparator_intersections_are_source_aware() {
-        let npm = NativeVersionRequirement::parse(
-            NativeRegistry::Npm,
-            ">=1.2.3 <2.0.0",
-        )
-        .unwrap();
-        let cargo = NativeVersionRequirement::parse(
-            NativeRegistry::Cargo,
-            ">=1.2.3, <2.0.0",
-        )
-        .unwrap();
+        let npm = NativeVersionRequirement::parse(NativeRegistry::Npm, ">=1.2.3 <2.0.0").unwrap();
+        let cargo =
+            NativeVersionRequirement::parse(NativeRegistry::Cargo, ">=1.2.3, <2.0.0").unwrap();
         let npm_x = NativeVersionRequirement::parse(NativeRegistry::Npm, "1.2.X").unwrap();
 
         assert_eq!(npm.canonical, ">=1.2.3, <2.0.0");
