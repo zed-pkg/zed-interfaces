@@ -471,9 +471,7 @@ source = "file:///tmp/registry"
             nix_adapters: Vec::new(),
         };
         let serialized = lock.to_toml_string().unwrap();
-        assert!(serialized.contains(&format!(
-            "vcs_commit = \"artifact-sha256:{digest}\""
-        )));
+        assert!(serialized.contains(&format!("vcs_commit = \"artifact-sha256:{digest}\"")));
         assert!(lock.packages[0].vcs_commit.is_none());
         let parsed = Lockfile::parse(&serialized).unwrap();
         assert_eq!(
