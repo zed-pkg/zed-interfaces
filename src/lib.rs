@@ -7,6 +7,7 @@
 //! `schemas/`) by the non-Rust client libraries in `zed-clients`.
 
 pub mod artifact;
+pub mod environment;
 pub mod excludes;
 pub mod language;
 pub mod lockfile;
@@ -18,6 +19,10 @@ pub mod vcs;
 pub mod version;
 
 pub use artifact::ArtifactFormat;
+pub use environment::{
+    ENVIRONMENT_PLAN_SCHEMA_VERSION, EnvironmentPlan, EnvironmentPlanError,
+    EnvironmentValidationMode,
+};
 pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile};
 pub use manifest::{Manifest, ManifestError};
