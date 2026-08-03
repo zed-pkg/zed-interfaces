@@ -1,0 +1,75 @@
+name: repair DEN-1420 environment contract
+
+on:
+  push:
+    branches:
+      - agent/den-1420-environment-plan-contract
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-den-1420-contract
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the PR branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: agent/den-1420-environment-plan-contract
+          persist-credentials: true
+          show-progress: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          components: rustfmt,clippy
+
+      - name: Apply semantic lint repairs
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/environment.rs")
+          text = path.read_text()
+
+          old_split = ".split(|character| character == '/' || character == '\\\\')"
+          new_split = ".split(['/', '\\\\'])"
+          if old_split not in text:
+              raise SystemExit("expected path-splitting expression not found")
+          text = text.replace(old_split, new_split, 1)
+
+          old_init = """        let mut plan = EnvironmentPlan::default();
+                  plan.activation = ActivationPolicy::FrozenInstall;
+          """
+          new_init = """        let mut plan = EnvironmentPlan {
+                      activation: ActivationPolicy::FrozenInstall,
+                      ..EnvironmentPlan::default()
+                  };
+          """
+          if old_init not in text:
+              raise SystemExit("expected activation test initializer not found")
+          text = text.replace(old_init, new_init, 1)
+          path.write_text(text)
+          PY
+
+      - name: Validate the repaired contract
+        run: |
+          cargo fmt
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+          cargo test --locked --doc
+
+      - name: Commit the repair and remove bootstrap workflow
+        run: |
+          rm .github/workflows/fix-den-1420-contract.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(DEN-1420): satisfy environment contract CI"
+          git push origin HEAD:agent/den-1420-environment-plan-contract
