@@ -4,21 +4,34 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::artifact::ArtifactFormat;
+use crate::native_dependency::NativeDependencyLock;
+use crate::native_registry::NativeRegistry;
 use crate::nix::NixAdapterRecord;
 
+type NativeDependencyKey = (NativeRegistry, String);
 type NixAdapterKey = (String, String, String, Option<String>, u8, String, String);
 
 /// The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.
 ///
-/// Serialized as TOML with one `[[package]]` table per locked package,
-/// Cargo.lock-style. Every entry pins the exact artifact hash and the VCS
-/// tag it was published from, so installs are reproducible and every
-/// artifact is traceable back to source.
+/// Serialized as TOML with one `[[package]]` table per locked Zed package,
+/// optional `[[native-dependency]]` tables for exact npm/Cargo resolutions,
+/// and optional `[[nix-adapter]]` tables for completed Nix translations.
+/// Every entry pins exact immutable identity so frozen restore never needs to
+/// reinterpret a native range or repeat an environment translation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Lockfile {
     pub version: u32,
     #[serde(default, rename = "package", skip_serializing_if = "Vec::is_empty")]
     pub packages: Vec<LockedPackage>,
+    /// Exact source-aware npm/Cargo resolutions. This additive field keeps
+    /// existing lockfile version 1 documents readable while newer writers can
+    /// preserve native requirement translation and immutable artifact identity.
+    #[serde(
+        default,
+        rename = "native-dependency",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub native_dependencies: Vec<NativeDependencyLock>,
     /// Optional immutable provenance for completed Nix interoperability
     /// translations. This additive field keeps lockfile version 1 readable by
     /// current consumers while allowing newer writers to preserve evidence.
@@ -51,6 +64,10 @@ pub enum LockfileError {
     Toml(String),
     #[error("unsupported lockfile version {0} (this build supports {1})")]
     UnsupportedVersion(u32, u32),
+    #[error("invalid native dependency provenance: {0}")]
+    InvalidNativeDependency(String),
+    #[error("duplicate native dependency key `{0}`")]
+    DuplicateNativeDependency(String),
     #[error("invalid Nix adapter provenance: {0}")]
     InvalidNixAdapter(String),
     #[error("duplicate Nix adapter provenance key `{0}`")]
@@ -62,6 +79,7 @@ impl Default for Lockfile {
         Self {
             version: Self::CURRENT_VERSION,
             packages: Vec::new(),
+            native_dependencies: Vec::new(),
             nix_adapters: Vec::new(),
         }
     }
@@ -79,13 +97,21 @@ impl Lockfile {
                 Self::CURRENT_VERSION,
             ));
         }
+        lockfile.validate_native_dependencies()?;
         lockfile.validate_nix_adapters()?;
         Ok(lockfile)
     }
 
     pub fn to_toml_string(&self) -> Result<String, LockfileError> {
+        self.validate_native_dependencies()?;
         self.validate_nix_adapters()?;
         let mut normalized = self.clone();
+        normalized
+            .packages
+            .sort_by(|left, right| (&left.org, &left.name).cmp(&(&right.org, &right.name)));
+        normalized
+            .native_dependencies
+            .sort_by_key(native_dependency_key);
         normalized.nix_adapters.sort_by_key(nix_adapter_key);
         toml::to_string_pretty(&normalized).map_err(|error| LockfileError::Toml(error.to_string()))
     }
@@ -105,6 +131,36 @@ impl Lockfile {
             .sort_by(|a, b| (&a.org, &a.name).cmp(&(&b.org, &b.name)));
     }
 
+    /// Return one exact native resolution by source registry and package name.
+    pub fn find_native_dependency(
+        &self,
+        registry: NativeRegistry,
+        package_name: &str,
+    ) -> Option<&NativeDependencyLock> {
+        self.native_dependencies.iter().find(|dependency| {
+            dependency.requirement.registry == registry
+                && dependency.package.name == package_name
+        })
+    }
+
+    /// Validate and insert or replace one exact native resolution. V1 identity
+    /// is `(registry, package.name)`, so a project cannot silently carry two
+    /// different exact resolutions of the same native package.
+    pub fn upsert_native_dependency(
+        &mut self,
+        dependency: NativeDependencyLock,
+    ) -> Result<(), LockfileError> {
+        dependency
+            .validate()
+            .map_err(|error| LockfileError::InvalidNativeDependency(error.to_string()))?;
+        let key = native_dependency_key(&dependency);
+        self.native_dependencies
+            .retain(|existing| native_dependency_key(existing) != key);
+        self.native_dependencies.push(dependency);
+        self.native_dependencies.sort_by_key(native_dependency_key);
+        Ok(())
+    }
+
     /// Insert or replace one completed Nix translation. Identity includes
     /// package/target, direction, system, and selected output, so platform
     /// variants never overwrite each other.
@@ -117,6 +173,22 @@ impl Lockfile {
             .retain(|existing| nix_adapter_key(existing) != key);
         self.nix_adapters.push(adapter);
         self.nix_adapters.sort_by_key(nix_adapter_key);
+        Ok(())
+    }
+
+    fn validate_native_dependencies(&self) -> Result<(), LockfileError> {
+        let mut seen = BTreeSet::new();
+        for dependency in &self.native_dependencies {
+            dependency
+                .validate()
+                .map_err(|error| LockfileError::InvalidNativeDependency(error.to_string()))?;
+            let key = native_dependency_key(dependency);
+            if !seen.insert(key) {
+                return Err(LockfileError::DuplicateNativeDependency(
+                    native_dependency_label(dependency),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -141,6 +213,20 @@ impl LockedPackage {
     pub fn full_name(&self) -> String {
         format!("{}/{}", self.org, self.name)
     }
+}
+
+fn native_dependency_key(dependency: &NativeDependencyLock) -> NativeDependencyKey {
+    (
+        dependency.requirement.registry,
+        dependency.package.name.clone(),
+    )
+}
+
+fn native_dependency_label(dependency: &NativeDependencyLock) -> String {
+    format!(
+        "{:?}:{}",
+        dependency.requirement.registry, dependency.package.name
+    )
 }
 
 fn nix_adapter_key(adapter: &NixAdapterRecord) -> NixAdapterKey {
