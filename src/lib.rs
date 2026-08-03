@@ -8,6 +8,7 @@
 
 pub mod artifact;
 pub mod environment;
+pub mod environment_lock;
 pub mod excludes;
 pub mod language;
 pub mod lockfile;
@@ -25,6 +26,11 @@ pub use environment::{
     EnvironmentPlanError, EnvironmentSource, EnvironmentValidationMode, ImmutableSource,
     SystemPackageRequirement, ToolRequirement, differ_only_in_build_metadata,
     validate_semver_export,
+};
+pub use environment_lock::{
+    ENVIRONMENT_LOCK_SCHEMA_VERSION, EnvironmentLock, EnvironmentLockError,
+    EnvironmentLockValidationMode, LockedArtifact, LockedArtifactFormat, LockedExecutable,
+    LockedInstall, LockedPlatform, LockedSignature, LockedSource, LockedSourceKind, LockedTool,
 };
 pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile, LockfileError};
