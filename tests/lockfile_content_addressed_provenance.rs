@@ -33,7 +33,10 @@ fn canonical_writer_upgrades_legacy_none_without_mutating_the_builder() {
     assert_eq!(lock.packages[0].vcs_commit, None);
 
     let parsed = Lockfile::parse(&rendered).unwrap();
-    assert_eq!(parsed.packages[0].vcs_commit.as_deref(), Some(expected.as_str()));
+    assert_eq!(
+        parsed.packages[0].vcs_commit.as_deref(),
+        Some(expected.as_str())
+    );
 }
 
 #[test]
@@ -87,9 +90,10 @@ fn public_schema_keeps_revision_required_despite_the_builder_fallback() {
 
 #[test]
 fn fallback_derivation_rejects_malformed_or_zero_hashes() {
-    for digest in ["bad", "0".repeat(64).as_str()] {
+    let digests = ["bad".to_string(), "0".repeat(64)];
+    for digest in digests {
         let mut bad = package(None);
-        bad.sha256 = digest.to_string();
+        bad.sha256 = digest;
         let lock = Lockfile {
             version: Lockfile::CURRENT_VERSION,
             packages: vec![bad],
