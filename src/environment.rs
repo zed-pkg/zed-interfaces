@@ -3,8 +3,8 @@
 //! Zed remains authoritative for the Zed package graph. These types describe
 //! exact toolchains, system packages, manager-native lock provenance, and the
 //! fixed activation policy used by Flox, Devbox, mise, asdf, and future Nix
-//! development-shell adapters. They intentionally cannot represent arbitrary
-//! imported shell hooks or secrets.
+//! development-shell adapters. Arbitrary imported shell hooks and secrets are
+//! intentionally not representable.
 
 use std::collections::BTreeMap;
 
@@ -23,13 +23,12 @@ pub enum EnvironmentManager {
     Asdf,
     Devbox,
     Flox,
-    /// Nix development-shell provenance. Package/derivation import and export
-    /// is a separate boundary from this environment plan.
+    /// Development-shell provenance only. Nix package/derivation import and
+    /// export is a separate interoperability boundary.
     Nix,
 }
 
-/// The only activation behavior an imported/exported environment may acquire
-/// from Zed. Arbitrary external hooks are deliberately not representable.
+/// The only activation behavior a Zed environment adapter may add.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ActivationPolicy {
@@ -48,16 +47,15 @@ impl ActivationPolicy {
     }
 }
 
-/// How strictly an environment plan is being validated.
+/// How strictly an environment plan is validated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvironmentValidationMode {
-    /// Requirements may still be ranges or aliases; resolved identities are
-    /// optional while an author is defining intent.
+    /// Requirements may be ranges and resolved identities are optional.
     Authoring,
-    /// Every resolved identity must be exact, immutable, and portable.
+    /// Every identity must be exact, immutable, and portable.
     FrozenPortable,
-    /// Every resolved identity must be exact and immutable, but explicit local
-    /// paths are allowed and make the plan intentionally non-portable.
+    /// Every identity must be exact and immutable; explicit local paths are
+    /// allowed and make the plan intentionally non-portable.
     FrozenLocal,
 }
 
@@ -71,7 +69,7 @@ impl EnvironmentValidationMode {
     }
 }
 
-/// Supported checksum algorithms in environment and adapter provenance.
+/// Supported checksum algorithms in environment provenance.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -91,10 +89,8 @@ impl ChecksumAlgorithm {
     }
 }
 
-/// One content checksum. Values are lowercase hexadecimal in canonical output.
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
-)]
+/// One lowercase hexadecimal content checksum in canonical output.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 pub struct Checksum {
     pub algorithm: ChecksumAlgorithm,
     pub value: String,
@@ -109,13 +105,13 @@ impl Checksum {
     }
 
     fn validate(&self, field: &str) -> Result<(), EnvironmentPlanError> {
-        let expected = self.algorithm.expected_hex_len();
+        let expected_hex_len = self.algorithm.expected_hex_len();
         let value = self.value.trim();
-        if value.len() != expected || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        if value.len() != expected_hex_len || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(EnvironmentPlanError::InvalidChecksum {
                 field: field.to_string(),
                 algorithm: self.algorithm,
-                expected_hex_len: expected,
+                expected_hex_len,
                 value: self.value.clone(),
             });
         }
@@ -123,11 +119,11 @@ impl Checksum {
     }
 }
 
-/// A source whose exact revision is part of environment identity.
+/// A source whose immutable revision is part of environment identity.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ImmutableSource {
     pub url: String,
-    /// Full immutable commit or content digest. Moving tags and branches are
+    /// A full immutable commit or content digest. Moving tags and branches are
     /// rejected in frozen validation.
     pub revision: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -141,12 +137,7 @@ impl ImmutableSource {
         let mut source = self.clone();
         source.url = source.url.trim().to_string();
         source.revision = source.revision.trim().to_ascii_lowercase();
-        source.subdir = source
-            .subdir
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned);
+        source.subdir = normalize_optional(&source.subdir);
         normalize_checksums(&mut source.checksums);
         source
     }
@@ -180,7 +171,7 @@ impl ImmutableSource {
     }
 }
 
-/// Desired and resolved identity for one language runtime or developer tool.
+/// Desired and resolved identity for one runtime or developer tool.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ToolRequirement {
     /// Author-authored requirement. It may be a range in authoring mode.
@@ -372,20 +363,20 @@ impl Default for EnvironmentPlan {
 impl EnvironmentPlan {
     pub const CURRENT_SCHEMA: u32 = 1;
 
-    /// Return a presentation-independent form suitable for deterministic
-    /// generation and hashing. Map keys are already ordered by `BTreeMap`;
-    /// set-like vectors are trimmed, sorted, and deduplicated.
+    /// Return a presentation-independent form for deterministic generation and
+    /// hashing. Invalid map keys remain unchanged so validation cannot be
+    /// bypassed by normalization.
     pub fn normalized(&self) -> Self {
         let mut plan = self.clone();
         plan.tools = plan
             .tools
             .iter()
-            .map(|(name, requirement)| (name.trim().to_string(), requirement.normalized()))
+            .map(|(name, requirement)| (name.clone(), requirement.normalized()))
             .collect();
         plan.system_packages = plan
             .system_packages
             .iter()
-            .map(|(name, requirement)| (name.trim().to_string(), requirement.normalized()))
+            .map(|(name, requirement)| (name.clone(), requirement.normalized()))
             .collect();
         normalize_strings(&mut plan.platforms);
         plan.sources = plan
@@ -394,35 +385,24 @@ impl EnvironmentPlan {
             .map(EnvironmentSource::normalized)
             .collect();
         plan.sources.sort_by(|left, right| {
-            (
-                left.manager,
-                &left.path,
-                &left.lock_path,
-                &left.digest,
-            )
-                .cmp(&(
-                    right.manager,
-                    &right.path,
-                    &right.lock_path,
-                    &right.digest,
-                ))
+            (left.manager, &left.path, &left.lock_path, &left.digest).cmp(&(
+                right.manager,
+                &right.path,
+                &right.lock_path,
+                &right.digest,
+            ))
         });
         plan.sources.dedup();
         plan
     }
 
-    /// Canonical compact JSON bytes for the environment-plan digest. The
-    /// output is deterministic because structs have fixed field order,
-    /// maps are `BTreeMap`, and all set-like vectors are normalized first.
+    /// Canonical compact JSON bytes for the environment-plan digest.
     pub fn canonical_json_bytes(&self) -> Result<Vec<u8>, EnvironmentPlanError> {
         serde_json::to_vec(&self.normalized())
             .map_err(|error| EnvironmentPlanError::Serialization(error.to_string()))
     }
 
-    pub fn validate(
-        &self,
-        mode: EnvironmentValidationMode,
-    ) -> Result<(), EnvironmentPlanError> {
+    pub fn validate(&self, mode: EnvironmentValidationMode) -> Result<(), EnvironmentPlanError> {
         if self.schema == 0 || self.schema > Self::CURRENT_SCHEMA {
             return Err(EnvironmentPlanError::UnsupportedSchema {
                 found: self.schema,
@@ -445,9 +425,7 @@ impl EnvironmentPlan {
     }
 }
 
-/// Parse a strict SemVer 2.0.0 version for an adapter or registry that requires
-/// SemVer. CalVer and opaque versions remain valid inside Zed where their
-/// declared version scheme allows them; they fail only at this boundary.
+/// Parse strict SemVer 2.0.0 for an adapter or registry that requires it.
 pub fn validate_semver_export(version: &str) -> Result<Version, EnvironmentPlanError> {
     Version::parse(version).map_err(|error| EnvironmentPlanError::InvalidSemver {
         version: version.to_string(),
@@ -455,9 +433,8 @@ pub fn validate_semver_export(version: &str) -> Result<Version, EnvironmentPlanE
     })
 }
 
-/// True when two valid SemVer strings have identical precedence fields and
-/// differ only in build metadata. Adapters use this to reject architecture or
-/// operating-system variants disguised as registry-distinct versions.
+/// Return true when valid SemVer strings have identical precedence fields and
+/// differ only in build metadata.
 pub fn differ_only_in_build_metadata(
     left: &str,
     right: &str,
@@ -477,7 +454,7 @@ pub enum EnvironmentPlanError {
     UnsupportedSchema { found: u32, supported: u32 },
     #[error("{field} must not be empty")]
     EmptyField { field: String },
-    #[error("invalid {kind} name `{name}`; names cannot contain whitespace or control characters")]
+    #[error("invalid {kind} name `{name}`; names cannot contain whitespace or controls")]
     InvalidName { kind: &'static str, name: String },
     #[error("{kind} `{name}` has no exact resolved identity for frozen validation")]
     Unresolved { kind: &'static str, name: String },
@@ -525,6 +502,7 @@ fn validate_requirement(
     if !mode.is_frozen() {
         return Ok(());
     }
+
     let resolved = resolved
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -532,6 +510,7 @@ fn validate_requirement(
             kind,
             name: name.to_string(),
         })?;
+
     if is_local_reference(resolved) {
         if !mode.allows_local_paths() {
             return Err(EnvironmentPlanError::NonPortableLocalReference {
@@ -594,17 +573,16 @@ fn validate_platforms(field: &str, platforms: &[String]) -> Result<(), Environme
 fn validate_relative_path(field: &str, value: &str) -> Result<(), EnvironmentPlanError> {
     let trimmed = value.trim();
     let has_drive_prefix = trimmed.as_bytes().get(1) == Some(&b':');
-    let unsafe_segment = trimmed
-        .split(['/', '\\'])
-        .any(|segment| segment == ".." || segment.is_empty());
+    let has_unsafe_segment = trimmed
+        .split(|character| character == '/' || character == '\\')
+        .any(|segment| segment.is_empty() || segment == "." || segment == "..");
     if trimmed.is_empty()
         || trimmed != value
-        || trimmed.starts_with(['/', '\\'])
+        || trimmed.starts_with('/')
+        || trimmed.starts_with('\\')
         || has_drive_prefix
-        || unsafe_segment
-        || trimmed
-            .chars()
-            .any(|character| character.is_control())
+        || has_unsafe_segment
+        || trimmed.chars().any(|character| character.is_control())
     {
         return Err(EnvironmentPlanError::UnsafeRelativePath {
             field: field.to_string(),
@@ -664,16 +642,24 @@ fn is_moving_selector(value: &str) -> bool {
     if let Some(revision) = value.strip_prefix("ref:") {
         return !is_full_hex_revision(revision);
     }
-    value.contains('*')
+    if value.contains('*')
         || value.contains('^')
         || value.contains('~')
         || value.contains('<')
         || value.contains('>')
         || value.contains('|')
         || value.contains(',')
-        || value
-            .split(['.', '-'])
-            .any(|segment| segment == "x")
+        || value.chars().any(char::is_whitespace)
+    {
+        return true;
+    }
+
+    let precedence_core = value
+        .split_once('-')
+        .map_or(value.as_str(), |(core, _)| core)
+        .split_once('+')
+        .map_or(value.as_str(), |(core, _)| core);
+    precedence_core.split('.').any(|segment| segment == "x")
 }
 
 fn is_immutable_revision(value: &str) -> bool {
@@ -727,7 +713,7 @@ mod tests {
     }
 
     #[test]
-    fn authoring_accepts_ranges_but_frozen_requires_a_resolution() {
+    fn authoring_accepts_ranges_but_frozen_requires_resolution() {
         let mut plan = EnvironmentPlan::default();
         plan.tools.insert(
             "node".to_string(),
@@ -741,6 +727,7 @@ mod tests {
                 platforms: Vec::new(),
             },
         );
+
         plan.validate(EnvironmentValidationMode::Authoring).unwrap();
         assert!(matches!(
             plan.validate(EnvironmentValidationMode::FrozenPortable),
@@ -749,8 +736,8 @@ mod tests {
     }
 
     #[test]
-    fn frozen_validation_rejects_moving_and_local_resolutions() {
-        for value in ["latest", "lts", "prefix:22", "ref:master", "^22"] {
+    fn frozen_validation_rejects_moving_and_nonportable_resolutions() {
+        for value in ["latest", "lts", "prefix:22", "ref:master", "^22", "22.x"] {
             let mut plan = EnvironmentPlan::default();
             plan.tools.insert("node".to_string(), exact_tool(value));
             assert!(matches!(
@@ -771,6 +758,15 @@ mod tests {
     }
 
     #[test]
+    fn prerelease_x_is_not_a_wildcard() {
+        let mut plan = EnvironmentPlan::default();
+        plan.tools
+            .insert("node".to_string(), exact_tool("22.0.0-x.1"));
+        plan.validate(EnvironmentValidationMode::FrozenPortable)
+            .unwrap();
+    }
+
+    #[test]
     fn frozen_sources_require_full_immutable_revisions() {
         let mut plan = EnvironmentPlan::default();
         let mut tool = exact_tool("22.11.0");
@@ -786,14 +782,19 @@ mod tests {
             Err(EnvironmentPlanError::MutableSourceRevision { .. })
         ));
 
-        plan.tools.get_mut("node").unwrap().source.as_mut().unwrap().revision =
-            "0123456789abcdef0123456789abcdef01234567".to_string();
+        plan.tools
+            .get_mut("node")
+            .unwrap()
+            .source
+            .as_mut()
+            .unwrap()
+            .revision = "0123456789abcdef0123456789abcdef01234567".to_string();
         plan.validate(EnvironmentValidationMode::FrozenPortable)
             .unwrap();
     }
 
     #[test]
-    fn canonical_bytes_ignore_set_order_and_duplicate_entries() {
+    fn canonical_bytes_ignore_set_order_and_duplicates() {
         let mut first = EnvironmentPlan {
             platforms: vec![
                 "x86_64-linux".to_string(),
@@ -837,11 +838,22 @@ mod tests {
     }
 
     #[test]
+    fn normalization_does_not_hide_invalid_map_keys() {
+        let mut plan = EnvironmentPlan::default();
+        plan.tools
+            .insert(" node ".to_string(), exact_tool("22.11.0"));
+        assert!(matches!(
+            plan.normalized()
+                .validate(EnvironmentValidationMode::FrozenPortable),
+            Err(EnvironmentPlanError::InvalidName { .. })
+        ));
+    }
+
+    #[test]
     fn canonical_json_roundtrips() {
         let mut plan = EnvironmentPlan::default();
         plan.activation = ActivationPolicy::FrozenInstall;
-        plan.tools
-            .insert("node".to_string(), exact_tool("22.11.0"));
+        plan.tools.insert("node".to_string(), exact_tool("22.11.0"));
         let bytes = plan.canonical_json_bytes().unwrap();
         let parsed: EnvironmentPlan = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(parsed, plan.normalized());
