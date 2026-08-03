@@ -1,0 +1,557 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnvironmentPlanV2",
+  "description": "Manager-neutral desired and resolved developer-environment state.",
+  "type": "object",
+  "properties": {
+    "activation": {
+      "$ref": "#/$defs/ActivationPolicy",
+      "default": "none"
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/EnvironmentValue"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "schema": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 2,
+      "minimum": 0
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EnvironmentSource"
+      }
+    },
+    "system-packages": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/SystemPackageSpec"
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/TaskSpec"
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ToolSpec"
+      }
+    },
+    "vars": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/EnvironmentValue"
+      }
+    }
+  },
+  "$defs": {
+    "ActivationPolicy": {
+      "description": "The only activation behavior a Zed environment adapter may add.",
+      "type": "string",
+      "enum": [
+        "none",
+        "frozen-install"
+      ]
+    },
+    "Checksum": {
+      "description": "One lowercase hexadecimal content checksum in canonical output.",
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/ChecksumAlgorithm"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "value"
+      ]
+    },
+    "ChecksumAlgorithm": {
+      "description": "Supported checksum algorithms in environment provenance.",
+      "type": "string",
+      "enum": [
+        "sha256",
+        "sha512",
+        "blake3"
+      ]
+    },
+    "EnvironmentManager": {
+      "description": "Environment managers with a first-class adapter contract.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "mise",
+            "asdf",
+            "devbox",
+            "flox"
+          ]
+        },
+        {
+          "description": "Development-shell provenance only. Nix package/derivation import and\nexport is a separate interoperability boundary.",
+          "type": "string",
+          "const": "nix"
+        }
+      ]
+    },
+    "EnvironmentSource": {
+      "description": "Provenance for one manager-native input and optional lock file.",
+      "type": "object",
+      "properties": {
+        "digest": {
+          "description": "Digest of the normalized manager-native lock/input state.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Checksum"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lock_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manager": {
+          "$ref": "#/$defs/EnvironmentManager"
+        },
+        "path": {
+          "description": "Project-relative manager input path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manager",
+        "path"
+      ]
+    },
+    "EnvironmentValue": {
+      "description": "Typed activation value, task variable, or backend option.\n\nArrays retain order. Tables are deterministic because they use\n[`BTreeMap`]. Non-finite floats are rejected before serialization.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer",
+          "format": "int64"
+        },
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EnvironmentValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/EnvironmentValue"
+          }
+        }
+      ]
+    },
+    "ImmutableSource": {
+      "description": "A source whose immutable revision is part of environment identity.",
+      "type": "object",
+      "properties": {
+        "checksums": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Checksum"
+          }
+        },
+        "revision": {
+          "description": "A full immutable commit or content digest. Moving tags and branches are\nrejected in frozen validation.",
+          "type": "string"
+        },
+        "subdir": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "revision"
+      ]
+    },
+    "SystemPackageSpec": {
+      "description": "Schema-v2 system package with typed options and lossless extensions.",
+      "type": "object",
+      "properties": {
+        "checksums": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Checksum"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/EnvironmentValue"
+          }
+        },
+        "package_ref": {
+          "description": "Exact provider-native attribute/reference when it differs from the\nnormalized package name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provider": {
+          "description": "Manager/catalog provider, such as `nixpkgs`, a Flox catalog, or a flake.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requirement": {
+          "type": "string"
+        },
+        "resolved": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImmutableSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "requirement"
+      ]
+    },
+    "TaskConfirmation": {
+      "description": "Confirmation may be a Boolean policy or a custom prompt.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "TaskGroup": {
+      "type": "object",
+      "properties": {
+        "parallel": {
+          "description": "Explicit groups are parallel by default, matching mise grouped tasks.",
+          "type": "boolean"
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "tasks"
+      ]
+    },
+    "TaskInvocation": {
+      "type": "object",
+      "properties": {
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/EnvironmentValue"
+          }
+        },
+        "task": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task"
+      ]
+    },
+    "TaskSpec": {
+      "description": "Manager-neutral task definition.\n\nOrdered command fields, shell arguments, and invocation arguments are not\nsorted. Set-like metadata is canonicalized.",
+      "type": "object",
+      "properties": {
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cache": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "confirm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TaskConfirmation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "depends": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "depends_post": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/EnvironmentValue"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "hide": {
+          "type": "boolean"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "quiet": {
+          "type": "boolean"
+        },
+        "raw": {
+          "type": "boolean"
+        },
+        "run": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TaskStep"
+          }
+        },
+        "run_windows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TaskStep"
+          }
+        },
+        "shell": {
+          "description": "Shell program followed by arguments. Order is semantic.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "silent": {
+          "type": "boolean"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeout": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tools": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ToolSpec"
+          }
+        },
+        "usage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vars": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/EnvironmentValue"
+          }
+        },
+        "wait_for": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "TaskStep": {
+      "description": "A task command, one task invocation, or an explicit task group.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/TaskInvocation"
+        },
+        {
+          "$ref": "#/$defs/TaskGroup"
+        }
+      ]
+    },
+    "ToolSpec": {
+      "description": "One logical tool may expose one active version or an ordered version list.\nVersion order is retained because it may determine the default executable.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ToolVersion"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ToolVersion"
+          }
+        }
+      ]
+    },
+    "ToolVersion": {
+      "description": "One version of a logical tool.\n\nFlattening the schema-v1 requirement keeps existing single-tool JSON and\nTOML documents readable without migration.",
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "checksums": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Checksum"
+          }
+        },
+        "extensions": {
+          "description": "Manager-qualified fields not yet promoted into the shared contract.\nAdapters preserve these instead of silently dropping them.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "options": {
+          "description": "Typed options whose semantics are implemented by Zed or an adapter.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/EnvironmentValue"
+          }
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requirement": {
+          "description": "Author-authored requirement. It may be a range in authoring mode.",
+          "type": "string"
+        },
+        "resolved": {
+          "description": "Exact manager-native result. Required in frozen modes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImmutableSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "requirement"
+      ]
+    }
+  }
+}

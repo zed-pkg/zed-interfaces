@@ -15,12 +15,11 @@ concurrency:
 jobs:
   rust:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
           show-progress: false
 
@@ -29,60 +28,7 @@ jobs:
         with:
           components: rustfmt,clippy
 
-      - name: Recover and verify DEN-1450 source payload
-        if: github.head_ref == 'agent/den-1450-environment-plan-v2'
-        env:
-          PAYLOAD_SHA256: 87d4d0a10bbf87d6fd60d334cf69a53bf0db9be1522f934c858f963892be551e
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          source = Path('.github/workflows/apply-den-1450-environment-v2.yml').read_text()
-          payload = source.split("<<'PAYLOAD'\n", 1)[1].split('\nPAYLOAD\n', 1)[0]
-          Path('/tmp/den1450.b64').write_text(payload.strip() + '\n')
-          PY
-          base64 --decode /tmp/den1450.b64 > /tmp/den1450.tar.gz
-          echo "$PAYLOAD_SHA256  /tmp/den1450.tar.gz" | sha256sum --check --strict
-          tar -xzf /tmp/den1450.tar.gz
-
-      - name: Apply type-safe enum boxing repair
-        if: github.head_ref == 'agent/den-1450-environment-plan-v2'
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('src/environment_v2.rs')
-          text = path.read_text()
-          replacements = [
-              ('    One(ToolVersion),', '    One(Box<ToolVersion>),'),
-              ('        Self::One(requirement.into())', '        Self::One(Box::new(requirement.into()))'),
-              ('            Self::One(version) => std::slice::from_ref(version),', '            Self::One(version) => std::slice::from_ref(version.as_ref()),'),
-              ('            Self::One(version) => std::slice::from_mut(version),', '            Self::One(version) => std::slice::from_mut(version.as_mut()),'),
-              ('            Self::One(versions.remove(0))', '            Self::One(Box::new(versions.remove(0)))'),
-              ('        Self::One(value)', '        Self::One(Box::new(value))'),
-              ('            ToolSpec::One(ToolVersion::new(exact_tool("22.11.0"))),', '            ToolSpec::One(Box::new(ToolVersion::new(exact_tool("22.11.0")))),'),
-          ]
-          for old, new in replacements:
-              if text.count(old) != 1:
-                  raise SystemExit(f'expected exactly one repair target: {old!r}')
-              text = text.replace(old, new, 1)
-          path.write_text(text)
-          PY
-
-      - name: Apply machine-safe Clippy suggestions
-        if: github.head_ref == 'agent/den-1450-environment-plan-v2'
-        run: |
-          cargo fmt
-          cargo clippy --fix --locked --all-targets --allow-dirty --allow-staged -- \
-            -W clippy::collapsible-if \
-            -W clippy::manual-contains
-
-      - name: Format and generate schemas
-        run: |
-          cargo fmt
-          cargo run --locked --example generate_schemas
-
-      - name: Format is stable
+      - name: Format
         run: cargo fmt --check
 
       - name: Clippy
@@ -94,30 +40,8 @@ jobs:
       - name: Doctest
         run: cargo test --locked --doc
 
-      - name: Pack validated DEN-1450 implementation
-        if: github.head_ref == 'agent/den-1450-environment-plan-v2'
-        run: |
-          tar -czf den1450-validated.tar.gz \
-            src/environment_v2.rs \
-            src/lib.rs \
-            examples/generate_schemas.rs \
-            schemas/environment-plan.json \
-            schemas/environment-plan-v1.json
-          sha256sum den1450-validated.tar.gz > den1450-validated.tar.gz.sha256
-
-      - name: Upload validated DEN-1450 implementation
-        if: github.head_ref == 'agent/den-1450-environment-plan-v2'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: den1450-validated
-          path: |
-            den1450-validated.tar.gz
-            den1450-validated.tar.gz.sha256
-          if-no-files-found: error
-          retention-days: 1
-
       - name: Schemas are up to date
-        if: github.head_ref != 'agent/den-1450-environment-plan-v2'
         run: |
+          cargo run --locked --example generate_schemas
           git diff --exit-code schemas/ \
             || (echo "schemas/ is stale; run 'cargo run --locked --example generate_schemas' and commit" && exit 1)

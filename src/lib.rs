@@ -8,6 +8,7 @@
 
 pub mod artifact;
 pub mod environment;
+pub mod environment_v2;
 pub mod excludes;
 pub mod language;
 pub mod lockfile;
@@ -25,6 +26,10 @@ pub use environment::{
     EnvironmentPlanError, EnvironmentSource, EnvironmentValidationMode, ImmutableSource,
     SystemPackageRequirement, ToolRequirement, differ_only_in_build_metadata,
     validate_semver_export,
+};
+pub use environment_v2::{
+    EnvironmentPlanV2, EnvironmentPlanV2Error, EnvironmentValue, SystemPackageSpec,
+    TaskConfirmation, TaskGroup, TaskInvocation, TaskSpec, TaskStep, ToolSpec, ToolVersion,
 };
 pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile, LockfileError};
