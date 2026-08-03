@@ -1,0 +1,60 @@
+name: DEN-1464 regenerate strict lock schema
+
+on:
+  push:
+    branches:
+      - agent/den-1464-strict-frozen-lock-metadata
+    paths:
+      - '.github/workflows/den-1464-regenerate-schema.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-1464-regenerate-schema
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    if: github.actor == 'ORESoftware'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: agent/den-1464-strict-frozen-lock-metadata
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Format and regenerate checked-in schemas
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt
+          cargo run --locked --example generate_schemas
+      - name: Require only generated lock-contract outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git diff --name-only | sort)
+          printf '%s\n' "${changed[@]}"
+          test "${#changed[@]}" -ge 1
+          for path in "${changed[@]}"; do
+            case "$path" in
+              schemas/lockfile.json|src/lockfile.rs) ;;
+              *) echo "unexpected generated change: $path" >&2; exit 1 ;;
+            esac
+          done
+          git diff --check
+      - name: Commit generated schema and formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ORESoftware'
+          git config user.email '11139560+ORESoftware@users.noreply.github.com'
+          git add src/lockfile.rs schemas/lockfile.json
+          git commit -m 'style(DEN-1464): regenerate strict lock schema'
+          git push origin HEAD:agent/den-1464-strict-frozen-lock-metadata
