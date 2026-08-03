@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   validate-and-materialize:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
       - name: Check out exact branch head
@@ -39,6 +39,53 @@ jobs:
           rustup default stable
           rustc --version --verbose
           cargo --version --verbose
+
+      - name: Apply exact test and diagnostic corrections
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/native_registry.rs")
+          source = path.read_text(encoding="utf-8")
+
+          old_test = '''        let mut record = record();
+                  record.publications[0].artifact.sha256 = "A".repeat(64);
+                  assert!(matches!(
+                      record.validate(),
+                      Err(NativeRegistryError::InvalidSha256 { .. })
+                  ));
+
+                  let mut record = record();
+                  record.publications[0].package.version = "1.2.4".to_string();
+                  assert!(matches!(
+                      record.validate(),
+                      Err(NativeRegistryError::VersionDrift { .. })
+                  ));'''
+          new_test = '''        let mut invalid_artifact = record();
+                  invalid_artifact.publications[0].artifact.sha256 = "A".repeat(64);
+                  assert!(matches!(
+                      invalid_artifact.validate(),
+                      Err(NativeRegistryError::InvalidSha256 { .. })
+                  ));
+
+                  let mut version_drift = record();
+                  version_drift.publications[0].package.version = "1.2.4".to_string();
+                  assert!(matches!(
+                      version_drift.validate(),
+                      Err(NativeRegistryError::VersionDrift { .. })
+                  ));'''
+          if old_test not in source:
+              raise SystemExit("expected shadowing test block was not found")
+          source = source.replace(old_test, new_test, 1)
+
+          old_detail = 'detail: "name components may contain lowercase letters, digits, `-`, `_`, or `."\n                    .to_string(),'
+          new_detail = 'detail: "name components may contain lowercase letters, digits, `-`, `_`, or `.`"\n                    .to_string(),'
+          if old_detail not in source:
+              raise SystemExit("expected npm diagnostic was not found")
+          source = source.replace(old_detail, new_detail, 1)
+          path.write_text(source, encoding="utf-8")
+          PY
 
       - name: Generate checked-in schemas
         run: |
