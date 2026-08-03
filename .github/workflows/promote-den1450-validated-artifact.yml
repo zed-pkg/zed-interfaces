@@ -1,0 +1,71 @@
+name: promote validated DEN-1450 source
+
+on:
+  push:
+    branches:
+      - agent/den-1450-environment-plan-v2
+    paths:
+      - .github/workflows/promote-den1450-validated-artifact.yml
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: promote-den-1450-validated-source
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out implementation branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: agent/den-1450-environment-plan-v2
+          persist-credentials: true
+          show-progress: false
+
+      - name: Download the CI-validated source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: "8845882632"
+        run: |
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            > /tmp/den1450-validated.zip
+          mkdir -p /tmp/den1450-validated
+          unzip -q /tmp/den1450-validated.zip -d /tmp/den1450-validated
+          cd /tmp/den1450-validated
+          sha256sum -c den1450-validated.tar.gz.sha256
+
+      - name: Materialize the reviewed implementation
+        run: |
+          mkdir -p /tmp/den1450-source
+          tar -xzf /tmp/den1450-validated/den1450-validated.tar.gz \
+            -C /tmp/den1450-source
+          install -Dm644 /tmp/den1450-source/src/environment_v2.rs src/environment_v2.rs
+          install -Dm644 /tmp/den1450-source/src/lib.rs src/lib.rs
+          install -Dm644 /tmp/den1450-source/examples/generate_schemas.rs examples/generate_schemas.rs
+          install -Dm644 /tmp/den1450-source/schemas/environment-plan-v1.json schemas/environment-plan-v1.json
+          install -Dm644 /tmp/den1450-source/schemas/environment-plan.json schemas/environment-plan.json
+
+      - name: Restore ordinary CI and remove bootstrap workflows
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+          rm -f \
+            .github/workflows/apply-den-1450-environment-v2.yml \
+            .github/workflows/apply-den-1450-on-pr.yml \
+            .github/workflows/promote-den1450-validated-artifact.yml
+
+      - name: Commit the validated source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat(DEN-1450): add EnvironmentPlan v2 contract"
+          git push origin HEAD:agent/den-1450-environment-plan-v2
