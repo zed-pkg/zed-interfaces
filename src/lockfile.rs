@@ -8,6 +8,8 @@ use crate::nix::NixAdapterRecord;
 
 type NixAdapterKey = (String, String, String, Option<String>, u8, String, String);
 
+const ARTIFACT_REVISION_PREFIX: &str = "artifact-sha256:";
+
 /// The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.
 ///
 /// Serialized as TOML with one `[[package]]` table per locked package,
@@ -48,8 +50,9 @@ pub struct LockedPackage {
     pub vcs_tag: String,
     /// Exact immutable source revision associated with the published artifact.
     /// The optional Rust representation preserves API compatibility for
-    /// builders, but lockfile parsing, schema generation, and serialization
-    /// all require this value to be explicitly present.
+    /// builders. Parsing and JSON Schema validation require an explicit value;
+    /// the canonical writer upgrades a legacy in-memory `None` to the exact
+    /// content-addressed `artifact-sha256:<digest>` revision before emission.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(
         !default,
@@ -107,9 +110,10 @@ impl Lockfile {
     }
 
     pub fn to_toml_string(&self) -> Result<String, LockfileError> {
-        self.validate_packages()?;
-        self.validate_nix_adapters()?;
         let mut normalized = self.clone();
+        normalized.normalize_missing_package_revisions()?;
+        normalized.validate_packages()?;
+        normalized.validate_nix_adapters()?;
         normalized.nix_adapters.sort_by_key(nix_adapter_key);
         toml::to_string_pretty(&normalized).map_err(|error| LockfileError::Toml(error.to_string()))
     }
@@ -141,6 +145,29 @@ impl Lockfile {
             .retain(|existing| nix_adapter_key(existing) != key);
         self.nix_adapters.push(adapter);
         self.nix_adapters.sort_by_key(nix_adapter_key);
+        Ok(())
+    }
+
+    fn normalize_missing_package_revisions(&mut self) -> Result<(), LockfileError> {
+        for package in &mut self.packages {
+            if package.vcs_commit.is_some() {
+                continue;
+            }
+            let label = package.full_name();
+            if !is_canonical_sha256(&package.sha256) {
+                return invalid_package(
+                    &label,
+                    "sha256 must be canonical before deriving content-addressed provenance",
+                );
+            }
+            if package.sha256.bytes().all(|byte| byte == b'0') {
+                return invalid_package(
+                    &label,
+                    "sha256 must not be all-zero before deriving content-addressed provenance",
+                );
+            }
+            package.vcs_commit = Some(artifact_revision(&package.sha256));
+        }
         Ok(())
     }
 
@@ -221,6 +248,10 @@ fn invalid_package<T>(package: &str, reason: &str) -> Result<T, LockfileError> {
     })
 }
 
+fn artifact_revision(sha256: &str) -> String {
+    format!("{ARTIFACT_REVISION_PREFIX}{sha256}")
+}
+
 fn is_canonical_sha256(value: &str) -> bool {
     value.len() == 64
         && value
@@ -231,7 +262,9 @@ fn is_canonical_sha256(value: &str) -> bool {
 /// VCS backends do not all use Git's 40-hex object IDs, so lockfiles accept a
 /// conservative printable revision alphabet while rejecting branch-like or
 /// otherwise mutable names. The published tag is retained separately; this
-/// field must identify one immutable source state.
+/// field must identify one immutable source state. A canonical writer may use
+/// `artifact-sha256:<digest>` when legacy or explicitly VCS-skipped registry
+/// metadata has no stronger source revision; the digest still pins exact bytes.
 fn is_immutable_vcs_revision(value: &str) -> bool {
     if value != value.trim() || !(7..=128).contains(&value.len()) {
         return false;
@@ -326,6 +359,20 @@ source = "file:///tmp/registry"
         )
     }
 
+    fn package_without_commit(sha256: &str) -> LockedPackage {
+        LockedPackage {
+            org: "zed-pkg".to_string(),
+            name: "fixture".to_string(),
+            version: "1.2.3".to_string(),
+            sha256: sha256.to_string(),
+            size: 42,
+            format: ArtifactFormat::TarGz,
+            vcs_tag: "v1.2.3".to_string(),
+            vcs_commit: None,
+            source: "file:///tmp/registry".to_string(),
+        }
+    }
+
     #[test]
     fn complete_package_metadata_round_trips() {
         let lock = Lockfile::parse(VALID_LOCK).unwrap();
@@ -392,11 +439,12 @@ source = "file:///tmp/registry"
     }
 
     #[test]
-    fn non_git_immutable_revisions_remain_supported() {
+    fn non_git_and_content_addressed_immutable_revisions_remain_supported() {
         for revision in [
             "fossil:0123456789abcdef",
             "hg/0123456789abcdef0123456789abcdef01234567",
             "pijul+ABCdef0123456789_-",
+            "artifact-sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         ] {
             let input = lock_with_commit(revision);
             assert!(
@@ -415,25 +463,39 @@ source = "file:///tmp/registry"
     }
 
     #[test]
-    fn writer_refuses_to_emit_incomplete_provenance() {
+    fn writer_normalizes_missing_commit_to_exact_artifact_revision() {
+        let digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         let lock = Lockfile {
             version: Lockfile::CURRENT_VERSION,
-            packages: vec![LockedPackage {
-                org: "zed-pkg".to_string(),
-                name: "fixture".to_string(),
-                version: "1.2.3".to_string(),
-                sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-                    .to_string(),
-                size: 42,
-                format: ArtifactFormat::TarGz,
-                vcs_tag: "v1.2.3".to_string(),
-                vcs_commit: None,
-                source: "file:///tmp/registry".to_string(),
-            }],
+            packages: vec![package_without_commit(digest)],
             nix_adapters: Vec::new(),
         };
-        let error = lock.to_toml_string().unwrap_err().to_string();
-        assert!(error.contains("vcs_commit"));
+        let serialized = lock.to_toml_string().unwrap();
+        assert!(serialized.contains(&format!(
+            "vcs_commit = \"artifact-sha256:{digest}\""
+        )));
+        assert!(lock.packages[0].vcs_commit.is_none());
+        let parsed = Lockfile::parse(&serialized).unwrap();
+        assert_eq!(
+            parsed.packages[0].vcs_commit.as_deref(),
+            Some(format!("artifact-sha256:{digest}").as_str())
+        );
+    }
+
+    #[test]
+    fn writer_refuses_to_derive_provenance_from_invalid_hashes() {
+        for digest in [
+            "not-a-sha256",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        ] {
+            let lock = Lockfile {
+                version: Lockfile::CURRENT_VERSION,
+                packages: vec![package_without_commit(digest)],
+                nix_adapters: Vec::new(),
+            };
+            let error = lock.to_toml_string().unwrap_err().to_string();
+            assert!(error.contains("sha256"), "unexpected error: {error}");
+        }
     }
 
     #[test]
