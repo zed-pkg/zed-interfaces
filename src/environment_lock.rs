@@ -172,9 +172,7 @@ pub enum LockedArtifactFormat {
     Directory,
 }
 
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 pub struct LockedSignature {
     /// Signature system (`cosign`, `minisign`, `gpg`, `sigstore-bundle`, ...).
     pub kind: String,
@@ -186,9 +184,7 @@ pub struct LockedSignature {
 }
 
 /// Exact target identity for one locked variant.
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 pub struct LockedPlatform {
     /// Canonical target triple or backend target identifier.
     pub target: String,
@@ -307,9 +303,10 @@ pub enum EnvironmentLockError {
 impl EnvironmentLock {
     /// Parse TOML and apply local frozen validation.
     pub fn parse_toml(input: &str) -> Result<Self, EnvironmentLockError> {
-        let lock: Self = toml::from_str(input).map_err(|error| EnvironmentLockError::TomlParse {
-            message: error.to_string(),
-        })?;
+        let lock: Self =
+            toml::from_str(input).map_err(|error| EnvironmentLockError::TomlParse {
+                message: error.to_string(),
+            })?;
         lock.validate(EnvironmentLockValidationMode::Local)?;
         Ok(lock)
     }
@@ -458,10 +455,7 @@ impl LockedTool {
         if let Some(digest) = &self.backend_options_digest_sha256 {
             validate_sha256(&format!("tool `{tool}` backend options digest"), digest)?;
         }
-        validate_extensions(
-            &format!("tool `{tool}` extensions"),
-            &self.extensions,
-        )?;
+        validate_extensions(&format!("tool `{tool}` extensions"), &self.extensions)?;
         self.artifact.validate(tool)?;
         self.source.validate(tool, &self.artifact, mode)?;
         self.platform.validate(tool)?;
@@ -516,14 +510,9 @@ impl LockedSource {
 
         let exact = match self.kind {
             LockedSourceKind::Registry => revision_is_exact && self.immutable,
-            LockedSourceKind::Vcs | LockedSourceKind::Other => {
-                revision_is_exact && self.immutable
-            }
+            LockedSourceKind::Vcs | LockedSourceKind::Other => revision_is_exact && self.immutable,
             LockedSourceKind::Http => valid_sha256(&artifact.sha256),
-            LockedSourceKind::Oci => self
-                .revision
-                .as_deref()
-                .is_some_and(valid_prefixed_sha256),
+            LockedSourceKind::Oci => self.revision.as_deref().is_some_and(valid_prefixed_sha256),
             LockedSourceKind::Path => {
                 validate_relative_path(
                     &format!("tool `{tool}` path source"),
@@ -584,10 +573,7 @@ impl LockedArtifact {
                 &signature.identity,
             )?;
             if let Some(digest) = &signature.sha256 {
-                validate_sha256(
-                    &format!("tool `{tool}` signature {index} digest"),
-                    digest,
-                )?;
+                validate_sha256(&format!("tool `{tool}` signature {index} digest"), digest)?;
             }
         }
         validate_extensions(
@@ -630,17 +616,9 @@ impl LockedPlatform {
 
 impl LockedInstall {
     fn validate(&self, tool: &str, variant: &str) -> Result<(), EnvironmentLockError> {
-        validate_relative_path(
-            &format!("tool `{tool}` install root"),
-            &self.root,
-            true,
-        )?;
+        validate_relative_path(&format!("tool `{tool}` install root"), &self.root, true)?;
         for (index, path) in self.bin_dirs.iter().enumerate() {
-            validate_relative_path(
-                &format!("tool `{tool}` bin directory {index}"),
-                path,
-                true,
-            )?;
+            validate_relative_path(&format!("tool `{tool}` bin directory {index}"), path, true)?;
         }
         if let Some(digest) = &self.layout_digest_sha256 {
             validate_sha256(&format!("tool `{tool}` layout digest"), digest)?;
@@ -750,9 +728,7 @@ fn valid_sha256(value: &str) -> bool {
 }
 
 fn valid_prefixed_sha256(value: &str) -> bool {
-    value
-        .strip_prefix("sha256:")
-        .is_some_and(valid_sha256)
+    value.strip_prefix("sha256:").is_some_and(valid_sha256)
 }
 
 fn validate_relative_path(
@@ -911,7 +887,10 @@ mod tests {
     #[test]
     fn exact_registry_lock_is_portable() {
         let lock = lock_with(registry_tool("22.4.0", "x86_64-unknown-linux-gnu"));
-        assert_eq!(lock.validate(EnvironmentLockValidationMode::Portable), Ok(()));
+        assert_eq!(
+            lock.validate(EnvironmentLockValidationMode::Portable),
+            Ok(())
+        );
     }
 
     #[test]
@@ -955,7 +934,10 @@ mod tests {
             extensions: BTreeMap::new(),
         };
         let lock = lock_with(tool);
-        assert_eq!(lock.validate(EnvironmentLockValidationMode::Portable), Ok(()));
+        assert_eq!(
+            lock.validate(EnvironmentLockValidationMode::Portable),
+            Ok(())
+        );
     }
 
     #[test]
@@ -1115,9 +1097,15 @@ mod tests {
     fn toml_and_json_round_trip() {
         let lock = lock_with(registry_tool("22.4.0", "x86_64-unknown-linux-gnu"));
         let toml = lock.to_toml_string().unwrap();
-        assert_eq!(EnvironmentLock::parse_toml(&toml).unwrap(), lock.normalized());
+        assert_eq!(
+            EnvironmentLock::parse_toml(&toml).unwrap(),
+            lock.normalized()
+        );
         let json = lock.canonical_json_string().unwrap();
-        assert_eq!(EnvironmentLock::parse_json(&json).unwrap(), lock.normalized());
+        assert_eq!(
+            EnvironmentLock::parse_json(&json).unwrap(),
+            lock.normalized()
+        );
     }
 
     #[test]
