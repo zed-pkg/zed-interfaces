@@ -36,6 +36,10 @@ jobs:
           text = path.read_text()
           replacements = [
               (
+                  'use std::path::{Component, Path};',
+                  'use std::path::Path;',
+              ),
+              (
                   '#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]\n    pub bins:',
                   '#[serde(default)]\n    pub bins:',
               ),
