@@ -25,6 +25,7 @@ fn main() {
     write::<zed_interfaces::EnvironmentPlan>(dir, "environment-plan-v1");
     write::<zed_interfaces::EnvironmentPlanV2>(dir, "environment-plan");
     write::<zed_interfaces::NixExportSection>(dir, "nix-export-section");
+    write::<zed_interfaces::NixExportPlan>(dir, "nix-export-plan");
     write::<zed_interfaces::NixAdapterRecord>(dir, "nix-adapter-record");
     write::<zed_interfaces::registry::PackageMetadata>(dir, "package-metadata");
     write::<zed_interfaces::registry::VersionMetadata>(dir, "version-metadata");
