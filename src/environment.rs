@@ -91,11 +91,9 @@ pub enum EnvironmentValue {
 impl EnvironmentValue {
     fn validate(&self, path: &str) -> Result<(), EnvironmentPlanError> {
         match self {
-            Self::Float(value) if !value.is_finite() => {
-                Err(EnvironmentPlanError::NonFiniteFloat {
-                    path: path.to_string(),
-                })
-            }
+            Self::Float(value) if !value.is_finite() => Err(EnvironmentPlanError::NonFiniteFloat {
+                path: path.to_string(),
+            }),
             Self::Array(values) => {
                 for (index, value) in values.iter().enumerate() {
                     value.validate(&format!("{path}[{index}]"))?;
@@ -188,7 +186,9 @@ pub struct ToolSourceIdentity {
 
 impl ToolSourceIdentity {
     fn has_text(value: &Option<String>) -> bool {
-        value.as_deref().is_some_and(|value| !value.trim().is_empty())
+        value
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
     }
 
     fn frozen_identity_is_immutable(&self) -> bool {
@@ -196,22 +196,17 @@ impl ToolSourceIdentity {
             ToolSourceKind::Path => false,
             ToolSourceKind::Http => Self::has_text(&self.url) && Self::has_text(&self.checksum),
             ToolSourceKind::Vcs => {
-                Self::has_text(&self.url)
-                    && Self::has_text(&self.revision)
-                    && self.immutable
+                Self::has_text(&self.url) && Self::has_text(&self.revision) && self.immutable
             }
             ToolSourceKind::Registry | ToolSourceKind::Other => {
-                Self::has_text(&self.checksum)
-                    || (Self::has_text(&self.revision) && self.immutable)
+                Self::has_text(&self.checksum) || (Self::has_text(&self.revision) && self.immutable)
             }
         }
     }
 }
 
 /// OS/architecture constraints. Empty selectors are rejected.
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 pub struct PlatformSelector {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub os: Option<String>,
@@ -378,9 +373,7 @@ pub struct EnvironmentProvenance {
 /// Validation and serialization failures for environment plans.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum EnvironmentPlanError {
-    #[error(
-        "unsupported environment schema version {found}; this build supports {supported}"
-    )]
+    #[error("unsupported environment schema version {found}; this build supports {supported}")]
     UnsupportedSchemaVersion { found: u32, supported: u32 },
 
     #[error("{kind} name cannot be empty")]
@@ -443,9 +436,10 @@ pub enum EnvironmentPlanError {
 impl EnvironmentPlan {
     /// Parse and structurally validate a TOML environment plan.
     pub fn parse_toml(input: &str) -> Result<Self, EnvironmentPlanError> {
-        let plan: Self = toml::from_str(input).map_err(|error| EnvironmentPlanError::TomlParse {
-            message: error.to_string(),
-        })?;
+        let plan: Self =
+            toml::from_str(input).map_err(|error| EnvironmentPlanError::TomlParse {
+                message: error.to_string(),
+            })?;
         plan.validate(EnvironmentValidationMode::Permissive)?;
         Ok(plan)
     }
@@ -461,10 +455,7 @@ impl EnvironmentPlan {
     }
 
     /// Validate structural integrity and, in frozen mode, exact immutable pins.
-    pub fn validate(
-        &self,
-        mode: EnvironmentValidationMode,
-    ) -> Result<(), EnvironmentPlanError> {
+    pub fn validate(&self, mode: EnvironmentValidationMode) -> Result<(), EnvironmentPlanError> {
         if self.schema_version != ENVIRONMENT_PLAN_SCHEMA_VERSION {
             return Err(EnvironmentPlanError::UnsupportedSchemaVersion {
                 found: self.schema_version,
@@ -475,12 +466,16 @@ impl EnvironmentPlan {
         for (name, tool) in &self.tools {
             validate_name("tool", name)?;
             if tool.versions.is_empty() {
-                return Err(EnvironmentPlanError::ToolWithoutVersions {
-                    tool: name.clone(),
-                });
+                return Err(EnvironmentPlanError::ToolWithoutVersions { tool: name.clone() });
             }
-            if tool.backend.as_deref().is_some_and(|value| value.trim().is_empty()) {
-                return Err(EnvironmentPlanError::EmptyName { kind: "tool backend" });
+            if tool
+                .backend
+                .as_deref()
+                .is_some_and(|value| value.trim().is_empty())
+            {
+                return Err(EnvironmentPlanError::EmptyName {
+                    kind: "tool backend",
+                });
             }
             validate_json_extensions(&tool.extensions, &format!("tools.{name}.extensions"))?;
             for version in &tool.versions {
@@ -498,12 +493,7 @@ impl EnvironmentPlan {
             validate_name("system package", name)?;
             validate_name("system package manager", &package.manager)?;
             validate_requirement("system package", name, &package.requirement)?;
-            validate_resolution(
-                "system package",
-                name,
-                package.resolved.as_deref(),
-                mode,
-            )?;
+            validate_resolution("system package", name, package.resolved.as_deref(), mode)?;
             validate_source("system package", name, package.source.as_ref(), mode)?;
             validate_platforms("system package", name, &package.platforms)?;
             validate_json_extensions(
@@ -706,7 +696,10 @@ fn validate_source(
         &source.revision,
         &source.checksum,
     ] {
-        if value.as_deref().is_some_and(|value| value.trim().is_empty()) {
+        if value
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
             return Err(EnvironmentPlanError::MutableSource {
                 kind,
                 name: name.to_string(),
@@ -997,10 +990,7 @@ mod tests {
         test.depends.push("b".to_string());
         plan.tasks.insert("build".to_string(), build);
         plan.tasks.insert("test".to_string(), test);
-        assert_eq!(
-            plan.validate(EnvironmentValidationMode::Permissive),
-            Ok(())
-        );
+        assert_eq!(plan.validate(EnvironmentValidationMode::Permissive), Ok(()));
     }
 
     #[test]
@@ -1031,13 +1021,13 @@ mod tests {
                     "path".to_string(),
                     EnvironmentValue::String(".zed/dev".to_string()),
                 ),
-                (
-                    "enabled".to_string(),
-                    EnvironmentValue::Boolean(true),
-                ),
+                ("enabled".to_string(), EnvironmentValue::Boolean(true)),
             ])),
         );
         let text = plan.to_toml_string().unwrap();
-        assert_eq!(EnvironmentPlan::parse_toml(&text).unwrap(), plan.normalized());
+        assert_eq!(
+            EnvironmentPlan::parse_toml(&text).unwrap(),
+            plan.normalized()
+        );
     }
 }
