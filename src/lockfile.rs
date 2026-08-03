@@ -28,26 +28,37 @@ pub struct Lockfile {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct LockedPackage {
+    #[schemars(length(min = 1))]
     pub org: String,
+    #[schemars(length(min = 1))]
     pub name: String,
+    #[schemars(length(min = 1))]
     pub version: String,
     /// Canonical lowercase hex sha256 of the artifact archive; also its store address.
+    #[schemars(length(equal = 64), regex(pattern = r"^[0-9a-f]{64}$"))]
     pub sha256: String,
     /// Artifact size in bytes. Zero-byte package artifacts are invalid.
+    #[schemars(range(min = 1))]
     pub size: u64,
     /// Explicit archive format. A missing value must never be inferred during
     /// a frozen install because the format is part of immutable artifact identity.
     pub format: ArtifactFormat,
     /// VCS tag the version was published from, e.g. `v1.2.0`.
+    #[schemars(length(min = 1))]
     pub vcs_tag: String,
     /// Exact immutable source revision associated with the published artifact.
     /// The optional Rust representation preserves API compatibility for
     /// builders, but lockfile parsing, schema generation, and serialization
     /// all require this value to be explicitly present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(required)]
+    #[schemars(
+        required,
+        length(min = 7, max = 128),
+        regex(pattern = r"^[A-Za-z0-9._+:/-]+$")
+    )]
     pub vcs_commit: Option<String>,
     /// Base URL of the registry the artifact was resolved from.
+    #[schemars(length(min = 1))]
     pub source: String,
 }
 
@@ -418,16 +429,22 @@ source = "file:///tmp/registry"
     }
 
     #[test]
-    fn public_schema_requires_format_and_vcs_commit() {
+    fn public_schema_requires_complete_package_provenance() {
         let schema = schemars::schema_for!(Lockfile);
         let value = serde_json::to_value(schema).unwrap();
-        let required = value["$defs"]["LockedPackage"]["required"]
-            .as_array()
-            .unwrap();
-        let names = required.iter().filter_map(|item| item.as_str()).collect::<BTreeSet<_>>();
+        let package = &value["$defs"]["LockedPackage"];
+        let required = package["required"].as_array().unwrap();
+        let names = required
+            .iter()
+            .filter_map(|item| item.as_str())
+            .collect::<BTreeSet<_>>();
         assert!(names.contains("format"));
         assert!(names.contains("vcs_commit"));
-        let commit_type = &value["$defs"]["LockedPackage"]["properties"]["vcs_commit"]["type"];
-        assert_eq!(commit_type, "string");
+        assert_eq!(package["properties"]["vcs_commit"]["type"], "string");
+        assert_eq!(package["properties"]["vcs_commit"]["minLength"], 7);
+        assert_eq!(package["properties"]["vcs_commit"]["maxLength"], 128);
+        assert_eq!(package["properties"]["sha256"]["minLength"], 64);
+        assert_eq!(package["properties"]["sha256"]["maxLength"], 64);
+        assert_eq!(package["properties"]["size"]["minimum"], 1);
     }
 }
