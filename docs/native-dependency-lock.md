@@ -14,6 +14,8 @@ assumed to have identical semantics:
 | `1` | x-range `1.*` | default caret `^1` |
 | `^0.2.3` | caret | caret |
 | `~1.2.3` | patch-compatible | patch-compatible |
+| `>1` | `>=2.0.0` | Cargo comparison requirement |
+| `<=1.2` | `<1.3.0` | Cargo comparison requirement |
 
 The original declaration remains in the record for auditability. The canonical
 requirement is recomputed during validation, so editing it independently causes
@@ -34,12 +36,23 @@ build metadata is rejected for declarations, candidates, and exact lock
 versions because it does not participate in precedence and cannot safely name
 different artifacts.
 
+For npm identities, numeric components must also fit JavaScript's exact integer
+range. Leading-zero partial components and values above
+`Number.MAX_SAFE_INTEGER` are rejected rather than accepted by Rust and later
+reinterpreted differently by npm tooling.
+
 ## Supported npm subset
 
 Version 1 supports exact versions, partial/x-ranges, `x`/`X`/`*` wildcards,
 caret and tilde ranges, explicit comparators, whitespace-separated comparator
 intersections, and explicit prerelease requirements. A full bare version is
 made explicitly exact.
+
+Whitespace between one comparator operator and its version is normalized, so
+`>= 1.2.3 < 2.0.0` produces the same canonical intersection as
+`>=1.2.3 <2.0.0`. Partial inequality comparators are desugared using npm's
+boundaries: `>1` becomes `>=2.0.0`, `>1.2` becomes `>=1.3.0`, and `<=1.2`
+becomes `<1.3.0`.
 
 Logical unions, hyphen ranges, dist-tags, aliases, workspace requirements,
 local paths, Git sources, and URL sources are rejected rather than approximated
@@ -50,7 +63,9 @@ rejected for npm in strict v1.
 
 Version 1 supports Cargo's default-caret bare requirements, explicit caret,
 tilde, exact and inequality comparators, `*` wildcards, comma-separated
-comparator intersections, and explicit prerelease requirements.
+comparator intersections, and explicit prerelease requirements. Whitespace
+between one operator and its version is accepted, including
+`>= 1.2, < 1.5`; multiple comparators still require commas.
 
 Npm-style `x` wildcards, whitespace-only comparator intersections, unions,
 source protocols, and mutable or non-SemVer selectors are rejected.
