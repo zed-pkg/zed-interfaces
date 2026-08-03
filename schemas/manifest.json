@@ -292,6 +292,46 @@
         "package"
       ]
     },
+    "NixExportMode": {
+      "oneOf": [
+        {
+          "description": "Export the exact immutable Zed artifact. Source-builder translation is\nintentionally not inferred from native manifests in contract v1.",
+          "type": "string",
+          "const": "artifact"
+        }
+      ]
+    },
+    "NixExportSection": {
+      "description": "Author intent for exporting a package or target to Nix.\n\nThis structure contains no realized store paths, hashes, commands,\ncredentials, cache keys, or service deployment policy. Those belong in a\nversioned adapter record after planning/realization.",
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "description": "Optional Nix package attribute. Omit it to use the Zed package name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "$ref": "#/$defs/NixExportMode",
+          "default": "artifact"
+        },
+        "outputs": {
+          "description": "Explicit derivation outputs. Contract v1 never silently selects the\nfirst output of a multi-output derivation.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "systems": {
+          "description": "Explicit Nix systems this package claims to support.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "OverridesSection": {
       "description": "Consumer-side dependency patches, keyed by `org/name`.",
       "type": "object",
@@ -388,6 +428,17 @@
             }
           ]
         },
+        "nix": {
+          "description": "Optional deterministic export of this single-language package as a\nstandalone Nix flake. Nix is a typed interop adapter, not a native\nregistry destination, so its intent remains separate from `native`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NixExportSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "smoke_test": {
           "description": "Command run by `zed r2g` (alias `zed test-local`) inside a throwaway\nconsumer project that has this package installed the same way a real\nconsumer would.",
           "type": [
@@ -463,6 +514,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/NativeReleaseSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nix": {
+          "description": "Optional deterministic Nix export intent for this isolated target.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NixExportSection"
             },
             {
               "type": "null"
