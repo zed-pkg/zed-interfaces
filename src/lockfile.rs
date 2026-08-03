@@ -316,8 +316,7 @@ vcs_commit = "fedcba9876543210fedcba9876543210fedcba98"
 source = "file:///tmp/registry"
 "#;
 
-    const VALID_COMMIT_LINE: &str =
-        "vcs_commit = \"fedcba9876543210fedcba9876543210fedcba98\"";
+    const VALID_COMMIT_LINE: &str = "vcs_commit = \"fedcba9876543210fedcba9876543210fedcba98\"";
 
     fn lock_with_commit(revision: &str) -> String {
         VALID_LOCK.replacen(
