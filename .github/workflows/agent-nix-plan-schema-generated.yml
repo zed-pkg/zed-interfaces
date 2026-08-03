@@ -1,0 +1,48 @@
+name: agent-nix-plan-schema-generated
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/agent-nix-plan-schema-generated.yml"
+      - "src/nix_plan.rs"
+      - "src/lib.rs"
+      - "examples/generate_schemas.rs"
+      - "schemas/nix-export-plan.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          components: rustfmt,clippy
+
+      - name: Format, lint, test, and generate schemas
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo fmt --all --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked nix_plan::tests:: -- --test-threads=1
+          cargo run --locked --example generate_schemas
+          test -s schemas/nix-export-plan.json
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: den-1418-nix-plan-schema
+          path: |
+            src/nix_plan.rs
+            src/lib.rs
+            examples/generate_schemas.rs
+            schemas/nix-export-plan.json
+          if-no-files-found: error
+          retention-days: 1
