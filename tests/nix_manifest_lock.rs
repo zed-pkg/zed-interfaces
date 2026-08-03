@@ -204,7 +204,9 @@ name = "tool"
 version = "1.2.3"
 sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 size = 42
+format = "tar.gz"
 vcs_tag = "v1.2.3"
+vcs_commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 source = "https://zpkg.example"
 "#,
     )
