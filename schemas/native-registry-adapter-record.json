@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NativeRegistryAdapterRecord",
+  "description": "Final immutable mapping from one Zed source target to a family of native\nregistry packages.",
+  "type": "object",
+  "properties": {
+    "publications": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NativePublication"
+      }
+    },
+    "registry": {
+      "$ref": "#/$defs/NativeRegistry"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/ZedNativePackageIdentity"
+    }
+  },
+  "required": [
+    "schema",
+    "registry",
+    "source",
+    "publications"
+  ],
+  "$defs": {
+    "ArtifactFormat": {
+      "description": "On-the-wire formats for published package artifacts.",
+      "type": "string",
+      "enum": [
+        "tar.gz",
+        "zip"
+      ]
+    },
+    "NativeArtifact": {
+      "description": "Exact immutable bytes published under one native package identity.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/ArtifactFormat",
+          "default": "tar.gz"
+        },
+        "sha256": {
+          "description": "Lowercase hexadecimal SHA-256 of the exact uploaded archive bytes.",
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sha256",
+        "size"
+      ]
+    },
+    "NativePackageIdentity": {
+      "description": "Public identity selected in npm or a Cargo-compatible registry.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ]
+    },
+    "NativePlatform": {
+      "description": "Platform identity kept outside the package version.",
+      "type": "object",
+      "properties": {
+        "arch": {
+          "type": "string"
+        },
+        "libc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "os": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "os",
+        "arch"
+      ]
+    },
+    "NativePlatformPackage": {
+      "description": "One platform-to-package edge emitted by a generic wrapper package.",
+      "type": "object",
+      "properties": {
+        "package": {
+          "type": "string"
+        },
+        "platform": {
+          "$ref": "#/$defs/NativePlatform"
+        }
+      },
+      "required": [
+        "platform",
+        "package"
+      ]
+    },
+    "NativePublication": {
+      "description": "One uploaded package within a publication family.",
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/NativeArtifact"
+        },
+        "kind": {
+          "$ref": "#/$defs/NativePublicationKind"
+        },
+        "package": {
+          "$ref": "#/$defs/NativePackageIdentity"
+        },
+        "platform": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativePlatform"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "platform_packages": {
+          "description": "Only a `meta` publication may contain selector edges. Each edge must\nreference a `platform` publication in the same adapter record.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NativePlatformPackage"
+          }
+        }
+      },
+      "required": [
+        "package",
+        "kind",
+        "artifact"
+      ]
+    },
+    "NativePublicationKind": {
+      "description": "Role of one package in a native-registry publication family.",
+      "oneOf": [
+        {
+          "description": "One package whose payload is portable across all supported platforms.",
+          "type": "string",
+          "const": "portable"
+        },
+        {
+          "description": "A generic wrapper package that selects platform-specific packages.",
+          "type": "string",
+          "const": "meta"
+        },
+        {
+          "description": "One package containing bytes for exactly one explicit platform.",
+          "type": "string",
+          "const": "platform"
+        }
+      ]
+    },
+    "NativeRegistry": {
+      "description": "Native registries with a first-class publication identity contract.",
+      "type": "string",
+      "enum": [
+        "npm",
+        "cargo"
+      ]
+    },
+    "ZedNativePackageIdentity": {
+      "description": "Strict SemVer source identity in the Zed registry.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "org",
+        "name",
+        "version"
+      ]
+    }
+  }
+}
