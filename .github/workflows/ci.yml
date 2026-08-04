@@ -1,312 +1,47 @@
-name: DEN-1420 materialize native publication topology
+name: ci
 
 on:
+  push:
+    branches: [main]
   pull_request:
-    paths:
-      - .github/workflows/ci.yml
-      - .github/workflows/den-1420-native-topology.yml
-  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: den-1420-topology-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  apply:
-    if: github.actor != 'github-actions[bot]'
+  rust:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out the exact review branch
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.head_ref }}
-          persist-credentials: true
+          persist-credentials: false
           show-progress: false
-          fetch-depth: 0
 
-      - name: Install the Rust validation toolchain
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
-          toolchain: stable
           components: rustfmt,clippy
 
-      - name: Apply the publication-family invariants structurally
-        shell: bash
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Doctest
+        run: cargo test --locked --doc
+
+      - name: Schemas are up to date
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def block(*lines: str) -> str:
-              return "\n".join(lines) + "\n"
-
-          def replace_once(text: str, old: str, new: str, label: str) -> str:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected one match, found {count}")
-              return text.replace(old, new, 1)
-
-          source_path = Path("src/native_registry.rs")
-          source = source_path.read_text(encoding="utf-8")
-
-          source = replace_once(
-              source,
-              block(
-                  "        let mut platform_publications = BTreeMap::new();",
-                  "        let mut meta_count = 0usize;",
-              ),
-              block(
-                  "        let mut platform_publications = BTreeMap::new();",
-                  "        let mut meta_count = 0usize;",
-                  "        let mut portable_count = 0usize;",
-              ),
-              "publication counters",
-          )
-
-          source = replace_once(
-              source,
-              block("                NativePublicationKind::Portable => {}"),
-              block(
-                  "                NativePublicationKind::Portable => {",
-                  "                    portable_count += 1;",
-                  "                    if portable_count > 1 {",
-                  "                        return Err(NativeRegistryError::MultiplePortablePackages);",
-                  "                    }",
-                  "                }",
-              ),
-              "portable cardinality",
-          )
-
-          meta_start = block(
-              "        for publication in self",
-              "            .publications",
-              "            .iter()",
-              "            .filter(|publication| publication.kind == NativePublicationKind::Meta)",
-              "        {",
-          )
-          start = source.find(meta_start)
-          if start < 0:
-              raise SystemExit("meta coverage: start anchor not found")
-          end = source.find("        Ok(())", start)
-          if end < 0:
-              raise SystemExit("meta coverage: end anchor not found")
-          replacement = block(
-              "        for publication in self",
-              "            .publications",
-              "            .iter()",
-              "            .filter(|publication| publication.kind == NativePublicationKind::Meta)",
-              "        {",
-              "            if publication.platform_packages.is_empty() {",
-              "                return Err(NativeRegistryError::MetaPackageRequiresPlatformSelections {",
-              "                    package: publication.package.name.clone(),",
-              "                });",
-              "            }",
-              "",
-              "            let mut selected_platforms = BTreeSet::new();",
-              "            for selection in &publication.platform_packages {",
-              "                selected_platforms.insert(selection.platform.clone());",
-              "                match platform_publications.get(&selection.platform) {",
-              "                    Some(package) if package == &selection.package => {}",
-              "                    Some(package) => {",
-              "                        return Err(NativeRegistryError::PlatformPackageMismatch {",
-              "                            meta_package: publication.package.name.clone(),",
-              "                            platform: selection.platform.selector(),",
-              "                            expected: package.clone(),",
-              "                            selected: selection.package.clone(),",
-              "                        });",
-              "                    }",
-              "                    None => {",
-              "                        return Err(NativeRegistryError::MissingPlatformPublication {",
-              "                            meta_package: publication.package.name.clone(),",
-              "                            platform: selection.platform.selector(),",
-              "                            selected: selection.package.clone(),",
-              "                        });",
-              "                    }",
-              "                }",
-              "            }",
-              "",
-              "            for (platform, package) in &platform_publications {",
-              "                if !selected_platforms.contains(platform) {",
-              "                    return Err(NativeRegistryError::UnselectedPlatformPublication {",
-              "                        meta_package: publication.package.name.clone(),",
-              "                        platform: platform.selector(),",
-              "                        package: package.clone(),",
-              "                    });",
-              "                }",
-              "            }",
-              "        }",
-              "",
-          )
-          source = source[:start] + replacement + source[end:]
-
-          source = replace_once(
-              source,
-              block(
-                  "    #[error(\"one adapter record may contain at most one meta package\")]",
-                  "    MultipleMetaPackages,",
-              ),
-              block(
-                  "    #[error(\"one adapter record may contain at most one portable package\")]",
-                  "    MultiplePortablePackages,",
-                  "    #[error(\"one adapter record may contain at most one meta package\")]",
-                  "    MultipleMetaPackages,",
-                  "    #[error(\"meta publication `{package}` must select at least one platform package\")]",
-                  "    MetaPackageRequiresPlatformSelections { package: String },",
-              ),
-              "cardinality errors",
-          )
-
-          missing_platform = block(
-              "    #[error(",
-              "        \"meta package `{meta_package}` selects missing platform package `{selected}` for `{platform}`\"",
-              "    )]",
-              "    MissingPlatformPublication {",
-              "        meta_package: String,",
-              "        platform: String,",
-              "        selected: String,",
-              "    },",
-          )
-          source = replace_once(
-              source,
-              missing_platform,
-              missing_platform
-              + block(
-                  "    #[error(",
-                  "        \"meta package `{meta_package}` does not select published platform package `{package}` for `{platform}`\"",
-                  "    )]",
-                  "    UnselectedPlatformPublication {",
-                  "        meta_package: String,",
-                  "        platform: String,",
-                  "        package: String,",
-                  "    },",
-              ),
-              "coverage error",
-          )
-
-          test_anchor = block(
-              "    #[test]",
-              "    fn cargo_and_npm_names_use_conservative_portable_subsets() {",
-          )
-          topology_test = block(
-              "    #[test]",
-              "    fn publication_family_cardinality_and_meta_coverage_fail_closed() {",
-              "        let mut multiple_portable = record();",
-              "        multiple_portable.publications.extend([",
-              "            publication(",
-              "                \"@fiducia/core-portable\",",
-              "                NativePublicationKind::Portable,",
-              "                None,",
-              "                'd',",
-              "            ),",
-              "            publication(",
-              "                \"@fiducia/core-portable-extra\",",
-              "                NativePublicationKind::Portable,",
-              "                None,",
-              "                'e',",
-              "            ),",
-              "        ]);",
-              "        assert!(matches!(",
-              "            multiple_portable.validate(),",
-              "            Err(NativeRegistryError::MultiplePortablePackages)",
-              "        ));",
-              "",
-              "        let mut empty_meta = record();",
-              "        empty_meta",
-              "            .publications",
-              "            .iter_mut()",
-              "            .find(|publication| publication.kind == NativePublicationKind::Meta)",
-              "            .unwrap()",
-              "            .platform_packages",
-              "            .clear();",
-              "        assert!(matches!(",
-              "            empty_meta.validate(),",
-              "            Err(NativeRegistryError::MetaPackageRequiresPlatformSelections { .. })",
-              "        ));",
-              "",
-              "        let mut incomplete_meta = record();",
-              "        incomplete_meta",
-              "            .publications",
-              "            .iter_mut()",
-              "            .find(|publication| publication.kind == NativePublicationKind::Meta)",
-              "            .unwrap()",
-              "            .platform_packages",
-              "            .pop();",
-              "        assert!(matches!(",
-              "            incomplete_meta.validate(),",
-              "            Err(NativeRegistryError::UnselectedPlatformPublication { .. })",
-              "        ));",
-              "",
-              "        let mut platform_only = record();",
-              "        platform_only",
-              "            .publications",
-              "            .retain(|publication| publication.kind == NativePublicationKind::Platform);",
-              "        assert!(platform_only.validate().is_ok());",
-              "    }",
-              "",
-          )
-          source = replace_once(
-              source,
-              test_anchor,
-              topology_test + test_anchor,
-              "topology tests",
-          )
-          source_path.write_text(source, encoding="utf-8")
-
-          docs_path = Path("docs/native-registry-contract.md")
-          docs = docs_path.read_text(encoding="utf-8")
-          docs = replace_once(
-              docs,
-              block(
-                  "A publication family may contain:",
-                  "",
-                  "- one portable package;",
-                  "- one generic meta package whose platform edges reference packages in the same",
-                  "  record; and",
-                  "- one package for each unique platform selector.",
-              ),
-              block(
-                  "A publication family may contain:",
-                  "",
-                  "- at most one portable package;",
-                  "- at most one generic meta package, with at least one platform edge;",
-                  "- one package for each unique platform selector.",
-                  "",
-                  "When a meta package is present it must select every platform publication in the",
-                  "record exactly once. Platform-only families remain valid when consumers select",
-                  "native packages directly without a generic wrapper.",
-              ),
-              "contract topology prose",
-          )
-          docs_path.write_text(docs, encoding="utf-8")
-          PY
-
-          cargo fmt --all
-          cargo test --locked --all-targets
-          cargo clippy --locked --all-targets -- -D warnings
-          git diff --check
-
-      - name: Restore permanent CI and remove materialization scaffolding
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main --depth=1
-          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
-          rm -f .github/workflows/den-1420-native-topology.yml
-
-      - name: Commit and push only the reviewed product result
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add \
-            src/native_registry.rs \
-            docs/native-registry-contract.md \
-            .github/workflows/ci.yml \
-            .github/workflows/den-1420-native-topology.yml
-          git commit -m 'fix(DEN-1420): enforce native publication family topology'
-          git push origin HEAD:${{ github.head_ref }}
+          cargo run --locked --example generate_schemas
+          git diff --exit-code schemas/ \
+            || (echo "schemas/ is stale; run 'cargo run --locked --example generate_schemas' and commit" && exit 1)
