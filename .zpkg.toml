@@ -1,0 +1,21 @@
+[package]
+org = "zed-pkg"
+name = "zed-interfaces"
+version = "0.1.0"
+description = "Core interface definitions for the zed-pkg universal package manager"
+license = "MIT"
+keywords = ["zed-pkg", "interfaces", "contracts", "manifest", "lockfile"]
+language = "rust"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/zed-pkg/zed-interfaces"
+
+[publish]
+include_readme = true
+tag_format = "v{version}"
+smoke_test = "test -f \"$ZED_PKG_TEST_TARGET/src/manifest.rs\" && test -f \"$ZED_PKG_TEST_TARGET/src/lockfile.rs\""
+exclude = [".env", ".env.*", ".direnv/**", ".zed/**", ".zed-pack/**", "tmp/**", "**/*.log", ".DS_Store", "target/**", "**/target/**"]
+
+[scripts]
+test = "cargo test --locked --all-targets"
