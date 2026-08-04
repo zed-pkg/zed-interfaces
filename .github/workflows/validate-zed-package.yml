@@ -125,12 +125,31 @@ jobs:
                   }
               }
 
+              let mut repository_targets = Vec::new();
               for (name, target) in &manifest.targets {
                   let path = root.join(&target.dir);
                   if !path.is_dir() {
                       fail(format!(
                           "target `{name}` points at missing or non-directory path `{}`",
                           target.dir
+                      ));
+                  }
+                  if target.dir == "." {
+                      repository_targets.push(name.as_str());
+                  }
+              }
+
+              if !manifest.targets.is_empty() {
+                  if repository_targets.len() != 1 {
+                      fail(format!(
+                          "targeted packages must declare exactly one canonical `[targets.repository]` with `dir = \".\"`; found {} root target(s)",
+                          repository_targets.len()
+                      ));
+                  }
+                  if repository_targets[0] != "repository" {
+                      fail(format!(
+                          "canonical root target must be named `repository`, found `{}`",
+                          repository_targets[0]
                       ));
                   }
               }
@@ -150,11 +169,12 @@ jobs:
               }
 
               println!(
-                  "validated {}/{}@{} with {} target(s) and {} locked package(s)",
+                  "validated {}/{}@{} with {} target(s), {} canonical root target(s), and {} locked package(s)",
                   manifest.package.org,
                   manifest.package.name,
                   manifest.package.version,
                   manifest.targets.len(),
+                  repository_targets.len(),
                   lock.packages.len()
               );
           }
