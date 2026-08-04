@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnvironmentLock",
+  "description": "Exact resolved state for all tools in one development environment.",
+  "type": "object",
+  "properties": {
+    "extensions": {
+      "description": "Lossless future/backend fields. Unknown state must never disappear\nmerely because an older client rewrote a lock.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "plan_digest_sha256": {
+      "description": "SHA-256 of the normalized environment plan that produced this lock.",
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 1,
+      "minimum": 0
+    },
+    "tools": {
+      "description": "Logical tool name to one or more exact version/platform variants.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/LockedTool"
+        }
+      }
+    }
+  },
+  "required": [
+    "plan_digest_sha256"
+  ],
+  "$defs": {
+    "LockedArtifact": {
+      "description": "Archive/blob identity downloaded into the content-addressed store.",
+      "type": "object",
+      "properties": {
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "format": {
+          "$ref": "#/$defs/LockedArtifactFormat"
+        },
+        "mirrors": {
+          "description": "Alternate immutable download locations. Order is not semantic.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sha256": {
+          "description": "Exact lowercase hexadecimal SHA-256, without a `sha256:` prefix.",
+          "type": "string"
+        },
+        "signatures": {
+          "description": "Signature, transparency-log, or attestation identities. Verification\npolicy remains a caller concern; the lock records what was verified.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LockedSignature"
+          }
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sha256",
+        "size",
+        "format"
+      ]
+    },
+    "LockedArtifactFormat": {
+      "type": "string",
+      "enum": [
+        "tar",
+        "tar_gz",
+        "tar_xz",
+        "tar_zstd",
+        "zip",
+        "raw",
+        "directory"
+      ]
+    },
+    "LockedExecutable": {
+      "type": "object",
+      "properties": {
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Relative to [`LockedInstall::root`].",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path"
+      ]
+    },
+    "LockedInstall": {
+      "description": "Verified install layout within an extracted artifact/store entry.",
+      "type": "object",
+      "properties": {
+        "bin_dirs": {
+          "description": "Relative PATH directories below `root`. Order is not semantic here;\nactivation precedence is defined by the environment plan/runtime.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "executables": {
+          "description": "Executables and aliases exposed by this variant.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LockedExecutable"
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "layout_digest_sha256": {
+          "description": "Digest of normalized layout metadata when a backend has additional\ndeterministic install-layout decisions.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root": {
+          "description": "Relative root selected from the extracted artifact. `.` means the\nartifact root.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "root"
+      ]
+    },
+    "LockedPlatform": {
+      "description": "Exact target identity for one locked variant.",
+      "type": "object",
+      "properties": {
+        "abi": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "arch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "libc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "os": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "Canonical target triple or backend target identifier.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target"
+      ]
+    },
+    "LockedSignature": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "description": "Key, certificate, transparency-log, or issuer/subject identity.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Signature system (`cosign`, `minisign`, `gpg`, `sigstore-bundle`, ...).",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "Optional SHA-256 of detached signature or attestation bytes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "identity"
+      ]
+    },
+    "LockedSource": {
+      "description": "Exact source identity used before artifact verification.",
+      "type": "object",
+      "properties": {
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "immutable": {
+          "description": "True when backend semantics guarantee that `revision` cannot move.",
+          "type": "boolean",
+          "default": false
+        },
+        "kind": {
+          "$ref": "#/$defs/LockedSourceKind"
+        },
+        "locator": {
+          "description": "Registry coordinates, repository URL, HTTP URL, OCI reference, or a\nproject-relative path.",
+          "type": "string"
+        },
+        "portable": {
+          "description": "A relative path source may be marked portable only when its complete\ntree identity is locked and intended to travel with the project.",
+          "type": "boolean",
+          "default": false
+        },
+        "revision": {
+          "description": "Exact package revision, VCS object, OCI digest, or backend identity.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tree_sha256": {
+          "description": "SHA-256 of a local directory tree for `path` sources.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "locator"
+      ]
+    },
+    "LockedSourceKind": {
+      "description": "Source category for an exact tool artifact.",
+      "type": "string",
+      "enum": [
+        "registry",
+        "vcs",
+        "http",
+        "oci",
+        "path",
+        "other"
+      ]
+    },
+    "LockedTool": {
+      "description": "One exact backend/version/platform selection for a logical tool.",
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/LockedArtifact"
+        },
+        "backend": {
+          "description": "Backend/provider identity (`core`, `aqua`, `github`, `npm`, `cargo`,\n`ubi`, `asdf`, `vfox`, `http`, `zed`, ...).",
+          "type": "string"
+        },
+        "backend_options_digest_sha256": {
+          "description": "Digest of normalized backend options, excluding credentials/secrets.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "backend_version": {
+          "description": "Exact backend/plugin implementation version when backend behavior can\naffect resolution or installation.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "install": {
+          "$ref": "#/$defs/LockedInstall"
+        },
+        "platform": {
+          "$ref": "#/$defs/LockedPlatform"
+        },
+        "requirement": {
+          "description": "Original human-authored requirement retained for diagnostics.",
+          "type": "string"
+        },
+        "resolved": {
+          "description": "Exact, non-moving version selected by the backend.",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/LockedSource"
+        }
+      },
+      "required": [
+        "requirement",
+        "resolved",
+        "backend",
+        "source",
+        "artifact",
+        "platform",
+        "install"
+      ]
+    }
+  }
+}
