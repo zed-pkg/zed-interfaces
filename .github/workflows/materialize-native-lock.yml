@@ -1,6 +1,7 @@
 name: materialize native lockfile semantic merge
 
 on:
+  pull_request:
   push:
     branches:
       - agent/den-1565-native-lock-materialize
@@ -9,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-lock-materialize-${{ github.ref }}
+  group: native-lock-materialize-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 defaults:
