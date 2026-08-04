@@ -17,10 +17,13 @@ sharing one strict version.
 
 A publication family may contain:
 
-- one portable package;
-- one generic meta package whose platform edges reference packages in the same
-  record; and
+- at most one portable package;
+- at most one generic meta package, with at least one platform edge; and
 - one package for each unique platform selector.
+
+When a meta package is present it must select every platform publication in the
+record exactly once. Platform-only families remain valid when consumers select
+native packages directly without a generic wrapper.
 
 Validation fails closed on version drift, duplicate package identities,
 duplicate platforms, dangling or mismatched meta-package edges, malformed

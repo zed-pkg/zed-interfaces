@@ -309,6 +309,7 @@ impl NativeRegistryAdapterRecord {
         let mut package_identities = BTreeSet::new();
         let mut platform_publications = BTreeMap::new();
         let mut meta_count = 0usize;
+        let mut portable_count = 0usize;
 
         for (index, publication) in self.publications.iter().enumerate() {
             publication.validate(self.registry, &self.source.version, index)?;
@@ -346,7 +347,12 @@ impl NativeRegistryAdapterRecord {
                         });
                     }
                 }
-                NativePublicationKind::Portable => {}
+                NativePublicationKind::Portable => {
+                    portable_count += 1;
+                    if portable_count > 1 {
+                        return Err(NativeRegistryError::MultiplePortablePackages);
+                    }
+                }
             }
         }
 
@@ -355,7 +361,15 @@ impl NativeRegistryAdapterRecord {
             .iter()
             .filter(|publication| publication.kind == NativePublicationKind::Meta)
         {
+            if publication.platform_packages.is_empty() {
+                return Err(NativeRegistryError::MetaPackageRequiresPlatformSelections {
+                    package: publication.package.name.clone(),
+                });
+            }
+
+            let mut selected_platforms = BTreeSet::new();
             for selection in &publication.platform_packages {
+                selected_platforms.insert(selection.platform.clone());
                 match platform_publications.get(&selection.platform) {
                     Some(package) if package == &selection.package => {}
                     Some(package) => {
@@ -373,6 +387,16 @@ impl NativeRegistryAdapterRecord {
                             selected: selection.package.clone(),
                         });
                     }
+                }
+            }
+
+            for (platform, package) in &platform_publications {
+                if !selected_platforms.contains(platform) {
+                    return Err(NativeRegistryError::UnselectedPlatformPublication {
+                        meta_package: publication.package.name.clone(),
+                        platform: platform.selector(),
+                        package: package.clone(),
+                    });
                 }
             }
         }
@@ -587,8 +611,12 @@ pub enum NativeRegistryError {
     DuplicateMetaPlatform { package: String, platform: String },
     #[error("duplicate native package identity `{package}@{version}`")]
     DuplicatePackageVersion { package: String, version: String },
+    #[error("one adapter record may contain at most one portable package")]
+    MultiplePortablePackages,
     #[error("one adapter record may contain at most one meta package")]
     MultipleMetaPackages,
+    #[error("meta publication `{package}` must select at least one platform package")]
+    MetaPackageRequiresPlatformSelections { package: String },
     #[error("platform `{platform}` is published twice by `{first}` and `{second}`")]
     DuplicatePlatformPublication {
         platform: String,
@@ -611,6 +639,14 @@ pub enum NativeRegistryError {
         meta_package: String,
         platform: String,
         selected: String,
+    },
+    #[error(
+        "meta package `{meta_package}` does not select published platform package `{package}` for `{platform}`"
+    )]
+    UnselectedPlatformPublication {
+        meta_package: String,
+        platform: String,
+        package: String,
     },
     #[error("failed to serialize native-registry adapter record: {0}")]
     Serialization(String),
@@ -786,6 +822,61 @@ mod tests {
             duplicate_package.validate(),
             Err(NativeRegistryError::DuplicatePackageVersion { .. })
         ));
+    }
+
+    #[test]
+    fn publication_family_cardinality_and_meta_coverage_fail_closed() {
+        let mut multiple_portable = record();
+        multiple_portable.publications.extend([
+            publication(
+                "@fiducia/core-portable",
+                NativePublicationKind::Portable,
+                None,
+                'd',
+            ),
+            publication(
+                "@fiducia/core-portable-extra",
+                NativePublicationKind::Portable,
+                None,
+                'e',
+            ),
+        ]);
+        assert!(matches!(
+            multiple_portable.validate(),
+            Err(NativeRegistryError::MultiplePortablePackages)
+        ));
+
+        let mut empty_meta = record();
+        empty_meta
+            .publications
+            .iter_mut()
+            .find(|publication| publication.kind == NativePublicationKind::Meta)
+            .unwrap()
+            .platform_packages
+            .clear();
+        assert!(matches!(
+            empty_meta.validate(),
+            Err(NativeRegistryError::MetaPackageRequiresPlatformSelections { .. })
+        ));
+
+        let mut incomplete_meta = record();
+        incomplete_meta
+            .publications
+            .iter_mut()
+            .find(|publication| publication.kind == NativePublicationKind::Meta)
+            .unwrap()
+            .platform_packages
+            .pop();
+        assert!(matches!(
+            incomplete_meta.validate(),
+            Err(NativeRegistryError::UnselectedPlatformPublication { .. })
+        ));
+
+        let mut platform_only = record();
+        platform_only
+            .publications
+            .retain(|publication| publication.kind == NativePublicationKind::Platform);
+        assert!(platform_only.validate().is_ok());
     }
 
     #[test]
