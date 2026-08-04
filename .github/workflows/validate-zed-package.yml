@@ -56,7 +56,7 @@ jobs:
           publish = false
 
           [dependencies]
-          zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "117c1a1e7aff96448fbf35da77f90f7d40dcc488" }
+          zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "2082012d1903783a89200c3bd44d2659a6daf872" }
           TOML
           cat > "$validator/src/main.rs" <<'RUST'
           use std::{env, fs, path::PathBuf, process};
