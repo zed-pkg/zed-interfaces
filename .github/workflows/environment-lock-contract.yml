@@ -1,0 +1,113 @@
+name: environment lock contract
+
+on:
+  push:
+    branches:
+      - agent/environment-lock-v1-current-main
+      - main
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - src/environment_lock.rs
+      - src/lib.rs
+      - examples/generate_schemas.rs
+      - schemas/environment-lock-v1.json
+      - .github/workflows/environment-lock-contract.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - src/environment_lock.rs
+      - src/lib.rs
+      - examples/generate_schemas.rs
+      - schemas/environment-lock-v1.json
+      - .github/workflows/environment-lock-contract.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: environment-lock-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-contract:
+    name: Rust contract / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - windows-2025
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+          components: rustfmt,clippy
+
+      - name: Verify formatting, tests, docs, and lint
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked environment_lock
+          cargo test --locked
+          cargo test --locked --doc
+          cargo clippy --locked --all-targets -- -D warnings
+
+  generated-schema:
+    name: Generated schema is deterministic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+
+      - name: Regenerate twice and reject drift
+        run: |
+          set -euo pipefail
+          cargo run --locked --example generate_schemas
+          cp schemas/environment-lock-v1.json /tmp/environment-lock-v1.json
+          cargo run --locked --example generate_schemas
+          cmp /tmp/environment-lock-v1.json schemas/environment-lock-v1.json
+          git diff --exit-code -- \
+            schemas/environment-plan-v1.json \
+            schemas/environment-plan.json \
+            schemas/environment-lock-v1.json
+
+  gate:
+    name: All EnvironmentLock checks passed
+    if: always()
+    needs:
+      - rust-contract
+      - generated-schema
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Enforce aggregate result
+        env:
+          RUST_RESULT: ${{ needs.rust-contract.result }}
+          SCHEMA_RESULT: ${{ needs.generated-schema.result }}
+        run: |
+          set -euo pipefail
+          printf 'rust=%s schema=%s\n' "$RUST_RESULT" "$SCHEMA_RESULT"
+          test "$RUST_RESULT" = success
+          test "$SCHEMA_RESULT" = success
