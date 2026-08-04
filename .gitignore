@@ -1,2 +1,6 @@
 /target
 .cache/
+
+# zed-pkg local state
+/zed_modules/
+/.zed/pack/

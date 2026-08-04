@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -55,6 +55,25 @@ pub struct Manifest {
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub build_dependencies: BTreeMap<String, String>,
+    /// Host-native packages required before this package's install hooks or
+    /// build step can run. Keys are supported package-manager names (`apt`,
+    /// `apk`, `brew`, `nix`, ...); values are package specs passed as argv,
+    /// never interpolated into a shell command. Installing these prerequisites
+    /// is an explicitly consented zed operation, separate from build-hook
+    /// consent.
+    #[serde(
+        default,
+        rename = "native-dependencies",
+        alias = "native_dependencies",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub native_dependencies: NativeDependencies,
+    /// Package-local lifecycle hooks. They run in a writable staging copy,
+    /// never in the immutable source store and never in the consumer project.
+    /// `pre-install` runs before `[build]`; `post-install` runs after it and
+    /// before the finalized artifact is promoted to the platform cache.
+    #[serde(default, skip_serializing_if = "InstallHooksSection::is_empty")]
+    pub hooks: InstallHooksSection,
     /// This package's own post-extract build step (compiled extensions,
     /// codegen), run when the package ships source that needs compiling.
     /// Builds run in an isolated staging copy — never inside the immutable
@@ -285,6 +304,19 @@ pub struct TargetSection {
     /// Optional deterministic Nix export intent for this isolated target.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nix: Option<NixExportSection>,
+    /// Native prerequisites added by this target. Entries merge with the
+    /// package-level `[native-dependencies]` table when this target is selected.
+    #[serde(
+        default,
+        rename = "native-dependencies",
+        alias = "native_dependencies",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub native_dependencies: NativeDependencies,
+    /// Target-specific lifecycle hooks, appended after package-level hooks in
+    /// each phase when the target is selected.
+    #[serde(default, skip_serializing_if = "InstallHooksSection::is_empty")]
+    pub hooks: InstallHooksSection,
     /// Override the ecosystem this target publishes into. Omit it (the normal
     /// case) and it is derived from the target key via [`Language::ecosystem`].
     /// Declare it when the key does not determine consumption — a `rust-wasm`
@@ -618,6 +650,146 @@ fn is_valid_go_module(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '/' | '-' | '_' | '~'))
 }
 
+/// Supported host package managers for `[native-dependencies]`.
+///
+/// The manifest names *packages*, never an installer command. zed maps these
+/// stable identifiers to fixed argv templates and rejects unknown keys, so a
+/// package cannot disguise arbitrary privileged shell execution as dependency
+/// installation.
+pub const NATIVE_PACKAGE_MANAGERS: &[&str] = &[
+    "apk", "apt", "brew", "choco", "dnf", "nix", "pacman", "pkg", "port", "scoop", "winget",
+    "xbps", "yum", "zypper",
+];
+
+/// Manager name to package specs. A manager may intentionally map to an empty
+/// list to state that it is supported without adding target-specific packages.
+pub type NativeDependencies = BTreeMap<String, Vec<String>>;
+
+/// Package-local lifecycle hooks. Commands are author-controlled shell code,
+/// but execution is separately consented by the installer and occurs only in
+/// a writable staging tree.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct InstallHooksSection {
+    #[serde(
+        rename = "pre-install",
+        alias = "pre_install",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub pre_install: Vec<String>,
+    #[serde(
+        rename = "post-install",
+        alias = "post_install",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub post_install: Vec<String>,
+}
+
+impl InstallHooksSection {
+    pub fn is_empty(&self) -> bool {
+        self.pre_install.is_empty() && self.post_install.is_empty()
+    }
+
+    /// Package hooks run before target-specific hooks in each phase.
+    pub fn merged(&self, target: &Self) -> Self {
+        let mut merged = self.clone();
+        merged
+            .pre_install
+            .extend(target.pre_install.iter().cloned());
+        merged
+            .post_install
+            .extend(target.post_install.iter().cloned());
+        merged
+    }
+}
+
+fn merged_native_dependencies(
+    package: &NativeDependencies,
+    target: &NativeDependencies,
+) -> NativeDependencies {
+    let mut merged = package.clone();
+    for (manager, packages) in target {
+        let existing = merged.entry(manager.clone()).or_default();
+        let mut seen: BTreeSet<String> = existing.iter().cloned().collect();
+        for package in packages {
+            if seen.insert(package.clone()) {
+                existing.push(package.clone());
+            }
+        }
+    }
+    merged
+}
+
+fn validate_native_dependencies(
+    dependencies: &NativeDependencies,
+    context: &str,
+) -> Result<(), ManifestError> {
+    for (manager, packages) in dependencies {
+        if !NATIVE_PACKAGE_MANAGERS.contains(&manager.as_str()) {
+            return Err(ManifestError::InvalidNativeDependency(
+                context.to_string(),
+                format!(
+                    "package manager `{manager}` is unsupported; expected one of {}",
+                    NATIVE_PACKAGE_MANAGERS.join(", ")
+                ),
+            ));
+        }
+        let mut seen = BTreeSet::new();
+        for package in packages {
+            if package.trim() != package
+                || package.is_empty()
+                || package.len() > 256
+                || package.starts_with('-')
+                || package.chars().any(char::is_whitespace)
+                || package.chars().any(char::is_control)
+            {
+                return Err(ManifestError::InvalidNativeDependency(
+                    context.to_string(),
+                    format!(
+                        "invalid `{manager}` package spec `{package}`; specs must be 1-256 non-whitespace, non-control characters and cannot begin with `-`"
+                    ),
+                ));
+            }
+            if !seen.insert(package) {
+                return Err(ManifestError::InvalidNativeDependency(
+                    context.to_string(),
+                    format!("duplicate `{manager}` package spec `{package}`"),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_install_hooks(hooks: &InstallHooksSection, context: &str) -> Result<(), ManifestError> {
+    for (phase, commands) in [
+        ("pre-install", &hooks.pre_install),
+        ("post-install", &hooks.post_install),
+    ] {
+        for (index, command) in commands.iter().enumerate() {
+            if command.trim().is_empty() {
+                return Err(ManifestError::InvalidInstallHook(
+                    context.to_string(),
+                    format!("{phase} command {} must not be empty", index + 1),
+                ));
+            }
+            if command.contains('\0') {
+                return Err(ManifestError::InvalidInstallHook(
+                    context.to_string(),
+                    format!("{phase} command {} contains NUL", index + 1),
+                ));
+            }
+            if command.len() > 32 * 1024 {
+                return Err(ManifestError::InvalidInstallHook(
+                    context.to_string(),
+                    format!("{phase} command {} exceeds 32768 bytes", index + 1),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// A post-extract build step. Because compiled output is OS/arch-specific,
 /// zed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the
 /// source and caches the result in a build cache keyed by
@@ -677,6 +849,10 @@ pub enum ManifestError {
     InvalidBin(String, String),
     #[error("invalid build section: {0}")]
     InvalidBuild(String),
+    #[error("invalid native dependency declaration for `{0}`: {1}")]
+    InvalidNativeDependency(String, String),
+    #[error("invalid install hook declaration for `{0}`: {1}")]
+    InvalidInstallHook(String, String),
     #[error("invalid workspace member pattern `{0}`")]
     InvalidWorkspaceMember(String),
     #[error("invalid install dir `{0}`: {1}")]
@@ -931,6 +1107,8 @@ impl Manifest {
             })?;
             nix_attributes.insert(nix.resolved_attribute(&self.package.name), "repository");
         }
+        validate_native_dependencies(&self.native_dependencies, "package")?;
+        validate_install_hooks(&self.hooks, "package")?;
         for (name, target) in &self.targets {
             if !is_target_name(name) {
                 return Err(ManifestError::InvalidTarget(
@@ -1006,6 +1184,8 @@ impl Manifest {
                     ),
                 ));
             }
+            validate_native_dependencies(&target.native_dependencies, &format!("target `{name}`"))?;
+            validate_install_hooks(&target.hooks, &format!("target `{name}`"))?;
             if let Some(native) = &target.native {
                 if target.dir == "." {
                     return Err(ManifestError::InvalidNativeRoute(
@@ -1279,6 +1459,9 @@ impl Manifest {
         // the manifest inside the Zed artifact remains self-describing.
         derived.publish.native = section.native.clone();
         derived.publish.nix = section.nix.clone();
+        derived.native_dependencies =
+            merged_native_dependencies(&self.native_dependencies, &section.native_dependencies);
+        derived.hooks = self.hooks.merged(&section.hooks);
         derived.targets = BTreeMap::new();
         derived.workspace = None;
         // The consumer-facing wiring for this ecosystem.
@@ -1372,6 +1555,69 @@ impl Manifest {
                 ))
             }
         }
+    }
+
+    /// Native prerequisites for the selected polyglot target. Package-level
+    /// entries are inherited; target entries append in declaration order and
+    /// are deterministically de-duplicated per manager.
+    pub fn effective_native_dependencies(
+        &self,
+        requested: Option<&str>,
+    ) -> Result<NativeDependencies, ManifestError> {
+        let Some(requested) = requested else {
+            return Ok(self.native_dependencies.clone());
+        };
+        if self.targets.is_empty() {
+            return Ok(self.native_dependencies.clone());
+        }
+        let key = self.resolve_target_key(requested).ok_or_else(|| {
+            let mut available: Vec<&str> = self.targets.keys().map(String::as_str).collect();
+            available.sort_unstable();
+            ManifestError::InvalidTarget(
+                requested.to_string(),
+                format!(
+                    "package `{}/{}` publishes no such target; it provides: {}",
+                    self.package.org,
+                    self.package.name,
+                    available.join(", ")
+                ),
+            )
+        })?;
+        let target = self.targets.get(key).expect("resolved target exists");
+        Ok(merged_native_dependencies(
+            &self.native_dependencies,
+            &target.native_dependencies,
+        ))
+    }
+
+    /// Lifecycle hooks for the selected target. Package hooks run before
+    /// target hooks in each phase.
+    pub fn effective_install_hooks(
+        &self,
+        requested: Option<&str>,
+    ) -> Result<InstallHooksSection, ManifestError> {
+        let Some(requested) = requested else {
+            return Ok(self.hooks.clone());
+        };
+        if self.targets.is_empty() {
+            return Ok(self.hooks.clone());
+        }
+        let key = self.resolve_target_key(requested).ok_or_else(|| {
+            let mut available: Vec<&str> = self.targets.keys().map(String::as_str).collect();
+            available.sort_unstable();
+            ManifestError::InvalidTarget(
+                requested.to_string(),
+                format!(
+                    "package `{}/{}` publishes no such target; it provides: {}",
+                    self.package.org,
+                    self.package.name,
+                    available.join(", ")
+                ),
+            )
+        })?;
+        Ok(self
+            .hooks
+            .merged(&self.targets.get(key).expect("resolved target exists").hooks))
     }
 
     /// True when this manifest declares a non-empty monorepo workspace.

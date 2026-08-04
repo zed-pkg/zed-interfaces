@@ -1,0 +1,375 @@
+name: validate-zed-package
+
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - ".zpkg.toml"
+      - ".zpkg.lock"
+      - ".gitignore"
+      - ".github/workflows/validate-zed-package.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".zpkg.toml"
+      - ".zpkg.lock"
+      - ".gitignore"
+      - ".github/workflows/validate-zed-package.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-zed-package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate and pack canonical package contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out package
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+
+      - name: Validate and pack with pinned Zed libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          validator="$RUNNER_TEMP/zed-package-validator"
+          mkdir -p "$validator/src"
+          cat > "$validator/Cargo.toml" <<'TOML'
+          [package]
+          name = "zed-package-validator"
+          version = "0.0.0"
+          edition = "2024"
+          publish = false
+
+          [dependencies]
+          flate2 = "1"
+          tar = "0.4"
+          tempfile = "3"
+          zed-cli = { git = "https://github.com/zed-pkg/zed-cli.git", rev = "0c1931bcdc2065279aea06abe9d66a0eb9e03315" }
+          zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "c2e049006453c26ca8ca291783f681fce75cb01f" }
+          TOML
+          cat > "$validator/src/main.rs" <<'RUST'
+          use std::{
+              collections::{BTreeMap, BTreeSet},
+              env, fs,
+              path::{Path, PathBuf},
+              process,
+          };
+
+          use flate2::read::GzDecoder;
+          use zed_interfaces::{Lockfile, Manifest};
+
+          fn fail(message: impl std::fmt::Display) -> ! {
+              eprintln!("zed-package validation failed: {message}");
+              process::exit(1);
+          }
+
+          fn archive_files(path: &Path) -> BTreeSet<String> {
+              let file = fs::File::open(path)
+                  .unwrap_or_else(|error| fail(format!("opening {}: {error}", path.display())));
+              let mut archive = tar::Archive::new(GzDecoder::new(file));
+              archive
+                  .entries()
+                  .unwrap_or_else(|error| {
+                      fail(format!("reading archive entries from {}: {error}", path.display()))
+                  })
+                  .map(|entry| {
+                      let entry = entry.unwrap_or_else(|error| {
+                          fail(format!("reading archive entry from {}: {error}", path.display()))
+                      });
+                      entry
+                          .path()
+                          .unwrap_or_else(|error| {
+                              fail(format!("reading archive path from {}: {error}", path.display()))
+                          })
+                          .to_string_lossy()
+                          .to_string()
+                  })
+                  .collect()
+          }
+
+          fn validate_artifact(
+              root_manifest: &Manifest,
+              package: &zed_cli::pack::PackagedTarget,
+              expected_name: &str,
+              output: &Path,
+          ) {
+              if package.manifest.package.org != root_manifest.package.org {
+                  fail(format!(
+                      "packed package `{expected_name}` changed org from `{}` to `{}`",
+                      root_manifest.package.org, package.manifest.package.org
+                  ));
+              }
+              if package.manifest.package.version != root_manifest.package.version {
+                  fail(format!(
+                      "packed package `{expected_name}` changed version from `{}` to `{}`",
+                      root_manifest.package.version, package.manifest.package.version
+                  ));
+              }
+              if package.manifest.package.name != expected_name {
+                  fail(format!(
+                      "packed package name `{}` does not match expected `{expected_name}`",
+                      package.manifest.package.name
+                  ));
+              }
+
+              let expected_file = format!(
+                  "{}-{}-{}.tar.gz",
+                  root_manifest.package.org, expected_name, root_manifest.package.version
+              );
+              let actual_file = package
+                  .packed
+                  .path
+                  .file_name()
+                  .and_then(|name| name.to_str())
+                  .unwrap_or_else(|| fail("packed artifact has no UTF-8 file name"));
+              if actual_file != expected_file {
+                  fail(format!(
+                      "artifact `{actual_file}` does not match expected `{expected_file}`"
+                  ));
+              }
+              if package.packed.path.parent() != Some(output) {
+                  fail(format!(
+                      "artifact {} escaped output directory {}",
+                      package.packed.path.display(),
+                      output.display()
+                  ));
+              }
+              if package.packed.size == 0 || package.packed.file_count == 0 {
+                  fail(format!("artifact `{actual_file}` is empty"));
+              }
+              if package.packed.sha256.len() != 64
+                  || !package
+                      .packed
+                      .sha256
+                      .bytes()
+                      .all(|byte| byte.is_ascii_hexdigit())
+              {
+                  fail(format!("artifact `{actual_file}` has an invalid sha256"));
+              }
+
+              let files = archive_files(&package.packed.path);
+              if !files.contains("pkg/.zpkg.toml") {
+                  fail(format!("artifact `{actual_file}` is missing pkg/.zpkg.toml"));
+              }
+              for forbidden in [
+                  "pkg/.git/",
+                  "pkg/.github/",
+                  "pkg/.zed/pack/",
+                  "pkg/.zpkg-staging/",
+                  "pkg/zed_modules/",
+              ] {
+                  if files.iter().any(|path| path.starts_with(forbidden)) {
+                      fail(format!(
+                          "artifact `{actual_file}` contains forbidden path prefix `{forbidden}`"
+                      ));
+                  }
+              }
+          }
+
+          fn main() {
+              let root = env::args_os()
+                  .nth(1)
+                  .map(PathBuf::from)
+                  .unwrap_or_else(|| fail("missing repository root argument"));
+              let manifest_text = fs::read_to_string(root.join(".zpkg.toml"))
+                  .unwrap_or_else(|error| fail(format!("reading .zpkg.toml: {error}")));
+              let lock_text = fs::read_to_string(root.join(".zpkg.lock"))
+                  .unwrap_or_else(|error| fail(format!("reading .zpkg.lock: {error}")));
+
+              let manifest = Manifest::parse(&manifest_text)
+                  .unwrap_or_else(|error| fail(format!("parsing .zpkg.toml: {error}")));
+              let lock = Lockfile::parse(&lock_text)
+                  .unwrap_or_else(|error| fail(format!("parsing .zpkg.lock: {error}")));
+
+              if lock.version != Lockfile::CURRENT_VERSION {
+                  fail(format!(
+                      "lock version {} is not current version {}",
+                      lock.version,
+                      Lockfile::CURRENT_VERSION
+                  ));
+              }
+
+              let repository = env::var("GITHUB_REPOSITORY")
+                  .unwrap_or_else(|error| fail(format!("reading GITHUB_REPOSITORY: {error}")));
+              let (_, expected_name) = repository
+                  .split_once('/')
+                  .unwrap_or_else(|| fail("GITHUB_REPOSITORY is not owner/name"));
+              if manifest.package.name != expected_name {
+                  fail(format!(
+                      "package name `{}` does not match repository `{expected_name}`",
+                      manifest.package.name
+                  ));
+              }
+
+              let expected_url = format!("https://github.com/{repository}");
+              let actual_url = manifest
+                  .package
+                  .repository
+                  .url
+                  .strip_suffix(".git")
+                  .unwrap_or(&manifest.package.repository.url);
+              if !actual_url.eq_ignore_ascii_case(&expected_url) {
+                  fail(format!(
+                      "repository URL `{actual_url}` does not match `{expected_url}`"
+                  ));
+              }
+
+              for dependency in manifest.dependencies.keys() {
+                  let (org, name) = dependency
+                      .split_once('/')
+                      .unwrap_or_else(|| fail(format!("invalid dependency key `{dependency}`")));
+                  if lock.find(org, name).is_none() {
+                      fail(format!("direct dependency `{dependency}` is absent from .zpkg.lock"));
+                  }
+              }
+
+              let mut repository_targets = Vec::new();
+              for (name, target) in &manifest.targets {
+                  let path = root.join(&target.dir);
+                  if !path.is_dir() {
+                      fail(format!(
+                          "target `{name}` points at missing or non-directory path `{}`",
+                          target.dir
+                      ));
+                  }
+                  if target.dir == "." {
+                      repository_targets.push(name.as_str());
+                  }
+              }
+
+              if !manifest.targets.is_empty() {
+                  if repository_targets.len() != 1 {
+                      fail(format!(
+                          "targeted packages must declare exactly one canonical `[targets.repository]` with `dir = \".\"`; found {} root target(s)",
+                          repository_targets.len()
+                      ));
+                  }
+                  if repository_targets[0] != "repository" {
+                      fail(format!(
+                          "canonical root target must be named `repository`, found `{}`",
+                          repository_targets[0]
+                      ));
+                  }
+              }
+
+              let ignore = fs::read_to_string(root.join(".gitignore"))
+                  .unwrap_or_else(|error| fail(format!("reading .gitignore: {error}")));
+              for required in ["/zed_modules/", "/.zed/pack/"] {
+                  if !ignore.lines().any(|line| line.trim() == required) {
+                      fail(format!(".gitignore is missing `{required}`"));
+                  }
+              }
+
+              for required in [".env", ".env.*", ".zed/**"] {
+                  if !manifest.publish.exclude.iter().any(|entry| entry == required) {
+                      fail(format!("publish.exclude is missing `{required}`"));
+                  }
+              }
+
+              let output = tempfile::tempdir()
+                  .unwrap_or_else(|error| fail(format!("creating artifact output: {error}")));
+              let packages = zed_cli::pack::pack_all(&root, &manifest, Some(output.path()))
+                  .unwrap_or_else(|error| fail(format!("packing repository: {error:#}")));
+
+              let mut expected_packages = BTreeMap::<String, String>::new();
+              if manifest.targets.is_empty() {
+                  expected_packages.insert(String::new(), manifest.package.name.clone());
+              } else {
+                  for (target, derived_name) in manifest.target_package_names() {
+                      let section = manifest.targets.get(&target).unwrap_or_else(|| {
+                          fail(format!("target `{target}` disappeared after parsing"))
+                      });
+                      let package_name = if section.dir == "." {
+                          manifest.package.name.clone()
+                      } else {
+                          derived_name
+                      };
+                      expected_packages.insert(target, package_name);
+                  }
+              }
+
+              if packages.len() != expected_packages.len() {
+                  fail(format!(
+                      "packing emitted {} package(s), expected {}",
+                      packages.len(),
+                      expected_packages.len()
+                  ));
+              }
+
+              let mut emitted_names = BTreeSet::new();
+              for package in &packages {
+                  let target = package.target.as_deref().unwrap_or("");
+                  let expected_package_name = expected_packages.remove(target).unwrap_or_else(|| {
+                      fail(format!("packing emitted unexpected target `{target}`"))
+                  });
+                  if !emitted_names.insert(expected_package_name.clone()) {
+                      fail(format!(
+                          "packing emitted duplicate package name `{expected_package_name}`"
+                      ));
+                  }
+                  validate_artifact(
+                      &manifest,
+                      package,
+                      &expected_package_name,
+                      output.path(),
+                  );
+              }
+              if !expected_packages.is_empty() {
+                  fail(format!(
+                      "packing omitted target(s): {}",
+                      expected_packages.keys().cloned().collect::<Vec<_>>().join(", ")
+                  ));
+              }
+
+              println!(
+                  "validated and packed {}/{}@{} into {} artifact(s), with {} canonical root target(s) and {} locked package(s)",
+                  manifest.package.org,
+                  manifest.package.name,
+                  manifest.package.version,
+                  packages.len(),
+                  repository_targets.len(),
+                  lock.packages.len()
+              );
+          }
+          RUST
+          cargo generate-lockfile --manifest-path "$validator/Cargo.toml"
+          cargo run --quiet --locked --manifest-path "$validator/Cargo.toml" -- "$GITHUB_WORKSPACE"
+
+      - name: Enforce read-only immutable workflow references
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          wrapper = Path(".github/workflows/zed-package.yml")
+          central = Path(".github/workflows/validate-zed-package.yml")
+          workflow = wrapper if wrapper.exists() else central
+          text = workflow.read_text()
+          assert "permissions:\n  contents: read" in text, workflow
+          forbidden_trigger = "pull_request" + "_target:"
+          assert forbidden_trigger not in text, workflow
+          actions = re.findall(r"^\s*uses:\s*(\S+)\s*$", text, re.MULTILINE)
+          assert actions, workflow
+          for action in actions:
+              assert re.search(r"@[0-9a-f]{40}$", action), action
+          PY
+
+      - name: Reject whitespace errors
+        run: git diff --check
