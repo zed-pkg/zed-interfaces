@@ -31,3 +31,8 @@ native package names, zero-byte artifacts, uppercase or malformed digests, and
 unsupported schema versions. `canonical_json_bytes()` validates first and then
 sorts publications and platform edges for deterministic signing and lockfile
 provenance.
+
+The contract is transport-neutral. It performs no npm, Cargo-registry, OCI, or
+Zed-registry operation and consumes no credential. Independent certification in
+`zed-pkg-test/zed-pkg-e2e` regenerates the schema, compiles an external consumer
+offline, and pins the exact `zed-interfaces` product commit before promotion.
