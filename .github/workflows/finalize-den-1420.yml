@@ -1,0 +1,88 @@
+name: finalize DEN-1420 native registry product
+
+on:
+  push:
+    branches:
+      - agent/den-1420-native-registry-product
+    paths:
+      - .github/den-1420-finalize-trigger
+      - .github/finalize-den-1420.py
+      - .github/workflows/finalize-den-1420.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-den-1420-native-registry-product
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact product branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: agent/den-1420-native-registry-product
+          fetch-depth: 0
+          persist-credentials: true
+          show-progress: false
+
+      - name: Install Rust quality components
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+          rustc --version --verbose
+          cargo --version --verbose
+
+      - name: Apply topology repair and validate product
+        run: |
+          set -euo pipefail
+          python3 .github/finalize-den-1420.py
+          cargo fmt --all
+          cargo fmt --all --check
+          cargo test --locked --all-targets
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo run --locked --example generate_schemas
+          git diff --check
+          git diff --exit-code -- schemas/native-registry-adapter-record.json
+
+      - name: Verify only reviewed paths changed
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+
+          allowed = {
+              "docs/native-registry-contract.md",
+              "src/native_registry.rs",
+          }
+          changed = set(
+              subprocess.check_output(["git", "diff", "--name-only"], text=True).splitlines()
+          )
+          unexpected = changed - allowed
+          if unexpected:
+              raise SystemExit(f"unexpected formatted paths: {sorted(unexpected)}")
+          if changed != allowed:
+              raise SystemExit(f"expected both topology paths, found: {sorted(changed)}")
+          PY
+
+      - name: Remove temporary finalizer and push ordinary product source
+        run: |
+          set -euo pipefail
+          rm -f \
+            .github/den-1420-finalize-trigger \
+            .github/finalize-den-1420.py \
+            .github/workflows/finalize-den-1420.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix(DEN-1420): enforce native publication family topology'
+          git push origin HEAD:agent/den-1420-native-registry-product
