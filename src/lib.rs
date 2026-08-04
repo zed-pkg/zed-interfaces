@@ -14,6 +14,7 @@ pub mod excludes;
 pub mod language;
 pub mod lockfile;
 pub mod manifest;
+pub mod native_dependency;
 pub mod native_registry;
 pub mod nix;
 pub mod nix_plan;
@@ -43,6 +44,10 @@ pub use environment_v2::{
 pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile, LockfileError};
 pub use manifest::{Manifest, ManifestError, NixExportRoute};
+pub use native_dependency::{
+    NATIVE_DEPENDENCY_LOCK_SCHEMA_V1, NativeDependencyError, NativeDependencyLock,
+    NativeVersionCandidate, NativeVersionRequirement,
+};
 pub use native_registry::{
     NATIVE_REGISTRY_ADAPTER_SCHEMA_V1, NativeArtifact, NativePackageIdentity, NativePlatform,
     NativePlatformPackage, NativePublication, NativePublicationKind, NativeRegistry,
