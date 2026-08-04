@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NixExportPlan",
+  "description": "Canonical, credential-free plan for one Zed → Nix package export.",
+  "type": "object",
+  "properties": {
+    "bins": {
+      "description": "Command name → artifact-relative executable path.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "dependencies": {
+      "description": "Contract v1 requires this list to be empty.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PlannedNixExportDependency"
+      }
+    },
+    "intent": {
+      "$ref": "#/$defs/ResolvedNixExportIntent"
+    },
+    "package": {
+      "$ref": "#/$defs/NixPackageIdentity"
+    },
+    "package_class": {
+      "$ref": "#/$defs/NixExportPackageClass"
+    },
+    "policy": {
+      "$ref": "#/$defs/NixPolicyEvidence"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/PlannedZedExportArtifact"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "package",
+    "package_class",
+    "intent",
+    "source",
+    "policy"
+  ],
+  "$defs": {
+    "ArtifactFormat": {
+      "description": "On-the-wire formats for published package artifacts.",
+      "type": "string",
+      "enum": [
+        "tar.gz",
+        "zip"
+      ]
+    },
+    "NixBuilderNetwork": {
+      "type": "string",
+      "enum": [
+        "disabled",
+        "preparation-only",
+        "allowed"
+      ]
+    },
+    "NixExportMode": {
+      "oneOf": [
+        {
+          "description": "Export the exact immutable Zed artifact. Source-builder translation is\nintentionally not inferred from native manifests in contract v1.",
+          "type": "string",
+          "const": "artifact"
+        }
+      ]
+    },
+    "NixExportPackageClass": {
+      "oneOf": [
+        {
+          "description": "Immutable package data with no executable entry point.",
+          "type": "string",
+          "const": "data"
+        },
+        {
+          "description": "Executables already present in the immutable Zed artifact. Contract v1\nnever infers or executes a source build to create them.",
+          "type": "string",
+          "const": "prebuilt-bin"
+        }
+      ]
+    },
+    "NixInteropArtifact": {
+      "description": "Immutable Zed artifact identity used by both a Zed-origin source and the\ntranslated artifact produced by Nix → Zed sealing.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/ArtifactFormat",
+          "default": "tar.gz"
+        },
+        "sha256": {
+          "description": "Lowercase hexadecimal SHA-256 of the exact archive bytes.",
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sha256",
+        "size"
+      ]
+    },
+    "NixPackageIdentity": {
+      "description": "Public Zed identity chosen for either translation direction. A Nix\nattribute is a selector and never silently claims a Zed organization.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "org",
+        "name",
+        "version"
+      ]
+    },
+    "NixPolicyEvidence": {
+      "description": "Evidence that the translation was planned/realized under a named policy.\nThis records policy state; it does not grant credentials or execute Nix.",
+      "type": "object",
+      "properties": {
+        "builder_network": {
+          "$ref": "#/$defs/NixBuilderNetwork"
+        },
+        "dirty_source": {
+          "type": "boolean"
+        },
+        "import_from_derivation": {
+          "type": "boolean"
+        },
+        "profile": {
+          "$ref": "#/$defs/NixPolicyProfile"
+        },
+        "publishable": {
+          "type": "boolean"
+        },
+        "pure_evaluation": {
+          "type": "boolean"
+        },
+        "sandbox_required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "profile",
+        "pure_evaluation",
+        "import_from_derivation",
+        "sandbox_required",
+        "builder_network",
+        "dirty_source",
+        "publishable"
+      ]
+    },
+    "NixPolicyProfile": {
+      "type": "string",
+      "enum": [
+        "strict-v1",
+        "development"
+      ]
+    },
+    "PlannedNixExportDependency": {
+      "description": "Reserved typed dependency edge for later plan revisions.\n\nStrict v1 plans must keep `dependencies` empty. Keeping the typed field in\nthe wire contract prevents a later implementation from smuggling an opaque\nnative package-manager graph into otherwise valid-looking plan JSON.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "org",
+        "name",
+        "version",
+        "sha256"
+      ]
+    },
+    "PlannedZedExportArtifact": {
+      "description": "Exact immutable Zed source selected by planning.",
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/NixInteropArtifact"
+        },
+        "file_name": {
+          "description": "Safe artifact basename, e.g. `acme-tool-1.2.3.tar.gz`.",
+          "type": "string"
+        },
+        "lock_sha256": {
+          "description": "SHA-256 of exact `.zpkg.lock` bytes.",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "description": "SHA-256 of exact `.zpkg.toml` bytes, including comments and formatting.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "file_name",
+        "artifact",
+        "manifest_sha256",
+        "lock_sha256"
+      ]
+    },
+    "ResolvedNixExportIntent": {
+      "description": "Fully resolved author intent. Unlike manifest intent, the package attribute\nis no longer optional and non-semantic arrays are canonicalized.",
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/NixExportMode"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "systems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "attribute",
+        "systems",
+        "outputs"
+      ]
+    }
+  }
+}
