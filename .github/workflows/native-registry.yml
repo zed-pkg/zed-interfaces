@@ -50,6 +50,13 @@ jobs:
           persist-credentials: false
           show-progress: false
 
+      - name: Normalize generated-schema line endings
+        run: |
+          set -euo pipefail
+          git config core.autocrlf false
+          git config core.eol lf
+          git reset --hard HEAD
+
       - name: Install Rust quality components
         run: |
           set -euo pipefail
