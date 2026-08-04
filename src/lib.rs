@@ -14,6 +14,7 @@ pub mod excludes;
 pub mod language;
 pub mod lockfile;
 pub mod manifest;
+pub mod native_registry;
 pub mod nix;
 pub mod nix_plan;
 pub mod oci;
@@ -44,6 +45,12 @@ pub use lockfile::{LockedPackage, Lockfile, LockfileError};
 pub use manifest::{
     InstallHooksSection, Manifest, ManifestError, NATIVE_PACKAGE_MANAGERS, NativeDependencies,
     NixExportRoute,
+};
+pub use native_registry::{
+    NATIVE_REGISTRY_ADAPTER_SCHEMA_V1, NativeArtifact, NativePackageIdentity, NativePlatform,
+    NativePlatformPackage, NativePublication, NativePublicationKind, NativeRegistry,
+    NativeRegistryAdapterRecord, NativeRegistryError, ZedNativePackageIdentity,
+    native_versions_collide, semver_precedence_identity,
 };
 pub use nix::{
     NIX_ADAPTER_SCHEMA_V1, NixAdapterRecord, NixBuilderNetwork, NixExportMode, NixExportSection,
