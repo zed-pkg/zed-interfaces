@@ -175,7 +175,8 @@ jobs:
           workflow = wrapper if wrapper.exists() else central
           text = workflow.read_text()
           assert "permissions:\n  contents: read" in text, workflow
-          assert "pull_request_target:" not in text, workflow
+          forbidden_trigger = "pull_request" + "_target:"
+          assert forbidden_trigger not in text, workflow
           actions = re.findall(r"^\s*uses:\s*(\S+)\s*$", text, re.MULTILINE)
           assert actions, workflow
           for action in actions:
