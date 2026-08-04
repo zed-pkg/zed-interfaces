@@ -1,0 +1,429 @@
+name: materialize hardened EnvironmentLock on current main
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/materialize-environment-lock-current-main.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-environment-lock-current-main
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent/environment-lock-v1-current-main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out current-main branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: agent/environment-lock-v1-current-main
+          fetch-depth: 0
+          persist-credentials: true
+          show-progress: false
+
+      - name: Fetch reviewed lock contract
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin agent/environment-lock-v1-rebased
+          git show origin/agent/environment-lock-v1-rebased:src/environment_lock.rs \
+            > src/environment_lock.rs
+
+      - name: Compose current interfaces and harden portability
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old in text:
+                  return text.replace(old, new, 1)
+              if new not in text:
+                  raise SystemExit(f"missing source anchor for {label}")
+              return text
+
+          cargo_path = Path("Cargo.toml")
+          cargo = cargo_path.read_text()
+          if '\nhex = "0.4"\n' not in cargo:
+              cargo = cargo.replace("[dependencies]\n", "[dependencies]\nhex = \"0.4\"\n", 1)
+          if '\nsha2 = "0.10"\n' not in cargo:
+              cargo = cargo.replace(
+                  'serde_json = "1.0.151"\n',
+                  'serde_json = "1.0.151"\nsha2 = "0.10"\n',
+                  1,
+              )
+          cargo_path.write_text(cargo)
+
+          lib_path = Path("src/lib.rs")
+          lib = lib_path.read_text()
+          if "pub mod environment_lock;" not in lib:
+              lib = lib.replace(
+                  "pub mod environment;\n",
+                  "pub mod environment;\npub mod environment_lock;\n",
+                  1,
+              )
+          exports = '''pub use environment_lock::{
+              ENVIRONMENT_LOCK_SCHEMA_VERSION, EnvironmentLock, EnvironmentLockError,
+              EnvironmentLockValidationMode, LockedArtifact, LockedArtifactFormat, LockedExecutable,
+              LockedInstall, LockedPlatform, LockedSignature, LockedSource, LockedSourceKind, LockedTool,
+          };
+          '''
+          if "pub use environment_lock::{" not in lib:
+              anchor = "pub use environment_v2::{\n"
+              if anchor not in lib:
+                  raise SystemExit("environment_v2 export anchor missing")
+              lib = lib.replace(anchor, exports + anchor, 1)
+          lib_path.write_text(lib)
+
+          generator_path = Path("examples/generate_schemas.rs")
+          generator = generator_path.read_text()
+          if 'write::<zed_interfaces::EnvironmentLock>(dir, "environment-lock-v1");' not in generator:
+              anchor = '    write::<zed_interfaces::EnvironmentPlanV2>(dir, "environment-plan");\n'
+              if anchor not in generator:
+                  raise SystemExit("environment schema generator anchor missing")
+              generator = generator.replace(
+                  anchor,
+                  anchor
+                  + '    write::<zed_interfaces::EnvironmentLock>(dir, "environment-lock-v1");\n',
+                  1,
+              )
+          generator_path.write_text(generator)
+
+          source_path = Path("src/environment_lock.rs")
+          text = source_path.read_text()
+
+          old = '''    #[error("{field} must be a 64-character hexadecimal SHA-256 digest")]
+              InvalidSha256 { field: String },
+          '''
+          new = '''    #[error("{field} must be a 64-character hexadecimal SHA-256 digest")]
+              InvalidSha256 { field: String },
+
+              #[error("{field} must not contain credentials, query parameters, or fragments: `{value}`")]
+              UnsafeLocator { field: String, value: String },
+
+              #[error("tool `{tool}` source {kind:?} is incompatible with artifact format {format:?}")]
+              SourceArtifactMismatch {
+                  tool: String,
+                  kind: LockedSourceKind,
+                  format: LockedArtifactFormat,
+              },
+
+              #[error("extension value `{path}` cannot be null")]
+              NullExtension { path: String },
+          '''
+          text = replace_once(text, old, new, "new lock validation errors")
+
+          old = '''        validate_text(&format!("tool `{tool}` source locator"), &self.locator)?;
+              if let Some(revision) = &self.revision {
+          '''
+          new = '''        let locator_field = format!("tool `{tool}` source locator");
+              validate_text(&locator_field, &self.locator)?;
+              validate_source_locator(&locator_field, &self.locator, self.kind)?;
+              if let Some(revision) = &self.revision {
+          '''
+          text = replace_once(text, old, new, "source locator validation")
+
+          old = '''        if !exact {
+                  return Err(EnvironmentLockError::MutableSource {
+                      tool: tool.to_string(),
+                      kind: self.kind,
+                  });
+              }
+          '''
+          new = '''        if !exact {
+                  return Err(EnvironmentLockError::MutableSource {
+                      tool: tool.to_string(),
+                      kind: self.kind,
+                  });
+              }
+
+              let path_source = self.kind == LockedSourceKind::Path;
+              let directory_artifact = artifact.format == LockedArtifactFormat::Directory;
+              if path_source != directory_artifact
+                  || (!path_source && self.tree_sha256.is_some())
+              {
+                  return Err(EnvironmentLockError::SourceArtifactMismatch {
+                      tool: tool.to_string(),
+                      kind: self.kind,
+                      format: artifact.format,
+                  });
+              }
+          '''
+          text = replace_once(text, old, new, "source/artifact consistency")
+
+          old = '''        for (index, mirror) in self.mirrors.iter().enumerate() {
+                  validate_text(&format!("tool `{tool}` mirror {index}"), mirror)?;
+              }
+          '''
+          new = '''        for (index, mirror) in self.mirrors.iter().enumerate() {
+                  let field = format!("tool `{tool}` mirror {index}");
+                  validate_text(&field, mirror)?;
+                  validate_network_locator(&field, mirror, false)?;
+              }
+          '''
+          text = replace_once(text, old, new, "mirror validation")
+
+          old = '''        let mut names = BTreeSet::new();
+              for executable in &self.executables {
+                  validate_executable_name(tool, variant, &executable.name)?;
+                  if !names.insert(executable.name.clone()) {
+          '''
+          new = '''        let mut names = BTreeSet::new();
+              for executable in &self.executables {
+                  validate_executable_name(tool, variant, &executable.name)?;
+                  if !names.insert(portable_executable_key(&executable.name)) {
+          '''
+          text = replace_once(text, old, new, "portable executable primary collision")
+
+          old = '''                validate_executable_name(tool, variant, alias)?;
+                      if !names.insert(alias.clone()) {
+          '''
+          new = '''                validate_executable_name(tool, variant, alias)?;
+                      if !names.insert(portable_executable_key(alias)) {
+          '''
+          text = replace_once(text, old, new, "portable executable alias collision")
+
+          marker = '''fn validate_text(field: &str, value: &str) -> Result<(), EnvironmentLockError> {
+          '''
+          helpers = '''fn portable_executable_key(name: &str) -> String {
+              let lower = name.to_ascii_lowercase();
+              for suffix in [".exe", ".cmd", ".bat", ".com"] {
+                  if let Some(stem) = lower.strip_suffix(suffix)
+                      && !stem.is_empty()
+                  {
+                      return stem.to_string();
+                  }
+              }
+              lower
+          }
+
+          fn validate_source_locator(
+              field: &str,
+              value: &str,
+              kind: LockedSourceKind,
+          ) -> Result<(), EnvironmentLockError> {
+              if kind == LockedSourceKind::Path || kind == LockedSourceKind::Registry {
+                  return Ok(());
+              }
+              validate_network_locator(field, value, kind == LockedSourceKind::Vcs)
+          }
+
+          fn validate_network_locator(
+              field: &str,
+              value: &str,
+              allow_git_user: bool,
+          ) -> Result<(), EnvironmentLockError> {
+              if value.contains('?') || value.contains('#') {
+                  return Err(EnvironmentLockError::UnsafeLocator {
+                      field: field.to_string(),
+                      value: value.to_string(),
+                  });
+              }
+
+              if let Some((_, remainder)) = value.split_once("://") {
+                  let authority = remainder.split('/').next().unwrap_or(remainder);
+                  if let Some((userinfo, _)) = authority.rsplit_once('@') {
+                      let allowed = allow_git_user && userinfo == "git";
+                      if !allowed {
+                          return Err(EnvironmentLockError::UnsafeLocator {
+                              field: field.to_string(),
+                              value: value.to_string(),
+                          });
+                      }
+                  }
+              }
+              Ok(())
+          }
+
+          fn validate_text(field: &str, value: &str) -> Result<(), EnvironmentLockError> {
+          '''
+          if "fn portable_executable_key" not in text:
+              text = replace_once(text, marker, helpers, "portable/security helpers")
+
+          old = '''fn validate_extensions(
+              field: &str,
+              extensions: &BTreeMap<String, serde_json::Value>,
+          ) -> Result<(), EnvironmentLockError> {
+              for key in extensions.keys() {
+                  validate_text(&format!("{field} key"), key)?;
+              }
+              serde_json::to_vec(extensions).map_err(|error| EnvironmentLockError::JsonSerialize {
+                  message: format!("{field}: {error}"),
+              })?;
+              Ok(())
+          }
+          '''
+          new = '''fn validate_extensions(
+              field: &str,
+              extensions: &BTreeMap<String, serde_json::Value>,
+          ) -> Result<(), EnvironmentLockError> {
+              for (key, value) in extensions {
+                  validate_text(&format!("{field} key"), key)?;
+                  validate_extension_value(&format!("{field}.{key}"), value)?;
+              }
+              serde_json::to_vec(extensions).map_err(|error| EnvironmentLockError::JsonSerialize {
+                  message: format!("{field}: {error}"),
+              })?;
+              Ok(())
+          }
+
+          fn validate_extension_value(
+              path: &str,
+              value: &serde_json::Value,
+          ) -> Result<(), EnvironmentLockError> {
+              match value {
+                  serde_json::Value::Null => Err(EnvironmentLockError::NullExtension {
+                      path: path.to_string(),
+                  }),
+                  serde_json::Value::Array(values) => {
+                      for (index, value) in values.iter().enumerate() {
+                          validate_extension_value(&format!("{path}[{index}]"), value)?;
+                      }
+                      Ok(())
+                  }
+                  serde_json::Value::Object(values) => {
+                      for (key, value) in values {
+                          validate_text(&format!("{path} key"), key)?;
+                          validate_extension_value(&format!("{path}.{key}"), value)?;
+                      }
+                      Ok(())
+                  }
+                  _ => Ok(()),
+              }
+          }
+          '''
+          text = replace_once(text, old, new, "null extension validation")
+
+          test_anchor = '''    #[test]
+              fn malformed_digest_is_rejected() {
+          '''
+          tests = '''    #[test]
+              fn credential_bearing_and_signed_urls_are_rejected() {
+                  let mut credential = registry_tool("1.2.3", "x86_64-unknown-linux-gnu");
+                  credential.source = LockedSource {
+                      kind: LockedSourceKind::Http,
+                      locator: "https://user:secret@example.invalid/tool.tar.gz".to_string(),
+                      revision: None,
+                      tree_sha256: None,
+                      immutable: false,
+                      portable: false,
+                      extensions: BTreeMap::new(),
+                  };
+                  assert!(matches!(
+                      lock_with(credential).validate(EnvironmentLockValidationMode::Portable),
+                      Err(EnvironmentLockError::UnsafeLocator { .. })
+                  ));
+
+                  let mut signed = registry_tool("1.2.3", "x86_64-unknown-linux-gnu");
+                  signed.artifact.mirrors = vec![
+                      "https://example.invalid/tool.tar.gz?X-Amz-Signature=secret".to_string(),
+                  ];
+                  assert!(matches!(
+                      lock_with(signed).validate(EnvironmentLockValidationMode::Portable),
+                      Err(EnvironmentLockError::UnsafeLocator { .. })
+                  ));
+              }
+
+              #[test]
+              fn source_and_artifact_format_must_agree() {
+                  let mut local = registry_tool("1.2.3", "x86_64-unknown-linux-gnu");
+                  local.source = LockedSource {
+                      kind: LockedSourceKind::Path,
+                      locator: "vendor/tool".to_string(),
+                      revision: None,
+                      tree_sha256: Some(A.to_string()),
+                      immutable: false,
+                      portable: true,
+                      extensions: BTreeMap::new(),
+                  };
+                  assert!(matches!(
+                      lock_with(local).validate(EnvironmentLockValidationMode::Portable),
+                      Err(EnvironmentLockError::SourceArtifactMismatch { .. })
+                  ));
+
+                  let mut remote_directory = registry_tool("1.2.3", "x86_64-unknown-linux-gnu");
+                  remote_directory.artifact.format = LockedArtifactFormat::Directory;
+                  assert!(matches!(
+                      lock_with(remote_directory)
+                          .validate(EnvironmentLockValidationMode::Portable),
+                      Err(EnvironmentLockError::SourceArtifactMismatch { .. })
+                  ));
+              }
+
+              #[test]
+              fn executable_collisions_follow_windows_command_semantics() {
+                  let mut tool = registry_tool("22.4.0", "x86_64-pc-windows-msvc");
+                  tool.install.executables.push(LockedExecutable {
+                      name: "Node.EXE".to_string(),
+                      path: "bin/Node.EXE".to_string(),
+                      aliases: Vec::new(),
+                  });
+                  assert!(matches!(
+                      lock_with(tool).validate(EnvironmentLockValidationMode::Portable),
+                      Err(EnvironmentLockError::ExecutableCollision { .. })
+                  ));
+              }
+
+              #[test]
+              fn null_extension_values_are_rejected_recursively() {
+                  let mut lock = lock_with(registry_tool(
+                      "22.4.0",
+                      "x86_64-unknown-linux-gnu",
+                  ));
+                  lock.extensions.insert(
+                      "future".to_string(),
+                      serde_json::json!({"nested": [1, null]}),
+                  );
+                  assert!(matches!(
+                      lock.validate(EnvironmentLockValidationMode::Portable),
+                      Err(EnvironmentLockError::NullExtension { .. })
+                  ));
+              }
+
+              #[test]
+              fn malformed_digest_is_rejected() {
+          '''
+          if "fn credential_bearing_and_signed_urls_are_rejected" not in text:
+              text = replace_once(text, test_anchor, tests, "security regression tests")
+
+          source_path.write_text(text)
+          PY
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+          components: rustfmt,clippy
+
+      - name: Resolve, test, lint, and generate schemas
+        run: |
+          set -euo pipefail
+          cargo check
+          cargo fmt --all
+          cargo fmt --all -- --check
+          cargo test --locked environment_lock
+          cargo test --locked
+          cargo test --locked --doc
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo run --locked --example generate_schemas
+          cp schemas/environment-lock-v1.json /tmp/environment-lock-v1.json
+          cargo run --locked --example generate_schemas
+          cmp /tmp/environment-lock-v1.json schemas/environment-lock-v1.json
+          git diff --check
+
+      - name: Commit ordinary hardened contract
+        run: |
+          set -euo pipefail
+          rm .github/workflows/materialize-environment-lock-current-main.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'feat(DEN-1452): add hardened EnvironmentLock v1'
+          git push origin HEAD:agent/environment-lock-v1-current-main
