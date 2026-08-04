@@ -56,7 +56,7 @@ jobs:
           publish = false
 
           [dependencies]
-          zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "2082012d1903783a89200c3bd44d2659a6daf872" }
+          zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "117c1a1e7aff96448fbf35da77f90f7d40dcc488" }
           TOML
           cat > "$validator/src/main.rs" <<'RUST'
           use std::{env, fs, path::PathBuf, process};
@@ -126,6 +126,11 @@ jobs:
               }
 
               for (name, target) in &manifest.targets {
+                  if target.dir == "." {
+                      fail(format!(
+                          "target `{name}` duplicates the canonical whole-repository package; remove it because zed pack/publish emits the root package automatically"
+                      ));
+                  }
                   let path = root.join(&target.dir);
                   if !path.is_dir() {
                       fail(format!(
