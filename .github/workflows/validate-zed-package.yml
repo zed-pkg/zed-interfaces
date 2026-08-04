@@ -26,9 +26,9 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate canonical package contract
+    name: Validate and pack canonical package contract
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Check out package
@@ -42,7 +42,7 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Validate with the pinned zed-interfaces parser
+      - name: Validate and pack with pinned Zed libraries
         shell: bash
         run: |
           set -euo pipefail
@@ -56,16 +56,129 @@ jobs:
           publish = false
 
           [dependencies]
-          zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "2082012d1903783a89200c3bd44d2659a6daf872" }
+          flate2 = "1"
+          tar = "0.4"
+          tempfile = "3"
+          zed-cli = { git = "https://github.com/zed-pkg/zed-cli.git", rev = "0c1931bcdc2065279aea06abe9d66a0eb9e03315" }
+          zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "c2e049006453c26ca8ca291783f681fce75cb01f" }
           TOML
           cat > "$validator/src/main.rs" <<'RUST'
-          use std::{env, fs, path::PathBuf, process};
+          use std::{
+              collections::{BTreeMap, BTreeSet},
+              env, fs,
+              path::{Path, PathBuf},
+              process,
+          };
 
+          use flate2::read::GzDecoder;
           use zed_interfaces::{Lockfile, Manifest};
 
           fn fail(message: impl std::fmt::Display) -> ! {
               eprintln!("zed-package validation failed: {message}");
               process::exit(1);
+          }
+
+          fn archive_files(path: &Path) -> BTreeSet<String> {
+              let file = fs::File::open(path)
+                  .unwrap_or_else(|error| fail(format!("opening {}: {error}", path.display())));
+              let mut archive = tar::Archive::new(GzDecoder::new(file));
+              archive
+                  .entries()
+                  .unwrap_or_else(|error| {
+                      fail(format!("reading archive entries from {}: {error}", path.display()))
+                  })
+                  .map(|entry| {
+                      let entry = entry.unwrap_or_else(|error| {
+                          fail(format!("reading archive entry from {}: {error}", path.display()))
+                      });
+                      entry
+                          .path()
+                          .unwrap_or_else(|error| {
+                              fail(format!("reading archive path from {}: {error}", path.display()))
+                          })
+                          .to_string_lossy()
+                          .to_string()
+                  })
+                  .collect()
+          }
+
+          fn validate_artifact(
+              root_manifest: &Manifest,
+              package: &zed_cli::pack::PackagedTarget,
+              expected_name: &str,
+              output: &Path,
+          ) {
+              if package.manifest.package.org != root_manifest.package.org {
+                  fail(format!(
+                      "packed package `{expected_name}` changed org from `{}` to `{}`",
+                      root_manifest.package.org, package.manifest.package.org
+                  ));
+              }
+              if package.manifest.package.version != root_manifest.package.version {
+                  fail(format!(
+                      "packed package `{expected_name}` changed version from `{}` to `{}`",
+                      root_manifest.package.version, package.manifest.package.version
+                  ));
+              }
+              if package.manifest.package.name != expected_name {
+                  fail(format!(
+                      "packed package name `{}` does not match expected `{expected_name}`",
+                      package.manifest.package.name
+                  ));
+              }
+
+              let expected_file = format!(
+                  "{}-{}-{}.tar.gz",
+                  root_manifest.package.org, expected_name, root_manifest.package.version
+              );
+              let actual_file = package
+                  .packed
+                  .path
+                  .file_name()
+                  .and_then(|name| name.to_str())
+                  .unwrap_or_else(|| fail("packed artifact has no UTF-8 file name"));
+              if actual_file != expected_file {
+                  fail(format!(
+                      "artifact `{actual_file}` does not match expected `{expected_file}`"
+                  ));
+              }
+              if package.packed.path.parent() != Some(output) {
+                  fail(format!(
+                      "artifact {} escaped output directory {}",
+                      package.packed.path.display(),
+                      output.display()
+                  ));
+              }
+              if package.packed.size == 0 || package.packed.file_count == 0 {
+                  fail(format!("artifact `{actual_file}` is empty"));
+              }
+              if package.packed.sha256.len() != 64
+                  || !package
+                      .packed
+                      .sha256
+                      .bytes()
+                      .all(|byte| byte.is_ascii_hexdigit())
+              {
+                  fail(format!("artifact `{actual_file}` has an invalid sha256"));
+              }
+
+              let files = archive_files(&package.packed.path);
+              if !files.contains("pkg/.zpkg.toml") {
+                  fail(format!("artifact `{actual_file}` is missing pkg/.zpkg.toml"));
+              }
+              for forbidden in [
+                  "pkg/.git/",
+                  "pkg/.github/",
+                  "pkg/.zed/pack/",
+                  "pkg/.zpkg-staging/",
+                  "pkg/zed_modules/",
+              ] {
+                  if files.iter().any(|path| path.starts_with(forbidden)) {
+                      fail(format!(
+                          "artifact `{actual_file}` contains forbidden path prefix `{forbidden}`"
+                      ));
+                  }
+              }
           }
 
           fn main() {
@@ -168,12 +281,67 @@ jobs:
                   }
               }
 
+              let output = tempfile::tempdir()
+                  .unwrap_or_else(|error| fail(format!("creating artifact output: {error}")));
+              let packages = zed_cli::pack::pack_all(&root, &manifest, Some(output.path()))
+                  .unwrap_or_else(|error| fail(format!("packing repository: {error:#}")));
+
+              let mut expected_packages = BTreeMap::<String, String>::new();
+              if manifest.targets.is_empty() {
+                  expected_packages.insert(String::new(), manifest.package.name.clone());
+              } else {
+                  for (target, derived_name) in manifest.target_package_names() {
+                      let section = manifest.targets.get(&target).unwrap_or_else(|| {
+                          fail(format!("target `{target}` disappeared after parsing"))
+                      });
+                      let package_name = if section.dir == "." {
+                          manifest.package.name.clone()
+                      } else {
+                          derived_name
+                      };
+                      expected_packages.insert(target, package_name);
+                  }
+              }
+
+              if packages.len() != expected_packages.len() {
+                  fail(format!(
+                      "packing emitted {} package(s), expected {}",
+                      packages.len(),
+                      expected_packages.len()
+                  ));
+              }
+
+              let mut emitted_names = BTreeSet::new();
+              for package in &packages {
+                  let target = package.target.as_deref().unwrap_or("");
+                  let expected_package_name = expected_packages.remove(target).unwrap_or_else(|| {
+                      fail(format!("packing emitted unexpected target `{target}`"))
+                  });
+                  if !emitted_names.insert(expected_package_name.clone()) {
+                      fail(format!(
+                          "packing emitted duplicate package name `{expected_package_name}`"
+                      ));
+                  }
+                  validate_artifact(
+                      &manifest,
+                      package,
+                      &expected_package_name,
+                      output.path(),
+                  );
+              }
+              if !expected_packages.is_empty() {
+                  fail(format!(
+                      "packing omitted target(s): {}",
+                      expected_packages.keys().cloned().collect::<Vec<_>>().join(", ")
+                  ));
+              }
+
               println!(
-                  "validated {}/{}@{} with {} target(s), {} canonical root target(s), and {} locked package(s)",
+                  "validated and packed {}/{}@{} into {} artifact(s), with {} canonical root target(s) and {} locked package(s)",
                   manifest.package.org,
                   manifest.package.name,
                   manifest.package.version,
-                  manifest.targets.len(),
+                  packages.len(),
                   repository_targets.len(),
                   lock.packages.len()
               );
