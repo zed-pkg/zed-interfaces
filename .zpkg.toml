@@ -1,0 +1,38 @@
+[package]
+org = "zed-pkg"
+name = "zed-interfaces"
+version = "0.1.0"
+description = "Core manifest, lockfile, registry, version, and package-model interfaces for zed-pkg"
+license = "MIT"
+keywords = ["package-manager", "interfaces", "manifest", "lockfile", "rust"]
+language = "rust"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/zed-pkg/zed-interfaces"
+
+[publish]
+include_readme = true
+tag_format = "v{version}"
+smoke_test = "cargo test --manifest-path \"$ZED_PKG_TEST_TARGET/Cargo.toml\" --locked"
+exclude = [
+  ".env",
+  ".env.*",
+  ".direnv/**",
+  ".zed/**",
+  ".zed-pack/**",
+  "target/**",
+  "tmp/**",
+  "**/*.log",
+  ".DS_Store",
+]
+
+[publish.native]
+registry = "crates-io"
+package = "zed-interfaces"
+
+[install]
+adapter = "rust"
+
+[scripts]
+test = "cargo test --all-targets --locked"
