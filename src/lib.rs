@@ -15,6 +15,7 @@ pub mod language;
 pub mod lockfile;
 pub mod manifest;
 pub mod nix;
+pub mod nix_plan;
 pub mod oci;
 pub mod paths;
 pub mod registry;
@@ -45,6 +46,10 @@ pub use nix::{
     NIX_ADAPTER_SCHEMA_V1, NixAdapterRecord, NixBuilderNetwork, NixExportMode, NixExportSection,
     NixInteropArtifact, NixInteropError, NixOutputOrigin, NixPackageIdentity, NixPolicyEvidence,
     NixPolicyProfile, NixRealizedOutput, NixStoreReference, ZedArtifactOrigin,
+};
+pub use nix_plan::{
+    NIX_EXPORT_PLAN_SCHEMA_V1, NixExportPackageClass, NixExportPlan, NixExportPlanError,
+    PlannedNixExportDependency, PlannedZedExportArtifact, ResolvedNixExportIntent,
 };
 pub use oci::{
     CYCLONEDX_JSON_MEDIA_TYPE, IN_TOTO_JSON_MEDIA_TYPE, OCI_ADAPTER_SCHEMA_V1,
