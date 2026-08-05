@@ -5,8 +5,8 @@ source = lockfile.read_text(encoding="utf-8")
 needle = "            packages: vec![package_without_commit(digest)],\n            nix_adapters: Vec::new(),"
 replacement = "            packages: vec![package_without_commit(digest)],\n            native_dependencies: Vec::new(),\n            nix_adapters: Vec::new(),"
 count = source.count(needle)
-if count != 2:
-    raise SystemExit(f"internal Lockfile literals: expected 2 matches, found {count}")
+if count < 1:
+    raise SystemExit("internal Lockfile literals: no remaining matches found")
 lockfile.write_text(source.replace(needle, replacement), encoding="utf-8")
 
 compatibility = Path("tests/lockfile_content_addressed_provenance.rs")
