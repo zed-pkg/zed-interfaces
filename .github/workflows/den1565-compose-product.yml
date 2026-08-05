@@ -6,6 +6,8 @@ on:
       - agent/den-1565-native-lock-provenance-current-main-v2
     paths:
       - .github/workflows/den1565-compose-product.yml
+      - scripts/den1565_compose_lock.py
+      - scripts/den1565_update_lock_literals.py
 
 permissions:
   contents: write
