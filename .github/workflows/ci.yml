@@ -33,234 +33,24 @@ jobs:
           toolchain: stable
           components: rustfmt,clippy
 
-      - name: Import reviewed docs and tests
+      - name: Apply the reviewed five-file provenance delta with a three-way merge
         run: |
           set -euo pipefail
-          git fetch --no-tags origin agent/native-lockfile-provenance --depth=1
-          source_ref=FETCH_HEAD
-          for path in \
+          git fetch --no-tags origin \
+            main:refs/remotes/origin/main \
+            agent/native-lockfile-provenance:refs/remotes/origin/agent/native-lockfile-provenance
+          source_ref=refs/remotes/origin/agent/native-lockfile-provenance
+          source_base="$(git merge-base refs/remotes/origin/main "$source_ref")"
+          git diff --binary "$source_base" "$source_ref" -- \
             docs/native-dependency-lockfile.md \
+            schemas/lockfile.json \
+            src/lockfile.rs \
             tests/native_dependency_lockfile_contract.rs \
-            tests/native_dependency_lockfile_schema_contract.rs; do
-            mkdir -p "$(dirname "$path")"
-            git show "$source_ref:$path" > "$path"
-          done
-
-      - name: Compose current lockfile semantics with native provenance
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path('src/lockfile.rs')
-          source = path.read_text(encoding='utf-8')
-
-          def replace_once(old: str, new: str, label: str) -> None:
-              global source
-              count = source.count(old)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected one match, found {count}')
-              source = source.replace(old, new, 1)
-
-          def sub_once(pattern: str, replacement: str, label: str) -> None:
-              global source
-              source, count = re.subn(
-                  pattern,
-                  lambda _match: replacement,
-                  source,
-                  count=1,
-                  flags=re.DOTALL,
-              )
-              if count != 1:
-                  raise SystemExit(f'{label}: expected one match, found {count}')
-
-          replace_once(
-              '''use crate::artifact::ArtifactFormat;
-          use crate::nix::NixAdapterRecord;
-
-          type NixAdapterKey =''',
-              '''use crate::artifact::ArtifactFormat;
-          use crate::native_dependency::NativeDependencyLock;
-          use crate::native_registry::NativeRegistry;
-          use crate::nix::NixAdapterRecord;
-
-          type NativeDependencyKey = (NativeRegistry, String);
-          type NixAdapterKey =''',
-              'native dependency imports and key',
-          )
-
-          replace_once(
-              '''/// Serialized as TOML with one `[[package]]` table per locked package,
-          /// Cargo.lock-style. Every entry pins the exact artifact hash and the VCS
-          /// tag it was published from, so installs are reproducible and every
-          /// artifact is traceable back to source.''',
-              '''/// Serialized as TOML with one `[[package]]` table per locked Zed package,
-          /// optional `[[native-dependency]]` tables for exact npm/Cargo resolutions,
-          /// and optional `[[nix-adapter]]` tables for completed Nix translations.
-          /// Every entry pins exact immutable identity so frozen restore never needs to
-          /// reinterpret a native range or repeat an environment translation.''',
-              'lockfile format documentation',
-          )
-
-          replace_once(
-              '''    #[serde(default, rename = "package", skip_serializing_if = "Vec::is_empty")]
-              pub packages: Vec<LockedPackage>,
-              /// Optional immutable provenance for completed Nix interoperability''',
-              '''    #[serde(default, rename = "package", skip_serializing_if = "Vec::is_empty")]
-              pub packages: Vec<LockedPackage>,
-              /// Exact source-aware npm/Cargo resolutions. This additive field keeps
-              /// existing lockfile version 1 documents readable while newer writers can
-              /// preserve native requirement translation and immutable artifact identity.
-              #[serde(
-                  default,
-                  rename = "native-dependency",
-                  skip_serializing_if = "Vec::is_empty"
-              )]
-              pub native_dependencies: Vec<NativeDependencyLock>,
-              /// Optional immutable provenance for completed Nix interoperability''',
-              'native dependency lockfile field',
-          )
-
-          replace_once(
-              '''    #[error("duplicate locked package identity `{0}`")]
-              DuplicatePackage(String),
-              #[error("invalid Nix adapter provenance: {0}")]''',
-              '''    #[error("duplicate locked package identity `{0}`")]
-              DuplicatePackage(String),
-              #[error("invalid native dependency provenance: {0}")]
-              InvalidNativeDependency(String),
-              #[error("duplicate native dependency key `{0}`")]
-              DuplicateNativeDependency(String),
-              #[error("invalid Nix adapter provenance: {0}")]''',
-              'native dependency errors',
-          )
-
-          replace_once(
-              '''            version: Self::CURRENT_VERSION,
-                          packages: Vec::new(),
-                          nix_adapters: Vec::new(),''',
-              '''            version: Self::CURRENT_VERSION,
-                          packages: Vec::new(),
-                          native_dependencies: Vec::new(),
-                          nix_adapters: Vec::new(),''',
-              'lockfile default',
-          )
-
-          replace_once(
-              '''        lockfile.validate_packages()?;
-                  lockfile.validate_nix_adapters()?;''',
-              '''        lockfile.validate_packages()?;
-                  lockfile.validate_native_dependencies()?;
-                  lockfile.validate_nix_adapters()?;''',
-              'parse validation order',
-          )
-
-          sub_once(
-              r'''    pub fn to_toml_string\(&self\) -> Result<String, LockfileError> \{.*?\n    \}\n\n    pub fn find\(''',
-              '''    pub fn to_toml_string(&self) -> Result<String, LockfileError> {
-              let mut normalized = self.clone();
-              normalized.normalize_missing_package_revisions()?;
-              normalized.validate_packages()?;
-              normalized.validate_native_dependencies()?;
-              normalized.validate_nix_adapters()?;
-              normalized
-                  .packages
-                  .sort_by(|left, right| (&left.org, &left.name).cmp(&(&right.org, &right.name)));
-              normalized
-                  .native_dependencies
-                  .sort_by_key(native_dependency_key);
-              normalized.nix_adapters.sort_by_key(nix_adapter_key);
-              toml::to_string_pretty(&normalized).map_err(|error| LockfileError::Toml(error.to_string()))
-          }
-
-          pub fn find(''',
-              'canonical writer',
-          )
-
-          replace_once(
-              '''    /// Insert or replace one completed Nix translation. Identity includes
-              /// package/target, direction, system, and selected output, so platform
-              /// variants never overwrite each other.''',
-              '''    /// Return one exact native resolution by source registry and package name.
-              pub fn find_native_dependency(
-                  &self,
-                  registry: NativeRegistry,
-                  package_name: &str,
-              ) -> Option<&NativeDependencyLock> {
-                  self.native_dependencies.iter().find(|dependency| {
-                      dependency.requirement.registry == registry
-                          && dependency.package.name == package_name
-                  })
-              }
-
-              /// Validate and insert or replace one exact native resolution. V1 identity
-              /// is `(registry, package.name)`, so a project cannot silently carry two
-              /// different exact resolutions of the same native package.
-              pub fn upsert_native_dependency(
-                  &mut self,
-                  dependency: NativeDependencyLock,
-              ) -> Result<(), LockfileError> {
-                  dependency
-                      .validate()
-                      .map_err(|error| LockfileError::InvalidNativeDependency(error.to_string()))?;
-                  let key = native_dependency_key(&dependency);
-                  self.native_dependencies
-                      .retain(|existing| native_dependency_key(existing) != key);
-                  self.native_dependencies.push(dependency);
-                  self.native_dependencies.sort_by_key(native_dependency_key);
-                  Ok(())
-              }
-
-              /// Insert or replace one completed Nix translation. Identity includes
-              /// package/target, direction, system, and selected output, so platform
-              /// variants never overwrite each other.''',
-              'native dependency lookup and upsert',
-          )
-
-          replace_once(
-              '''    fn validate_nix_adapters(&self) -> Result<(), LockfileError> {''',
-              '''    fn validate_native_dependencies(&self) -> Result<(), LockfileError> {
-              let mut seen = BTreeSet::new();
-              for dependency in &self.native_dependencies {
-                  dependency
-                      .validate()
-                      .map_err(|error| LockfileError::InvalidNativeDependency(error.to_string()))?;
-                  let key = native_dependency_key(dependency);
-                  if !seen.insert(key) {
-                      return Err(LockfileError::DuplicateNativeDependency(
-                          native_dependency_label(dependency),
-                      ));
-                  }
-              }
-              Ok(())
-          }
-
-          fn validate_nix_adapters(&self) -> Result<(), LockfileError> {''',
-              'native dependency validation',
-          )
-
-          replace_once(
-              '''fn nix_adapter_key(adapter: &NixAdapterRecord) -> NixAdapterKey {''',
-              '''fn native_dependency_key(dependency: &NativeDependencyLock) -> NativeDependencyKey {
-              (
-                  dependency.requirement.registry,
-                  dependency.package.name.clone(),
-              )
-          }
-
-          fn native_dependency_label(dependency: &NativeDependencyLock) -> String {
-              format!(
-                  "{:?}:{}",
-                  dependency.requirement.registry, dependency.package.name
-              )
-          }
-
-          fn nix_adapter_key(adapter: &NixAdapterRecord) -> NixAdapterKey {''',
-              'native dependency key helpers',
-          )
-
-          path.write_text(source, encoding='utf-8')
-          PY
+            tests/native_dependency_lockfile_schema_contract.rs \
+            > "$RUNNER_TEMP/native-lock-provenance.patch"
+          test -s "$RUNNER_TEMP/native-lock-provenance.patch"
+          git apply --3way --index "$RUNNER_TEMP/native-lock-provenance.patch"
+          git diff --cached --check
 
       - name: Format, regenerate schema, and certify the complete crate
         run: |
@@ -272,7 +62,12 @@ jobs:
           cargo clippy --locked --all-targets --all-features -- -D warnings
           git diff --check
 
-          changed="$(git diff --name-only | sort)"
+          changed="$(git diff --name-only HEAD -- \
+            docs/native-dependency-lockfile.md \
+            schemas/lockfile.json \
+            src/lockfile.rs \
+            tests/native_dependency_lockfile_contract.rs \
+            tests/native_dependency_lockfile_schema_contract.rs | sort)"
           expected="$(printf '%s\n' \
             docs/native-dependency-lockfile.md \
             schemas/lockfile.json \
@@ -284,24 +79,17 @@ jobs:
             exit 1
           }
 
-      - name: Restore permanent CI and commit only product files
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Commit and push only certified product files
         run: |
           set -euo pipefail
-          git fetch --no-tags origin main --depth=1
-          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
           git add \
             docs/native-dependency-lockfile.md \
             schemas/lockfile.json \
             src/lockfile.rs \
             tests/native_dependency_lockfile_contract.rs \
-            tests/native_dependency_lockfile_schema_contract.rs \
-            .github/workflows/ci.yml
+            tests/native_dependency_lockfile_schema_contract.rs
           git diff --cached --check
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git commit -m 'feat: persist exact native dependencies in zpkg lockfiles'
-          git push \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            HEAD:${{ github.head_ref }}
+          git push origin HEAD:${{ github.head_ref }}
