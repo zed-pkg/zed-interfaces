@@ -148,7 +148,11 @@ mod tests {
             &["!target".to_string(), "target/private/**".to_string()],
             false,
         );
-        assert!(excludes.iter().any(|pattern| pattern == "target/private/**"));
+        assert!(
+            excludes
+                .iter()
+                .any(|pattern| pattern == "target/private/**")
+        );
         assert!(!excludes.iter().any(|pattern| pattern == "target/**"));
     }
 }
