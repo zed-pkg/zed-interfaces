@@ -1,0 +1,60 @@
+name: DEN-1565 certify native lock provenance product
+
+on:
+  push:
+    branches:
+      - agent/den-1565-native-lock-provenance-current-main-v3
+    paths:
+      - .github/workflows/den1565-compose-product.yml
+      - scripts/den1565_compose_lock.py
+      - scripts/den1565_update_lock_literals.py
+
+permissions:
+  contents: write
+
+jobs:
+  certify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: agent/den-1565-native-lock-provenance-current-main-v3
+          persist-credentials: true
+          show-progress: false
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+          components: rustfmt,clippy
+      - name: Import reviewed docs and contract tests
+        run: |
+          git fetch --no-tags origin agent/native-lockfile-provenance --depth=1
+          for path in docs/native-dependency-lockfile.md tests/native_dependency_lockfile_contract.rs tests/native_dependency_lockfile_schema_contract.rs; do
+            mkdir -p "$(dirname "$path")"
+            git show "FETCH_HEAD:$path" > "$path"
+          done
+      - name: Compose current-main product
+        run: |
+          python3 scripts/den1565_compose_lock.py
+          python3 scripts/den1565_update_lock_literals.py
+      - name: Certify complete crate
+        run: |
+          cargo fmt --all
+          cargo run --locked --example generate_schemas
+          cargo fmt --all -- --check
+          cargo test --locked --all-targets
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+          git diff --check
+          changed="$(git diff --name-only | grep -v '^scripts/den1565_' | sort)"
+          expected="$(printf '%s\n' docs/native-dependency-lockfile.md schemas/lockfile.json src/lockfile.rs tests/lockfile_content_addressed_provenance.rs tests/native_dependency_lockfile_contract.rs tests/native_dependency_lockfile_schema_contract.rs | sort)"
+          test "$changed" = "$expected"
+      - name: Commit six certified product files
+        run: |
+          git add docs/native-dependency-lockfile.md schemas/lockfile.json src/lockfile.rs tests/lockfile_content_addressed_provenance.rs tests/native_dependency_lockfile_contract.rs tests/native_dependency_lockfile_schema_contract.rs
+          git diff --cached --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m 'feat: persist exact native dependencies in zpkg lockfiles'
+          git push origin HEAD:agent/den-1565-native-lock-provenance-current-main-v3
