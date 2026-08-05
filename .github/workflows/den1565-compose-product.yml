@@ -57,16 +57,22 @@ jobs:
             tests/native_dependency_lockfile_contract.rs
             tests/native_dependency_lockfile_schema_contract.rs
           )
-          product_changed="$(git diff --name-only HEAD -- "${product_files[@]}" | sort)"
+          product_changed="$({
+            git diff --name-only HEAD -- "${product_files[@]}"
+            git ls-files --others --exclude-standard -- "${product_files[@]}"
+          } | sort -u)"
           expected="$(printf '%s\n' "${product_files[@]}" | sort)"
           if [ "$product_changed" != "$expected" ]; then
             printf 'expected product delta:\n%s\nactual product delta:\n%s\n' "$expected" "$product_changed" >&2
             exit 1
           fi
 
-          unexpected="$(git diff --name-only HEAD | grep -Ev '^(docs/native-dependency-lockfile\.md|schemas/lockfile\.json|src/lockfile\.rs|tests/lockfile_content_addressed_provenance\.rs|tests/native_dependency_lockfile_contract\.rs|tests/native_dependency_lockfile_schema_contract\.rs|scripts/den1565_compose_lock\.py|scripts/den1565_update_lock_literals\.py|\.github/workflows/den1565-compose-product\.yml)$' || true)"
+          unexpected="$({
+            git diff --name-only HEAD
+            git ls-files --others --exclude-standard
+          } | sort -u | grep -Ev '^(docs/native-dependency-lockfile\.md|schemas/lockfile\.json|src/lockfile\.rs|tests/lockfile_content_addressed_provenance\.rs|tests/native_dependency_lockfile_contract\.rs|tests/native_dependency_lockfile_schema_contract\.rs|scripts/den1565_compose_lock\.py|scripts/den1565_update_lock_literals\.py|\.github/workflows/den1565-compose-product\.yml)$' || true)"
           if [ -n "$unexpected" ]; then
-            printf 'unexpected changed paths:\n%s\n' "$unexpected" >&2
+            printf 'unexpected changed or untracked paths:\n%s\n' "$unexpected" >&2
             exit 1
           fi
       - name: Commit six certified product files
