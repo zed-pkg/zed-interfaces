@@ -25,11 +25,30 @@ def add_native_dependency_initializer(path: Path) -> int:
     return inserted
 
 
+def update_legacy_fixture_revision(path: Path) -> None:
+    source = path.read_text(encoding="utf-8")
+    old = '''vcs_tag = "v1.0.0"
+source = "file:///tmp/registry"
+'''
+    new = '''vcs_tag = "v1.0.0"
+vcs_commit = "0123456789abcdef0123456789abcdef01234567"
+source = "file:///tmp/registry"
+'''
+    count = source.count(old)
+    if count != 1:
+        raise SystemExit(
+            f"{path}: expected one legacy immutable-revision fixture, found {count}"
+        )
+    path.write_text(source.replace(old, new, 1), encoding="utf-8")
+
+
 internal = add_native_dependency_initializer(Path("src/lockfile.rs"))
 compatibility = add_native_dependency_initializer(
     Path("tests/lockfile_content_addressed_provenance.rs")
 )
+update_legacy_fixture_revision(Path("tests/native_dependency_lockfile_contract.rs"))
 print(
     f"inserted native dependency defaults into {internal} internal and "
-    f"{compatibility} compatibility Lockfile literals"
+    f"{compatibility} compatibility Lockfile literals; refreshed the legacy "
+    "fixture with current immutable-revision metadata"
 )
