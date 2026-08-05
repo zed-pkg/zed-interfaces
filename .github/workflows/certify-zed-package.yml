@@ -1,0 +1,221 @@
+name: certify-and-publish-zed-package
+
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - ".zpkg.toml"
+      - ".zpkg.lock"
+      - ".gitignore"
+      - ".github/workflows/certify-zed-package.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".zpkg.toml"
+      - ".zpkg.lock"
+      - ".gitignore"
+      - ".github/workflows/certify-zed-package.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: certify-zed-package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    uses: zed-pkg/zed-interfaces/.github/workflows/validate-zed-package.yml@933155fc41dc6443424d06b618137b23dc434835
+
+  publish:
+    name: Pack and publish certified artifacts
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out package
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+
+      - name: Pack canonical and target packages
+        shell: bash
+        env:
+          ZED_ARTIFACT_OUTPUT: ${{ runner.temp }}/zed-package-artifacts
+        run: |
+          set -euo pipefail
+          packer="$RUNNER_TEMP/zed-artifact-publisher"
+          rm -rf "$packer" "$ZED_ARTIFACT_OUTPUT"
+          mkdir -p "$packer/src" "$ZED_ARTIFACT_OUTPUT"
+
+          cat > "$packer/Cargo.toml" <<'TOML'
+          [package]
+          name = "zed-artifact-publisher"
+          version = "0.0.0"
+          edition = "2024"
+          publish = false
+
+          [dependencies]
+          serde_json = "1"
+          zed-cli = { git = "https://github.com/zed-pkg/zed-cli.git", rev = "fd3b08eb1ac170518cb795e662318ae2714b1176" }
+          zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "a23cdd2ac509a39ca6fd6d21a3774fdd3a0f7660" }
+          TOML
+
+          cat > "$packer/src/main.rs" <<'RUST'
+          use std::{env, fs, path::PathBuf, process};
+
+          use serde_json::json;
+          use zed_interfaces::Manifest;
+
+          fn fail(message: impl std::fmt::Display) -> ! {
+              eprintln!("zed artifact publication failed: {message}");
+              process::exit(1);
+          }
+
+          fn main() {
+              let root = env::args_os()
+                  .nth(1)
+                  .map(PathBuf::from)
+                  .unwrap_or_else(|| fail("missing repository root argument"));
+              let output = env::var_os("ZED_ARTIFACT_OUTPUT")
+                  .map(PathBuf::from)
+                  .unwrap_or_else(|| fail("ZED_ARTIFACT_OUTPUT is not set"));
+              fs::create_dir_all(&output)
+                  .unwrap_or_else(|error| fail(format!("creating output directory: {error}")));
+
+              let manifest_text = fs::read_to_string(root.join(".zpkg.toml"))
+                  .unwrap_or_else(|error| fail(format!("reading .zpkg.toml: {error}")));
+              let manifest = Manifest::parse(&manifest_text)
+                  .unwrap_or_else(|error| fail(format!("parsing .zpkg.toml: {error}")));
+
+              let packages = zed_cli::pack::pack_all(&root, &manifest, Some(&output))
+                  .unwrap_or_else(|error| fail(format!("packing repository: {error:#}")));
+              if packages.is_empty() {
+                  fail("packer emitted no artifacts");
+              }
+
+              let canonical_file = format!(
+                  "{}-{}-{}.tar.gz",
+                  manifest.package.org, manifest.package.name, manifest.package.version
+              );
+              if !output.join(&canonical_file).is_file() {
+                  fail(format!("canonical artifact `{canonical_file}` was not emitted"));
+              }
+
+              let mut records = Vec::with_capacity(packages.len());
+              for package in packages {
+                  let file = package
+                      .packed
+                      .path
+                      .file_name()
+                      .and_then(|name| name.to_str())
+                      .unwrap_or_else(|| fail("artifact has no UTF-8 file name"))
+                      .to_string();
+                  if package.packed.size == 0 || package.packed.file_count == 0 {
+                      fail(format!("artifact `{file}` is empty"));
+                  }
+                  if package.packed.sha256.len() != 64
+                      || !package
+                          .packed
+                          .sha256
+                          .bytes()
+                          .all(|byte| byte.is_ascii_hexdigit())
+                  {
+                      fail(format!("artifact `{file}` has an invalid sha256"));
+                  }
+
+                  records.push(json!({
+                      "target": package.target,
+                      "org": package.manifest.package.org,
+                      "name": package.manifest.package.name,
+                      "version": package.manifest.package.version,
+                      "file": file,
+                      "sha256": package.packed.sha256,
+                      "size": package.packed.size,
+                      "file_count": package.packed.file_count,
+                      "excluded_count": package.packed.excluded_count,
+                      "format": package.packed.format.extension(),
+                  }));
+              }
+
+              records.sort_by(|left, right| {
+                  left["file"]
+                      .as_str()
+                      .cmp(&right["file"].as_str())
+              });
+
+              let mut checksums = String::new();
+              for record in &records {
+                  checksums.push_str(record["sha256"].as_str().unwrap());
+                  checksums.push_str("  ");
+                  checksums.push_str(record["file"].as_str().unwrap());
+                  checksums.push('\n');
+              }
+              fs::write(output.join("SHA256SUMS"), checksums)
+                  .unwrap_or_else(|error| fail(format!("writing SHA256SUMS: {error}")));
+
+              let provenance = json!({
+                  "schema": "zed.packages.v1",
+                  "repository": env::var("GITHUB_REPOSITORY").unwrap_or_default(),
+                  "commit": env::var("GITHUB_SHA").unwrap_or_default(),
+                  "run_id": env::var("GITHUB_RUN_ID").unwrap_or_default(),
+                  "run_attempt": env::var("GITHUB_RUN_ATTEMPT").unwrap_or_default(),
+                  "package": {
+                      "org": manifest.package.org,
+                      "name": manifest.package.name,
+                      "version": manifest.package.version,
+                  },
+                  "artifacts": records,
+              });
+              fs::write(
+                  output.join("zed-artifacts.json"),
+                  serde_json::to_vec_pretty(&provenance).unwrap(),
+              )
+              .unwrap_or_else(|error| fail(format!("writing artifact manifest: {error}")));
+          }
+          RUST
+
+          cargo generate-lockfile --manifest-path "$packer/Cargo.toml"
+          cargo run --quiet --locked --manifest-path "$packer/Cargo.toml" -- "$GITHUB_WORKSPACE"
+          test -s "$ZED_ARTIFACT_OUTPUT/SHA256SUMS"
+          test -s "$ZED_ARTIFACT_OUTPUT/zed-artifacts.json"
+          (cd "$ZED_ARTIFACT_OUTPUT" && sha256sum --check SHA256SUMS)
+          find "$ZED_ARTIFACT_OUTPUT" -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Publish certified package artifacts
+        id: publish
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: zed-packages-${{ github.event.repository.name }}-${{ github.sha }}
+          path: ${{ runner.temp }}/zed-package-artifacts
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          overwrite: false
+
+      - name: Verify publication metadata
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.publish.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.publish.outputs.artifact-url }}
+          ARTIFACT_DIGEST: ${{ steps.publish.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          test -n "$ARTIFACT_ID"
+          test -n "$ARTIFACT_URL"
+          test -n "$ARTIFACT_DIGEST"
+          {
+            echo "### Certified Zed package artifacts"
+            echo
+            echo "- Artifact ID: \`$ARTIFACT_ID\`"
+            echo "- Artifact digest: \`$ARTIFACT_DIGEST\`"
+            echo "- Download: $ARTIFACT_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
