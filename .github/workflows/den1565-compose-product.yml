@@ -41,8 +41,10 @@ jobs:
             git show "$source_ref:$path" > "$path"
           done
 
-      - name: Compose the current-main lockfile
-        run: python3 scripts/den1565_compose_lock.py
+      - name: Compose the current-main lockfile and compatibility fixtures
+        run: |
+          python3 scripts/den1565_compose_lock.py
+          python3 scripts/den1565_update_lock_literals.py
 
       - name: Certify formatting, schema, tests, and Clippy
         run: |
@@ -54,11 +56,15 @@ jobs:
           cargo clippy --locked --all-targets --all-features -- -D warnings
           git diff --check
 
-          changed="$(git diff --name-only | grep -v '^scripts/den1565_compose_lock.py$' | sort)"
+          changed="$(git diff --name-only \
+            | grep -v '^scripts/den1565_compose_lock.py$' \
+            | grep -v '^scripts/den1565_update_lock_literals.py$' \
+            | sort)"
           expected="$(printf '%s\n' \
             docs/native-dependency-lockfile.md \
             schemas/lockfile.json \
             src/lockfile.rs \
+            tests/lockfile_content_addressed_provenance.rs \
             tests/native_dependency_lockfile_contract.rs \
             tests/native_dependency_lockfile_schema_contract.rs | sort)"
           test "$changed" = "$expected" || {
@@ -66,13 +72,14 @@ jobs:
             exit 1
           }
 
-      - name: Commit only the certified five-file product delta
+      - name: Commit only the certified six-file product delta
         run: |
           set -euo pipefail
           git add \
             docs/native-dependency-lockfile.md \
             schemas/lockfile.json \
             src/lockfile.rs \
+            tests/lockfile_content_addressed_provenance.rs \
             tests/native_dependency_lockfile_contract.rs \
             tests/native_dependency_lockfile_schema_contract.rs
           git diff --cached --check
