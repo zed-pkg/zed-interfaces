@@ -142,7 +142,7 @@ jobs:
                       "size": package.packed.size,
                       "file_count": package.packed.file_count,
                       "excluded_count": package.packed.excluded_count,
-                      "format": package.packed.format.as_str(),
+                      "format": package.packed.format.extension(),
                   }));
               }
 
