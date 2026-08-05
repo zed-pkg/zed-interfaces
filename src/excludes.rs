@@ -81,6 +81,12 @@ const REGISTRY_DOC_PATTERNS: &[&str] = &["README", "CHANGELOG"];
 /// registry-facing doc patterns when `include_readme` is set), plus the
 /// manifest's own `publish.exclude` globs. `.zedignore` lines are appended by
 /// the CLI on top of this.
+///
+/// A leading `!` negates a built-in or earlier extra exclusion with the same
+/// normalized path. This supports the common root-directory override contract,
+/// for example `!target`, `!target/`, or `!target/**` to publish a checked-in
+/// Rust target directory. The negation itself is removed before the CLI builds
+/// its positive-only glob set.
 pub fn effective_excludes(extra: &[String], include_readme: bool) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for pattern in DEFAULT_EXCLUDES {
@@ -89,6 +95,64 @@ pub fn effective_excludes(extra: &[String], include_readme: bool) -> Vec<String>
         }
         out.push((*pattern).to_string());
     }
-    out.extend(extra.iter().cloned());
+
+    for pattern in extra {
+        if let Some(negated) = pattern.strip_prefix('!') {
+            let normalized = normalize_pattern(negated, false);
+            if normalized.is_empty() {
+                continue;
+            }
+            out.retain(|existing| normalize_pattern(existing, true) != normalized);
+        } else {
+            out.push(pattern.clone());
+        }
+    }
     out
+}
+
+fn normalize_pattern(pattern: &str, strip_recursive_prefix: bool) -> String {
+    let mut value = pattern.trim().replace('\\', "/");
+    if strip_recursive_prefix {
+        value = value.strip_prefix("**/").unwrap_or(&value).to_string();
+    }
+    while let Some(stripped) = value.strip_suffix("/**") {
+        value = stripped.to_string();
+    }
+    value.trim_matches('/').to_ascii_lowercase()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn target_negation_removes_root_and_recursive_defaults() {
+        for negation in ["!target", "!target/", "!target/**"] {
+            let excludes = effective_excludes(&[negation.to_string()], false);
+            assert!(!excludes.iter().any(|pattern| pattern == "target/**"));
+            assert!(!excludes.iter().any(|pattern| pattern == "**/target/**"));
+            assert!(!excludes.iter().any(|pattern| pattern.starts_with('!')));
+        }
+    }
+
+    #[test]
+    fn negation_only_removes_the_matching_default_family() {
+        let excludes = effective_excludes(&["!target".to_string()], false);
+        assert!(excludes.iter().any(|pattern| pattern == "node_modules/**"));
+        assert!(excludes.iter().any(|pattern| pattern == "build/**"));
+    }
+
+    #[test]
+    fn later_exclusion_can_reapply_after_negation() {
+        let excludes = effective_excludes(
+            &["!target".to_string(), "target/private/**".to_string()],
+            false,
+        );
+        assert!(
+            excludes
+                .iter()
+                .any(|pattern| pattern == "target/private/**")
+        );
+        assert!(!excludes.iter().any(|pattern| pattern == "target/**"));
+    }
 }
