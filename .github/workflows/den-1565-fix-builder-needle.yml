@@ -1,0 +1,57 @@
+name: DEN-1565 repair lock builder needle
+
+on:
+  push:
+    branches:
+      - agent/den-1565-native-lock-provenance-current-main-v2
+    paths:
+      - .github/workflows/den-1565-fix-builder-needle.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: agent/den-1565-native-lock-provenance-current-main-v2
+          persist-credentials: true
+          show-progress: false
+
+      - name: Replace only the whitespace-sensitive default-struct needle
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('.github/workflows/ci.yml')
+          source = path.read_text(encoding='utf-8')
+          pattern = re.compile(
+              r"'''            version: Self::CURRENT_VERSION,\n"
+              r"\s+packages: Vec::new\(\),\n"
+              r"\s+nix_adapters: Vec::new\(\),'''"
+          )
+          replacement = """'''            version: Self::CURRENT_VERSION,
+                      packages: Vec::new(),
+                      nix_adapters: Vec::new(),'''"""
+          updated, count = pattern.subn(replacement, source, count=1)
+          if count != 1:
+              raise SystemExit(f'default-struct needle: expected one match, found {count}')
+          path.write_text(updated, encoding='utf-8')
+          PY
+          rm .github/workflows/den-1565-fix-builder-needle.yml
+          git diff --check
+
+      - name: Commit the repaired self-cleaning builder
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            .github/workflows/ci.yml \
+            .github/workflows/den-1565-fix-builder-needle.yml
+          git commit -m 'ci: make native lock builder indentation-independent'
+          git push origin HEAD:agent/den-1565-native-lock-provenance-current-main-v2
