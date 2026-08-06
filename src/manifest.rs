@@ -82,6 +82,11 @@ pub struct Manifest {
     /// `.deps/.zed`.
     #[serde(default, skip_serializing_if = "InstallSection::is_empty")]
     pub install: InstallSection,
+    /// Explicit interoperability intent for external package and environment
+    /// managers. Detection alone never grants Zed permission to consume
+    /// another tool's metadata.
+    #[serde(default, skip_serializing_if = "InteropSection::is_empty")]
+    pub interop: InteropSection,
     /// Language subtrees for a **polyglot package** — one repo shipping the
     /// same library for several ecosystems (e.g. `node/`, `python/`, `go/`).
     /// Keyed by ecosystem name; the value says which subdirectory is that
@@ -220,6 +225,35 @@ pub struct InstallSection {
 impl InstallSection {
     pub fn is_empty(&self) -> bool {
         self.dir.is_none() && self.adapter.is_none() && self.target.is_none()
+    }
+}
+
+/// Opt-in interoperability with repository-local metadata owned by other tools.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct InteropSection {
+    #[serde(skip_serializing_if = "GitInteropSection::is_empty")]
+    pub git: GitInteropSection,
+}
+
+impl InteropSection {
+    pub fn is_empty(&self) -> bool {
+        self.git.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct GitInteropSection {
+    /// Whether Zed may synchronize and initialize dependencies declared by the
+    /// owning checkout's committed `.gitmodules` file.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub consume_gitmodules: bool,
+}
+
+impl GitInteropSection {
+    pub fn is_empty(&self) -> bool {
+        !self.consume_gitmodules
     }
 }
 

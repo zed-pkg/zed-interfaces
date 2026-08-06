@@ -8,6 +8,7 @@
 
 pub mod artifact;
 pub mod excludes;
+pub mod inspection;
 pub mod language;
 pub mod lockfile;
 pub mod manifest;

@@ -6,7 +6,12 @@ universal package manager backed by the VCS hosts you already use.
 This crate is the contract everything else builds against:
 
 - **`.zpkg.toml`** — the package manifest at the repo root, TOML only (`manifest` module)
+- **Interop intent** — typed `[interop.git].consume_gitmodules` ownership in the
+  manifest, so consumers do not infer authority from file detection alone
 - **`.zpkg.lock`** — the lockfile with artifact hashes and VCS provenance (`lockfile`)
+- **Static inspection protocol** — schema-versioned diagnostics, safe action
+  metadata, interop status, and update recommendations shared by `zed-lib`,
+  `zed-cli`, and editor integrations (`inspection`)
 - **Registry REST API** — URL scheme and JSON DTOs shared by `zed-api-server`,
   `zed-cli`, `zed-web-server`, and the SDKs in `zed-clients` (`registry`)
 - **Publish excludes** — the default rules that strip tests, CI config,
@@ -72,6 +77,7 @@ depend on it via `zed-interfaces = { path = "../zed-interfaces" }`:
 
 ```sh
 git clone https://github.com/zed-pkg/zed-interfaces
+git clone https://github.com/zed-pkg/zed-lib
 git clone https://github.com/zed-pkg/zed-cli
 # ... siblings in the same parent directory
 ```

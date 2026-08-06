@@ -45,6 +45,24 @@ fn manifest_roundtrip() {
 }
 
 #[test]
+fn gitmodules_consumption_is_typed_and_roundtrips() {
+    let enabled = format!("{SAMPLE}\n[interop.git]\nconsume_gitmodules = true\n");
+    let manifest = Manifest::parse(&enabled).unwrap();
+    assert!(manifest.interop.git.consume_gitmodules);
+
+    let serialized = manifest.to_toml_string().unwrap();
+    assert!(serialized.contains("consume_gitmodules = true"));
+    assert_eq!(Manifest::parse(&serialized).unwrap(), manifest);
+
+    let disabled = format!("{SAMPLE}\n[interop.git]\nconsume_gitmodules = false\n");
+    let serialized = Manifest::parse(&disabled)
+        .unwrap()
+        .to_toml_string()
+        .unwrap();
+    assert!(!serialized.contains("[interop"));
+}
+
+#[test]
 fn install_dir_defaults_and_overrides() {
     // No [install] section -> the default dep dir.
     assert_eq!(

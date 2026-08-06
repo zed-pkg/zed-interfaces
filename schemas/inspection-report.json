@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InspectionReport",
+  "type": "object",
+  "properties": {
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Diagnostic"
+      }
+    },
+    "interop": {
+      "$ref": "#/$defs/InteropInspection"
+    },
+    "network": {
+      "$ref": "#/$defs/NetworkInspection"
+    },
+    "package": {
+      "$ref": "#/$defs/PackageInspection"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "summary": {
+      "$ref": "#/$defs/InspectionSummary"
+    },
+    "updates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/VersionRecommendation"
+      }
+    },
+    "workspaceRoot": {
+      "type": "string"
+    },
+    "zedVersion": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "zedVersion",
+    "workspaceRoot",
+    "package",
+    "interop",
+    "network",
+    "updates",
+    "summary",
+    "diagnostics"
+  ],
+  "$defs": {
+    "ActionKind": {
+      "type": "string",
+      "enum": [
+        "zed-command",
+        "external-command",
+        "edit-file"
+      ]
+    },
+    "Diagnostic": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RecommendedAction"
+          }
+        },
+        "code": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiagnosticLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "title",
+        "detail",
+        "actions"
+      ]
+    },
+    "DiagnosticLocation": {
+      "type": "object",
+      "properties": {
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    },
+    "Health": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "warning",
+        "error"
+      ]
+    },
+    "InspectionSummary": {
+      "type": "object",
+      "properties": {
+        "errors": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "health": {
+          "$ref": "#/$defs/Health"
+        },
+        "information": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "warnings": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "health",
+        "errors",
+        "warnings",
+        "information"
+      ]
+    },
+    "InteropInspection": {
+      "type": "object",
+      "properties": {
+        "gitSubmodules": {
+          "$ref": "#/$defs/InteropStatus"
+        },
+        "mise": {
+          "$ref": "#/$defs/InteropStatus"
+        },
+        "nixDevelop": {
+          "$ref": "#/$defs/InteropStatus"
+        }
+      },
+      "required": [
+        "gitSubmodules",
+        "mise",
+        "nixDevelop"
+      ]
+    },
+    "InteropStatus": {
+      "type": "object",
+      "properties": {
+        "declared": {
+          "type": "boolean"
+        },
+        "detected": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "detected",
+        "declared",
+        "verified"
+      ]
+    },
+    "NetworkInspection": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "registry": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updateCheckComplete": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "updateCheckComplete"
+      ]
+    },
+    "PackageInspection": {
+      "type": "object",
+      "properties": {
+        "frozenReady": {
+          "type": "boolean"
+        },
+        "identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lockPath": {
+          "type": "string"
+        },
+        "lockValid": {
+          "type": "boolean"
+        },
+        "manifestPath": {
+          "type": "string"
+        },
+        "manifestValid": {
+          "type": "boolean"
+        },
+        "materializationDir": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "manifestPath",
+        "lockPath",
+        "materializationDir",
+        "manifestValid",
+        "lockValid",
+        "frozenReady"
+      ]
+    },
+    "RecommendedAction": {
+      "type": "object",
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "executesPackageCode": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ActionKind"
+        },
+        "mutatesProject": {
+          "type": "boolean"
+        },
+        "requiresConfirmation": {
+          "type": "boolean"
+        },
+        "requiresNetwork": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        },
+        "workingDirectory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "argv",
+        "workingDirectory",
+        "mutatesProject",
+        "requiresNetwork",
+        "executesPackageCode",
+        "requiresConfirmation"
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "error"
+      ]
+    },
+    "VersionChange": {
+      "type": "string",
+      "enum": [
+        "major",
+        "minor",
+        "patch"
+      ]
+    },
+    "VersionRecommendation": {
+      "type": "object",
+      "properties": {
+        "change": {
+          "$ref": "#/$defs/VersionChange"
+        },
+        "current": {
+          "type": "string"
+        },
+        "latest": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "package",
+        "current",
+        "latest",
+        "change"
+      ]
+    }
+  }
+}

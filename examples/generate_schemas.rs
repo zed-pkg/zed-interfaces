@@ -22,6 +22,7 @@ fn main() {
 
     write::<zed_interfaces::Manifest>(dir, "manifest");
     write::<zed_interfaces::Lockfile>(dir, "lockfile");
+    write::<zed_interfaces::inspection::InspectionReport>(dir, "inspection-report");
     write::<zed_interfaces::registry::PackageMetadata>(dir, "package-metadata");
     write::<zed_interfaces::registry::VersionMetadata>(dir, "version-metadata");
     write::<zed_interfaces::registry::PublishMeta>(dir, "publish-meta");

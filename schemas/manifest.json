@@ -40,6 +40,10 @@
       "description": "Where zed materializes the (few, hand-picked) dependencies it sources —\nzed complements npm/maven/etc. rather than replacing them, so this dir\nsits alongside the native one and the ecosystem adapter wires it into\nthe toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`\ndefaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or\n`.deps/.zed`.",
       "$ref": "#/$defs/InstallSection"
     },
+    "interop": {
+      "description": "Explicit interoperability intent for external package and environment\nmanagers. Detection alone never grants Zed permission to consume\nanother tool's metadata.",
+      "$ref": "#/$defs/InteropSection"
+    },
     "overrides": {
       "description": "Consumer-side patches for dependencies (e.g. fixing a dependency's\nbroken or missing `[build]` step without waiting on upstream).",
       "$ref": "#/$defs/OverridesSection"
@@ -155,6 +159,15 @@
         }
       ]
     },
+    "GitInteropSection": {
+      "type": "object",
+      "properties": {
+        "consume_gitmodules": {
+          "description": "Whether Zed may synchronize and initialize dependencies declared by the\nowning checkout's committed `.gitmodules` file.",
+          "type": "boolean"
+        }
+      }
+    },
     "InstallSection": {
       "description": "Install-layout controls: where zed's dependency tree lands and which\necosystem adapter to emit so those deps are visible to the native toolchain.",
       "type": "object",
@@ -179,6 +192,15 @@
             "string",
             "null"
           ]
+        }
+      }
+    },
+    "InteropSection": {
+      "description": "Opt-in interoperability with repository-local metadata owned by other tools.",
+      "type": "object",
+      "properties": {
+        "git": {
+          "$ref": "#/$defs/GitInteropSection"
         }
       }
     },
