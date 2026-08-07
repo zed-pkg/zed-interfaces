@@ -218,6 +218,15 @@ function typeRef(schema, where, emit) {
 
 /** One named type: a class or an enum. */
 function buildType(name, schema, sourceFile, sink) {
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) {
+    fail(`${sourceFile}: type name \`${name}\` must be PascalCase — it becomes a class in three languages`);
+  }
+  if (DART_CORE_TYPES.has(name)) {
+    fail(
+      `${sourceFile}: type name \`${name}\` collides with dart:core's \`${name}\`, which it would ` +
+        `silently shadow in every consumer — rename the Rust type`,
+    );
+  }
   const values = enumValues(schema);
   if (values) {
     return { kind: "enum", name, description: schema.description || "", values, sourceFile };
