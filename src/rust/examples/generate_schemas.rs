@@ -20,7 +20,10 @@ fn write<T: JsonSchema>(dir: &Path, name: &str) {
 }
 
 fn main() {
-    let dir = Path::new("schemas");
+    // Manifest-relative (this crate is `src/rust/`, the schemas are at the
+    // repository root) so the output is the same from any working directory.
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas");
+    let dir = dir.as_path();
     fs::create_dir_all(dir).expect("schemas dir");
 
     write::<zed_interfaces::Manifest>(dir, "manifest");
