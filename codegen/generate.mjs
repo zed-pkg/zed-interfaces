@@ -571,7 +571,9 @@ function tsType(ref, kinds) {
       default: return fail(`unsupported type ${ref.kind}`);
     }
   })();
-  return ref.nullable ? `${base} | null` : base;
+  // `unknown` already admits null; `unknown | null` is the same type written
+  // twice, and tsc's own lint rules flag it.
+  return ref.nullable && ref.kind !== "any" ? `${base} | null` : base;
 }
 
 function tsEnum(type) {
