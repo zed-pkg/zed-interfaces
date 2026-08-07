@@ -353,11 +353,22 @@ pub struct NativeReleaseSection {
     /// for example `clients/go/v{version}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag_format: Option<String>,
-    /// Optional copies in package registries run by source forges. The native
-    /// registry remains the canonical ecosystem destination; these mirrors
-    /// use the same native package format and version.
+    /// Optional copies in package registries run by source forges or
+    /// enterprise binary repositories. The native registry remains the
+    /// canonical ecosystem destination; these mirrors use the same native
+    /// package format and version.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub forge: Vec<ForgeRegistry>,
+    /// Default release track for this route. Overridden per release by
+    /// `zed release --channel`; declared here when a target is *only* ever
+    /// published to a pre-release track — a client generated from an unstable
+    /// API surface, say.
+    ///
+    /// The version is not spelled here. How a channel becomes a version string
+    /// is the host's business and differs per ecosystem, so it is resolved by
+    /// [`crate::native_host::NativeHost::channel_route`] at plan time.
+    #[serde(default, skip_serializing_if = "ReleaseChannel::is_default")]
+    pub channel: ReleaseChannel,
 }
 
 /// The ecosystem registry a target is mirrored into.
