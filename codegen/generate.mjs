@@ -350,22 +350,32 @@ function dartType(ref, kinds) {
   }
 }
 
-/** Expression decoding `expr` (a `dynamic`) into the Dart type of `ref`. */
-function dartDecode(ref, expr, kinds) {
+/**
+ * Expression decoding `expr` (a `dynamic`) into the Dart type of `ref`.
+ * `nullable` emits null-aware access rather than a `== null ? null : …`
+ * ternary, so the output reads like hand-written Dart.
+ */
+function dartDecode(ref, expr, kinds, nullable = false) {
+  const q = nullable ? "?" : "";
   switch (ref.kind) {
-    case "string": return `${expr} as String`;
-    case "int": return `(${expr} as num).toInt()`;
-    case "double": return `(${expr} as num).toDouble()`;
-    case "bool": return `${expr} as bool`;
+    case "string": return `${expr} as String${q}`;
+    case "int": return `(${expr} as num${q})${q}.toInt()`;
+    case "double": return `(${expr} as num${q})${q}.toDouble()`;
+    case "bool": return `${expr} as bool${q}`;
     case "any": return expr;
     case "ref":
-      return kinds.get(ref.name) === "enum"
-        ? `${ref.name}.fromJson(${expr} as String)`
+      if (kinds.get(ref.name) === "enum") {
+        return nullable
+          ? `${ref.name}.maybeFromJson(${expr} as String?)`
+          : `${ref.name}.fromJson(${expr} as String)`;
+      }
+      return nullable
+        ? `${expr} == null ? null : ${ref.name}.fromJson(${expr} as Map<String, dynamic>)`
         : `${ref.name}.fromJson(${expr} as Map<String, dynamic>)`;
     case "list":
-      return `(${expr} as List<dynamic>).map((e) => ${dartDecode(ref.item, "e", kinds)}).toList()`;
+      return `(${expr} as List<dynamic>${q})${q}.map((e) => ${dartDecode(ref.item, "e", kinds, ref.item.nullable)}).toList()`;
     case "map":
-      return `(${expr} as Map<String, dynamic>).map((k, v) => MapEntry(k, ${dartDecode(ref.value, "v", kinds)}))`;
+      return `(${expr} as Map<String, dynamic>${q})${q}.map((k, v) => MapEntry(k, ${dartDecode(ref.value, "v", kinds, ref.value.nullable)}))`;
     default: return fail(`unsupported type ${ref.kind}`);
   }
 }
