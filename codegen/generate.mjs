@@ -238,7 +238,7 @@ export function loadIndex(dir = schemaDir) {
         fail(`schemas/${INDEX_FILE}: ${entry.file} requests unknown target ${JSON.stringify(target)}`);
       }
     }
-    if (!fs.existsSync(path.join(schemaDir, entry.file))) {
+    if (!fs.existsSync(path.join(dir, entry.file))) {
       fail(`schemas/${INDEX_FILE} lists ${entry.file}, which does not exist`);
     }
     listed.set(entry.file, entry);
@@ -246,7 +246,7 @@ export function loadIndex(dir = schemaDir) {
 
   // A new schema must be classified, not silently skipped: that is the whole
   // point of the index, so an unlisted file is an error rather than a default.
-  const onDisk = fs.readdirSync(schemaDir).filter((f) => f.endsWith(".json") && f !== INDEX_FILE);
+  const onDisk = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && f !== INDEX_FILE);
   const missing = onDisk.filter((f) => !listed.has(f));
   if (missing.length) {
     fail(
@@ -652,6 +652,11 @@ export function build() {
   const built = plan();
   return { ...emitDart(built), ...emitTs(built) };
 }
+
+/** Exposed for codegen/generate.test.mjs — not part of any published surface. */
+export const internals = {
+  buildType, typeRef, emitDart, emitTs, dartIdent, dartEnumIdent, dartStr, snake, pascal,
+};
 
 /** Generated files that are no longer produced must not linger. */
 function staleFiles(expected) {
