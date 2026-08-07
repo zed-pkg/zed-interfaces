@@ -956,6 +956,26 @@ impl NativeHost {
         }
     }
 
+    /// Whether this host lets one version coordinate be published more than
+    /// once with different content.
+    ///
+    /// Almost nowhere. Maven serves snapshots from a repository built for
+    /// exactly that, Packagist re-reads a `dev-*` branch on every update, and
+    /// LuaRocks allows a `dev` rock to move. npm, crates.io, PyPI, RubyGems,
+    /// NuGet, Hex, and the rest reject a second upload of a version outright —
+    /// immutability is the property their consumers rely on.
+    ///
+    /// This is why [`ReleaseChannel::Snapshot`] is not universally available:
+    /// handing back a `0.1.0-SNAPSHOT` that crates.io will accept exactly once
+    /// and then refuse forever is worse than refusing it up front, because the
+    /// failure lands after the release is already half-run.
+    pub fn allows_republish(self) -> bool {
+        matches!(
+            self,
+            NativeHost::MavenCentral | NativeHost::Clojars | NativeHost::Packagist
+        )
+    }
+
     /// Whether a consumer must explicitly opt in before a resolver will select
     /// a package from this channel.
     ///
@@ -981,6 +1001,12 @@ impl NativeHost {
         }
         if !channel.is_default() && iteration == 0 {
             return Err(NativeHostError::ZeroIteration { channel });
+        }
+        if channel.is_mutable() && !self.allows_republish() {
+            return Err(NativeHostError::HostChannelUnsupported {
+                host: self,
+                channel,
+            });
         }
         let syntax = self.prerelease_syntax();
         let version = syntax
@@ -1493,6 +1519,46 @@ mod tests {
             rc.endpoints.publish,
             NativeHost::MavenCentral.endpoints().publish
         );
+    }
+
+    #[test]
+    fn a_snapshot_is_refused_where_a_version_can_only_be_published_once() {
+        // Every one of these rejects a second upload of the same version, so
+        // a "mutable" route to them is a promise nothing can keep. Failing at
+        // plan time beats failing after the release is half-run.
+        for host in [
+            NativeHost::Npm,
+            NativeHost::CratesIo,
+            NativeHost::PyPi,
+            NativeHost::RubyGems,
+            NativeHost::NuGet,
+            NativeHost::Hex,
+            NativeHost::PubDev,
+            NativeHost::GoProxy,
+        ] {
+            assert!(!host.allows_republish(), "{host}");
+            let error = host
+                .channel_route("1.0.0", ReleaseChannel::Snapshot, 1)
+                .unwrap_err();
+            assert!(
+                matches!(error, NativeHostError::HostChannelUnsupported { .. }),
+                "{host} accepted a snapshot: {error:?}"
+            );
+            // The immutable pre-release tracks still work.
+            assert!(host.channel_route("1.0.0", ReleaseChannel::Rc, 1).is_ok());
+        }
+
+        // The three that genuinely serve a mutable coordinate.
+        for host in [
+            NativeHost::MavenCentral,
+            NativeHost::Clojars,
+            NativeHost::Packagist,
+        ] {
+            let route = host
+                .channel_route("1.0.0", ReleaseChannel::Snapshot, 1)
+                .unwrap();
+            assert!(route.mutable, "{host} snapshot must be marked mutable");
+        }
     }
 
     #[test]
