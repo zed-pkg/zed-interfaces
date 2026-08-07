@@ -1,5 +1,8 @@
-//! Regenerates the JSON Schemas under `schemas/`, which the non-Rust
-//! client libraries in `zed-clients` use for codegen and validation.
+//! Regenerates the JSON Schemas under `schemas/`. They are the source of
+//! truth for every non-Rust consumer: `codegen/generate.mjs` turns the
+//! front-end-facing subset (see `schemas/index.json`) into `src/dart/` and
+//! `src/ts/`, and the client libraries in `zed-clients` codegen/validate
+//! against the same files.
 //!
 //! Run with: `cargo run --example generate_schemas`
 
