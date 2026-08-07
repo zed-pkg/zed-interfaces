@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ZedInterfacesSchemaIndex",
+  "description": "Demarcates which JSON Schemas are code-generated into the front-end language slices. Rust is deliberately absent: src/rust is the hand-written source of truth that schemas/*.json are generated FROM (cargo run --example generate_schemas), so every schema is already a Rust type. Dart and TypeScript are generated the other way round, from these schemas into src/dart and src/ts, and only for the subset a browser or Flutter client actually parses.",
+  "rule": "A schema is front-end-facing if and only if a non-Rust client decodes it directly off the registry HTTP API or the sync stream. Toolchain and on-disk formats (manifest, lockfile, environment plans, nix/oci/native adapter records, publish metadata) stay Rust-only: they are consumed by zed-cli and the servers, and generating them would put 20+ transitive types into every front-end bundle for no consumer.",
+  "targets": ["dart", "ts"],
+  "schemas": [
+    {
+      "file": "api-error.json",
+      "targets": ["dart", "ts"],
+      "why": "Error envelope of every registry endpoint; every client renders it."
+    },
+    {
+      "file": "package-metadata.json",
+      "targets": ["dart", "ts"],
+      "why": "GET /packages/{org}/{name} — the package detail page."
+    },
+    {
+      "file": "version-metadata.json",
+      "targets": ["dart", "ts"],
+      "why": "GET /packages/{org}/{name}/{version} — the version detail page."
+    },
+    {
+      "file": "package-list-response.json",
+      "targets": ["dart", "ts"],
+      "why": "Registry browse/index listing."
+    },
+    {
+      "file": "search-response.json",
+      "targets": ["dart", "ts"],
+      "why": "Keyword search results."
+    },
+    {
+      "file": "semantic-search-request.json",
+      "targets": ["dart", "ts"],
+      "why": "Semantic search is issued straight from the UI."
+    },
+    {
+      "file": "semantic-search-response.json",
+      "targets": ["dart", "ts"],
+      "why": "Semantic search results, incl. per-hit scores the UI displays."
+    },
+    {
+      "file": "publish-response.json",
+      "targets": ["dart", "ts"],
+      "why": "Shown after a UI-driven or extension-driven publish."
+    },
+    {
+      "file": "claim-org-request.json",
+      "targets": ["dart", "ts"],
+      "why": "Org claim flow is a web form."
+    },
+    {
+      "file": "claim-org-response.json",
+      "targets": ["dart", "ts"],
+      "why": "Org claim flow is a web form."
+    },
+    {
+      "file": "yank-request.json",
+      "targets": ["dart", "ts"],
+      "why": "Yank/unyank is exposed in the package admin UI."
+    },
+    {
+      "file": "yank-response.json",
+      "targets": ["dart", "ts"],
+      "why": "Yank/unyank is exposed in the package admin UI."
+    },
+    {
+      "file": "audit-log-response.json",
+      "targets": ["dart", "ts"],
+      "why": "Org governance screen renders the audit trail."
+    },
+    {
+      "file": "audit-integrity-response.json",
+      "targets": ["dart", "ts"],
+      "why": "The same screen verifies the hash chain client-side."
+    },
+    {
+      "file": "sync-change-event.json",
+      "targets": ["dart", "ts"],
+      "why": "Live sync envelope decoded by browser and Flutter transports."
+    },
+    {
+      "file": "sync-write-mode.json",
+      "targets": ["dart", "ts"],
+      "why": "Sync client configuration surfaced in UI settings."
+    },
+    {
+      "file": "sync-error-policy.json",
+      "targets": ["dart", "ts"],
+      "why": "Sync client configuration surfaced in UI settings."
+    },
+    {
+      "file": "sync-conflict-resolution.json",
+      "targets": ["dart", "ts"],
+      "why": "Sync client configuration surfaced in UI settings."
+    },
+    {
+      "file": "embedding-upsert-request.json",
+      "targets": [],
+      "why": "Server-side index ingestion; never issued by a front end."
+    },
+    {
+      "file": "manifest.json",
+      "targets": [],
+      "why": "On-disk .zpkg.toml model — zed-cli and the servers only."
+    },
+    {
+      "file": "lockfile.json",
+      "targets": [],
+      "why": "On-disk .zpkg.lock model — zed-cli and the servers only."
+    },
+    {
+      "file": "publish-meta.json",
+      "targets": [],
+      "why": "Publish-time provenance blob assembled by the CLI."
+    },
+    {
+      "file": "environment-plan.json",
+      "targets": [],
+      "why": "Toolchain/environment planning — CLI only."
+    },
+    {
+      "file": "environment-plan-v1.json",
+      "targets": [],
+      "why": "Toolchain/environment planning — CLI only."
+    },
+    {
+      "file": "environment-lock-v1.json",
+      "targets": [],
+      "why": "Toolchain/environment planning — CLI only."
+    },
+    {
+      "file": "native-dependency-lock.json",
+      "targets": [],
+      "why": "Native-registry interop record — CLI and servers only."
+    },
+    {
+      "file": "native-registry-adapter-record.json",
+      "targets": [],
+      "why": "Native-registry interop record — CLI and servers only."
+    },
+    {
+      "file": "nix-adapter-record.json",
+      "targets": [],
+      "why": "Nix interop record — CLI only."
+    },
+    {
+      "file": "nix-export-plan.json",
+      "targets": [],
+      "why": "Nix interop record — CLI only."
+    },
+    {
+      "file": "nix-export-section.json",
+      "targets": [],
+      "why": "Nix interop record — CLI only."
+    },
+    {
+      "file": "oci-adapter-record.json",
+      "targets": [],
+      "why": "OCI interop record — CLI and servers only."
+    }
+  ]
+}

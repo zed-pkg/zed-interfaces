@@ -2,7 +2,7 @@ use schemars::schema_for;
 use serde_json::Value;
 use zed_interfaces::Lockfile;
 
-const LOCKFILE_SCHEMA: &str = include_str!("../schemas/lockfile.json");
+const LOCKFILE_SCHEMA: &str = include_str!("../../../schemas/lockfile.json");
 
 #[test]
 fn checked_in_lockfile_schema_includes_native_dependency_provenance() {
