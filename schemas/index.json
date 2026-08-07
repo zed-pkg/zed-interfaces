@@ -141,6 +141,11 @@
       "why": "Native-registry interop record — CLI and servers only."
     },
     {
+      "file": "channel-route.json",
+      "targets": [],
+      "why": "Resolved native-host publish/pull destination for one release channel — release tooling only."
+    },
+    {
       "file": "nix-adapter-record.json",
       "targets": [],
       "why": "Nix interop record — CLI only."

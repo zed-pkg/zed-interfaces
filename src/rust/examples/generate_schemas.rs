@@ -35,6 +35,10 @@ fn main() {
     write::<zed_interfaces::NixExportPlan>(dir, "nix-export-plan");
     write::<zed_interfaces::NixAdapterRecord>(dir, "nix-adapter-record");
     write::<zed_interfaces::NativeRegistryAdapterRecord>(dir, "native-registry-adapter-record");
+    // The resolved (host, channel, version, endpoint) destination a release
+    // publishes to. Emitted so non-Rust release tooling reads the same shape
+    // `zed release plan --json` prints.
+    write::<zed_interfaces::ChannelRoute>(dir, "channel-route");
     write::<zed_interfaces::NativeDependencyLock>(dir, "native-dependency-lock");
     write::<zed_interfaces::OciAdapterRecord>(dir, "oci-adapter-record");
     write::<zed_interfaces::registry::PackageMetadata>(dir, "package-metadata");
