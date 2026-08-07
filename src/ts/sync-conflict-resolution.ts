@@ -8,4 +8,4 @@
 export type SyncConflictResolution = "server_wins" | "last_write_wins";
 
 /** Every `SyncConflictResolution` value, in schema order — for validation and pickers. */
-export const SYNCCONFLICTRESOLUTION_VALUES = ["server_wins", "last_write_wins"] as const;
+export const SYNC_CONFLICT_RESOLUTION_VALUES = ["server_wins", "last_write_wins"] as const;

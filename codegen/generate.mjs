@@ -217,8 +217,8 @@ function buildType(name, schema, sourceFile, sink) {
 
 // --- load + validate ---------------------------------------------------------
 
-export function loadIndex() {
-  const indexPath = path.join(schemaDir, INDEX_FILE);
+export function loadIndex(dir = schemaDir) {
+  const indexPath = path.join(dir, INDEX_FILE);
   if (!fs.existsSync(indexPath)) fail(`missing schemas/${INDEX_FILE}`);
   let index;
   try {

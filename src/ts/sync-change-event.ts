@@ -24,4 +24,4 @@ export interface SyncChangeEvent {
 export type SyncOp = "upsert" | "delete";
 
 /** Every `SyncOp` value, in schema order — for validation and pickers. */
-export const SYNCOP_VALUES = ["upsert", "delete"] as const;
+export const SYNC_OP_VALUES = ["upsert", "delete"] as const;

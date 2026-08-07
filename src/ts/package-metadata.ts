@@ -34,4 +34,4 @@ export const VCS_VALUES = ["git", "hg", "jj", "sapling", "fossil", "pijul"] as c
 export type VersionScheme = "semver" | "calver" | "opaque";
 
 /** Every `VersionScheme` value, in schema order — for validation and pickers. */
-export const VERSIONSCHEME_VALUES = ["semver", "calver", "opaque"] as const;
+export const VERSION_SCHEME_VALUES = ["semver", "calver", "opaque"] as const;

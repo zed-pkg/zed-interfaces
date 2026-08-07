@@ -12,7 +12,7 @@
 export type AuditAction = "publish" | "yank" | "unyank" | "org_claim";
 
 /** Every `AuditAction` value, in schema order — for validation and pickers. */
-export const AUDITACTION_VALUES = ["publish", "yank", "unyank", "org_claim"] as const;
+export const AUDIT_ACTION_VALUES = ["publish", "yank", "unyank", "org_claim"] as const;
 
 /** One audit-log record. The actor is identified by the *token* that acted — its name and role, never its secret — which is the identity a registry actually has (zed-docs issue #7 governance). */
 export interface AuditEntry {

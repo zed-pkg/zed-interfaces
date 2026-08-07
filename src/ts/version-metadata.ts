@@ -8,7 +8,7 @@
 export type ArtifactFormat = "tar.gz" | "zip";
 
 /** Every `ArtifactFormat` value, in schema order — for validation and pickers. */
-export const ARTIFACTFORMAT_VALUES = ["tar.gz", "zip"] as const;
+export const ARTIFACT_FORMAT_VALUES = ["tar.gz", "zip"] as const;
 
 export interface VersionMetadata {
   /** Absolute or registry-relative URL the artifact can be fetched from. */

@@ -8,4 +8,4 @@
 export type SyncErrorPolicy = "throw_only" | "emit_only" | "throw_and_emit" | "silent";
 
 /** Every `SyncErrorPolicy` value, in schema order — for validation and pickers. */
-export const SYNCERRORPOLICY_VALUES = ["throw_only", "emit_only", "throw_and_emit", "silent"] as const;
+export const SYNC_ERROR_POLICY_VALUES = ["throw_only", "emit_only", "throw_and_emit", "silent"] as const;

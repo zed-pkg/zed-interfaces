@@ -8,4 +8,4 @@
 export type SyncWriteMode = "local_only" | "optimistic_queue" | "optimistic_await_ack" | "server_first" | "server_only";
 
 /** Every `SyncWriteMode` value, in schema order — for validation and pickers. */
-export const SYNCWRITEMODE_VALUES = ["local_only", "optimistic_queue", "optimistic_await_ack", "server_first", "server_only"] as const;
+export const SYNC_WRITE_MODE_VALUES = ["local_only", "optimistic_queue", "optimistic_await_ack", "server_first", "server_only"] as const;
