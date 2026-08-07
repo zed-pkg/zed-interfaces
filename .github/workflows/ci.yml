@@ -46,6 +46,15 @@ jobs:
           git diff --exit-code schemas/ \
             || (echo "schemas/ is stale; run 'cargo run --locked --example generate_schemas' and commit" && exit 1)
 
+      # The fixtures are what the Dart and TypeScript slices decode. If a serde
+      # attribute changes what the wire looks like, this is the gate that says
+      # so — the schema can stay identical while the encoding moves.
+      - name: Wire-format fixtures are up to date
+        run: |
+          cargo run --locked --example generate_fixtures
+          git diff --exit-code fixtures/ \
+            || (echo "fixtures/ is stale; run 'cargo run --locked --example generate_fixtures' and commit" && exit 1)
+
   # The Dart and TypeScript slices are generated from schemas/. Drift between
   # the Rust source of truth and what a front end compiles against is the whole
   # failure mode this repository exists to prevent, so it is a hard CI gate.
@@ -89,6 +98,12 @@ jobs:
         working-directory: src/dart
         run: dart analyze --fatal-infos
 
+      # Decodes fixtures/*.json — real serde output — with the generated
+      # classes. Compiling proves the shape; only this proves the encoding.
+      - name: Wire-format tests
+        working-directory: src/dart
+        run: dart test
+
   typescript:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -101,8 +116,15 @@ jobs:
 
       - name: Install dependencies
         working-directory: src/ts
-        run: npm install --no-save typescript@5
+        run: npm install --no-save typescript@5 @types/node
 
       - name: Typecheck
         working-directory: src/ts
         run: npx tsc --noEmit
+
+      # Node strips the types, so this runs against the shipped source and also
+      # proves the generated `.ts` imports resolve at runtime — extensionless
+      # ones do not, which tsc alone will not tell you.
+      - name: Wire-format tests
+        working-directory: src/ts
+        run: node --test wire-format.test.ts

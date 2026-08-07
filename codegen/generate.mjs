@@ -712,8 +712,15 @@ export const internals = {
   buildType, typeRef, emitDart, emitTs, dartIdent, dartEnumIdent, dartStr, snake, pascal,
 };
 
-/** Generated files that are no longer produced must not linger. */
+/**
+ * Generated files that are no longer produced must not linger — but the
+ * cleanup may only touch files this generator wrote. Ownership is decided by
+ * the banner, not by "it has the right extension and I don't recognize it":
+ * the slice directories also hold hand-written files (tests, a tsconfig), and
+ * an over-broad rule here deletes them.
+ */
 function staleFiles(expected) {
+  const marker = BANNER.split("\n")[0];
   const stale = [];
   for (const dir of ["dart/lib", "ts"]) {
     const abs = path.join(outDir, dir);
@@ -723,7 +730,9 @@ function staleFiles(expected) {
       const full = path.join(abs, name);
       if (fs.statSync(full).isDirectory()) continue;
       if (!/\.(dart|ts)$/.test(name)) continue;
-      if (!(rel in expected)) stale.push(rel);
+      if (rel in expected) continue;
+      const head = fs.readFileSync(full, "utf8").slice(0, 200);
+      if (head.includes(marker)) stale.push(rel);
     }
   }
   return stale;

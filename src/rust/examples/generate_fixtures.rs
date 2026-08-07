@@ -20,7 +20,9 @@ use zed_interfaces::registry::{
     SearchResponse, SemanticHit, SemanticSearchRequest, SemanticSearchResponse, VersionMetadata,
     YankRequest, YankResponse,
 };
-use zed_interfaces::sync::{SyncChangeEvent, SyncConflictResolution, SyncErrorPolicy, SyncOp, SyncWriteMode};
+use zed_interfaces::sync::{
+    SyncChangeEvent, SyncConflictResolution, SyncErrorPolicy, SyncOp, SyncWriteMode,
+};
 use zed_interfaces::version::VersionScheme;
 use zed_interfaces::{ArtifactFormat, Vcs};
 
@@ -191,16 +193,31 @@ fn main() {
         dir,
         "enums",
         &[
-            ("write_mode", serde_json::to_value(SyncWriteMode::default()).unwrap()),
-            ("error_policy", serde_json::to_value(SyncErrorPolicy::default()).unwrap()),
+            (
+                "write_mode",
+                serde_json::to_value(SyncWriteMode::default()).unwrap(),
+            ),
+            (
+                "error_policy",
+                serde_json::to_value(SyncErrorPolicy::default()).unwrap(),
+            ),
             (
                 "conflict_resolution",
                 serde_json::to_value(SyncConflictResolution::default()).unwrap(),
             ),
-            ("artifact_format", serde_json::to_value(ArtifactFormat::Zip).unwrap()),
+            (
+                "artifact_format",
+                serde_json::to_value(ArtifactFormat::Zip).unwrap(),
+            ),
             ("vcs", serde_json::to_value(Vcs::Sapling).unwrap()),
-            ("version_scheme", serde_json::to_value(VersionScheme::Opaque).unwrap()),
-            ("audit_action", serde_json::to_value(AuditAction::OrgClaim).unwrap()),
+            (
+                "version_scheme",
+                serde_json::to_value(VersionScheme::Opaque).unwrap(),
+            ),
+            (
+                "audit_action",
+                serde_json::to_value(AuditAction::OrgClaim).unwrap(),
+            ),
         ],
     );
 
@@ -220,7 +237,10 @@ fn main() {
             ),
             (
                 "claim_org_request",
-                serde_json::to_value(ClaimOrgRequest { slug: "acme".into() }).unwrap(),
+                serde_json::to_value(ClaimOrgRequest {
+                    slug: "acme".into(),
+                })
+                .unwrap(),
             ),
             (
                 "claim_org_response",
