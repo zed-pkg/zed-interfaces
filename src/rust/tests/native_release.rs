@@ -493,6 +493,9 @@ fn every_language_host_is_routable_from_a_manifest() {
         ("r", "cran", "acme.client", "cran"),
         ("cpp", "conan-center", "acme-client", "cmake"),
         ("swift", "swift-package-index", "acme.client", "swiftpm"),
+        // Verified live: CocoaPods Trunk serves `Alamofire` and 404s on
+        // `alamofire`, so a route must preserve the podspec's case.
+        ("objc", "cocoapods", "AcmeClient", "swiftpm"),
         ("julia", "julia-general", "AcmeClient", "julia"),
         ("ocaml", "opam", "acme-client", "opam"),
         ("nim", "nimble", "acme_client", "nimble"),

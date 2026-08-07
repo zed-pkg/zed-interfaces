@@ -600,9 +600,11 @@ impl NativeRegistry {
             Self::Hex | Self::Opam | Self::Nimble | Self::Shards | Self::Zig => {
                 is_valid_lower_identity(package)
             }
-            Self::LuaRocks | Self::ConanCenter | Self::CocoaPods => {
-                is_valid_lower_identity(package)
-            }
+            // LuaRocks rock names and Conan references are lowercase by rule.
+            Self::LuaRocks | Self::ConanCenter => is_valid_lower_identity(package),
+            // CocoaPods is not. `Alamofire` is the pod; `alamofire` 404s on
+            // Trunk. Lowercasing it produces a route that resolves to nothing.
+            Self::CocoaPods => is_valid_simple_identity(package),
             Self::Hackage
             | Self::Stackage
             | Self::Cpan
@@ -638,11 +640,9 @@ impl NativeRegistry {
             Self::PyPi | Self::TestPyPi => normalize_pypi_package(package),
             // These hosts compare names case-insensitively, so two routes that
             // differ only in case are one destination and must collide.
-            Self::NuGet
-            | Self::PowerShellGallery
-            | Self::LuaRocks
-            | Self::CocoaPods
-            | Self::ConanCenter => package.to_ascii_lowercase(),
+            Self::NuGet | Self::PowerShellGallery | Self::LuaRocks | Self::ConanCenter => {
+                package.to_ascii_lowercase()
+            }
             Self::Clojars => package.replacen('/', ":", 1),
             _ => package.to_string(),
         }
