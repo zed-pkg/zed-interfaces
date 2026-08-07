@@ -385,7 +385,8 @@ function dartEncode(ref, name, kinds) {
   const q = ref.nullable ? "?" : "";
   switch (ref.kind) {
     case "ref":
-      return kinds.get(ref.name) === "enum" ? `${name}${q}.toJson()` : `${name}${q}.toJson()`;
+      // Both classes and enums expose `toJson()`, so the call is the same.
+      return `${name}${q}.toJson()`;
     case "list": {
       const inner = dartEncode(ref.item, "e", kinds);
       return inner === "e" ? name : `${name}${q}.map((e) => ${inner}).toList()`;
