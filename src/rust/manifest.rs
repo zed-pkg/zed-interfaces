@@ -427,6 +427,13 @@ pub enum NativeRegistry {
     Vcs,
 }
 
+/// A multi-format registry that re-serves a canonical registry's wire protocol
+/// at its own base URL: a source forge's package registry, or an enterprise
+/// binary repository that proxies public registries and hosts private ones.
+///
+/// These add no protocol of their own, which is why they are a separate axis
+/// from [`NativeRegistry`] — an org proxying npm through Artifactory needs a
+/// different URL and credential, not a different client.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -435,6 +442,11 @@ pub enum ForgeRegistry {
     GithubPackages,
     GitlabPackages,
     BitbucketPackages,
+    Artifactory,
+    Nexus,
+    AwsCodeartifact,
+    Cloudsmith,
+    AzureArtifacts,
 }
 
 impl ForgeRegistry {
@@ -443,35 +455,37 @@ impl ForgeRegistry {
             Self::GithubPackages => "github-packages",
             Self::GitlabPackages => "gitlab-packages",
             Self::BitbucketPackages => "bitbucket-packages",
+            Self::Artifactory => "artifactory",
+            Self::Nexus => "nexus",
+            Self::AwsCodeartifact => "aws-codeartifact",
+            Self::Cloudsmith => "cloudsmith",
+            Self::AzureArtifacts => "azure-artifacts",
         }
     }
 
-    /// Package-manager protocols currently documented by each forge. Failing
-    /// closed here prevents a manifest from promising e.g. Cargo support in
-    /// GitHub Packages when that registry has no Cargo endpoint.
-    pub fn supports(self, native: NativeRegistry) -> bool {
+    /// The mirror as [`crate::native_host::UniversalHost`] models it, which is
+    /// where the protocol compatibility matrix and URL rewriting live.
+    pub fn universal_host(self) -> UniversalHost {
         match self {
-            Self::GithubPackages => matches!(
-                native,
-                NativeRegistry::Npm
-                    | NativeRegistry::MavenCentral
-                    | NativeRegistry::RubyGems
-                    | NativeRegistry::NuGet
-            ),
-            Self::GitlabPackages => matches!(
-                native,
-                NativeRegistry::Npm
-                    | NativeRegistry::PyPi
-                    | NativeRegistry::MavenCentral
-                    | NativeRegistry::RubyGems
-                    | NativeRegistry::NuGet
-                    | NativeRegistry::Packagist
-                    | NativeRegistry::GoModules
-            ),
-            Self::BitbucketPackages => {
-                matches!(native, NativeRegistry::Npm | NativeRegistry::MavenCentral)
-            }
+            Self::GithubPackages => UniversalHost::GithubPackages,
+            Self::GitlabPackages => UniversalHost::GitlabPackages,
+            Self::BitbucketPackages => UniversalHost::BitbucketPackages,
+            Self::Artifactory => UniversalHost::Artifactory,
+            Self::Nexus => UniversalHost::Nexus,
+            Self::AwsCodeartifact => UniversalHost::AwsCodeArtifact,
+            Self::Cloudsmith => UniversalHost::Cloudsmith,
+            Self::AzureArtifacts => UniversalHost::AzureArtifacts,
         }
+    }
+
+    /// Whether this mirror serves the wire protocol the canonical registry
+    /// uses. Failing closed prevents a manifest from promising e.g. Cargo
+    /// support in GitHub Packages when that registry has no Cargo endpoint.
+    ///
+    /// Keyed on the *protocol*, not the registry, so a mirror that already
+    /// serves Maven automatically serves Clojars-shaped artifacts too.
+    pub fn supports(self, native: NativeRegistry) -> bool {
+        self.universal_host().supports(native.host().protocol())
     }
 }
 
