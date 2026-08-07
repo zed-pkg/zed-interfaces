@@ -25,6 +25,10 @@ The Rust crate is the contract everything else builds against:
 
 - **`.zpkg.toml`** — the package manifest at the repo root, TOML only (`manifest` module)
 - **`.zpkg.lock`** — the lockfile with artifact hashes and VCS provenance (`lockfile`)
+- **Environment plans** — manager-neutral runtime/tool pins, environment
+  values, task DAGs, system packages, platform selectors, and immutable
+  provenance used by native Zed environments and mise/asdf/Devbox/Flox/Nix
+  adapters (`environment`)
 - **Registry REST API** — URL scheme and JSON DTOs shared by `zed-api-server`,
   `zed-cli`, `zed-web-server`, and the SDKs in `zed-clients` (`registry`)
 - **Publish excludes** — the default rules that strip tests, CI config,
@@ -60,6 +64,15 @@ stay self-contained across multi-stage builds.
 
 The lockfile pins `sha256`, `size`, `vcs_tag`, and `vcs_commit` per package:
 installs are reproducible and every artifact traces back to source.
+
+The environment plan is deliberately adjacent to, not a replacement for, that
+package graph. It gives native Zed development environments and external
+manager adapters one normalized representation for exact runtime/tool pins,
+activation values, task dependencies, incremental inputs/outputs, platform
+constraints, system packages, and source/lock provenance. A frozen plan rejects
+floating resolved versions and mutable or incomplete source identities. Its
+canonical SHA-256 digest makes import/export drift detectable without treating
+manager-specific formatting as semantic state.
 
 For a polyglot repository, each `[targets.<language>]` slice becomes its own
 Zed artifact. An optional `[targets.<language>.native]` block declares the
@@ -118,6 +131,9 @@ source of truth for every non-Rust consumer: the SDKs in
 [zed-clients](https://github.com/zed-pkg/zed-clients) codegen and validate
 against them, and `codegen/generate.mjs` turns the front-end-facing subset into
 the Dart and TypeScript slices.
+`schemas/` holds generated JSON Schema files for every wire type, including the
+`environment-plan` contract used by non-Rust adapters and SDKs. Regenerate after
+changing any type:
 
 ```sh
 cargo run --locked --example generate_schemas   # src/rust  -> schemas/

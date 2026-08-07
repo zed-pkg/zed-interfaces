@@ -1,0 +1,51 @@
+name: generate environment contract artifacts
+
+on:
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - src/environment.rs
+      - src/lib.rs
+      - examples/generate_schemas.rs
+      - schemas/environment-plan.json
+      - .github/workflows/generate-environment-artifacts.yml
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          components: rustfmt,clippy
+
+      - name: Generate lock and schemas
+        run: cargo run --example generate_schemas
+
+      - name: Verify formatting and tests
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      - name: Upload generated artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: environment-contract-artifacts
+          path: |
+            Cargo.lock
+            schemas/environment-plan.json
+          if-no-files-found: warn
+          retention-days: 1
