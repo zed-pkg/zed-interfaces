@@ -488,11 +488,67 @@ impl NativeRegistry {
             Self::CratesIo => "crates-io",
             Self::PubDev => "pub.dev",
             Self::PyPi => "pypi",
+            Self::TestPyPi => "test-pypi",
             Self::MavenCentral => "maven-central",
             Self::RubyGems => "rubygems",
             Self::NuGet => "nuget",
             Self::Packagist => "packagist",
             Self::GoModules => "go-modules",
+            Self::Hex => "hex",
+            Self::Hackage => "hackage",
+            Self::Stackage => "stackage",
+            Self::Clojars => "clojars",
+            Self::LuaRocks => "luarocks",
+            Self::Cpan => "cpan",
+            Self::Cran => "cran",
+            Self::ConanCenter => "conan-center",
+            Self::SwiftPackageIndex => "swift-package-index",
+            Self::CocoaPods => "cocoapods",
+            Self::JuliaGeneral => "julia-general",
+            Self::Opam => "opam",
+            Self::Dub => "dub",
+            Self::Nimble => "nimble",
+            Self::Shards => "shards",
+            Self::Racket => "racket",
+            Self::PowerShellGallery => "powershell-gallery",
+            Self::Zig => "zig",
+            Self::Vcs => "vcs",
+        }
+    }
+
+    /// The host this route resolves to, which carries the endpoints, wire
+    /// protocol, auth scheme, and release-channel rules.
+    pub fn host(self) -> NativeHost {
+        match self {
+            Self::Npm => NativeHost::Npm,
+            Self::CratesIo => NativeHost::CratesIo,
+            Self::PubDev => NativeHost::PubDev,
+            Self::PyPi => NativeHost::PyPi,
+            Self::TestPyPi => NativeHost::TestPyPi,
+            Self::MavenCentral => NativeHost::MavenCentral,
+            Self::RubyGems => NativeHost::RubyGems,
+            Self::NuGet => NativeHost::NuGet,
+            Self::Packagist => NativeHost::Packagist,
+            Self::GoModules => NativeHost::GoProxy,
+            Self::Hex => NativeHost::Hex,
+            Self::Hackage => NativeHost::Hackage,
+            Self::Stackage => NativeHost::Stackage,
+            Self::Clojars => NativeHost::Clojars,
+            Self::LuaRocks => NativeHost::LuaRocks,
+            Self::Cpan => NativeHost::Cpan,
+            Self::Cran => NativeHost::Cran,
+            Self::ConanCenter => NativeHost::ConanCenter,
+            Self::SwiftPackageIndex => NativeHost::SwiftPackageIndex,
+            Self::CocoaPods => NativeHost::CocoaPods,
+            Self::JuliaGeneral => NativeHost::JuliaGeneral,
+            Self::Opam => NativeHost::Opam,
+            Self::Dub => NativeHost::Dub,
+            Self::Nimble => NativeHost::Nimble,
+            Self::Shards => NativeHost::Shards,
+            Self::Racket => NativeHost::Racket,
+            Self::PowerShellGallery => NativeHost::PowerShellGallery,
+            Self::Zig => NativeHost::Zig,
+            Self::Vcs => NativeHost::Vcs,
         }
     }
 
@@ -501,12 +557,48 @@ impl NativeRegistry {
             Self::Npm => is_valid_npm_package(package),
             Self::CratesIo => is_valid_crates_package(package),
             Self::PubDev => is_valid_pubdev_package(package),
-            Self::PyPi => is_valid_pypi_package(package),
+            Self::PyPi | Self::TestPyPi => is_valid_pypi_package(package),
             Self::MavenCentral => is_valid_maven_package(package),
             Self::RubyGems => is_valid_rubygems_package(package),
             Self::NuGet => is_valid_nuget_package(package),
             Self::Packagist => is_valid_packagist_package(package),
             Self::GoModules => is_valid_go_module(package),
+            // Clojars is Maven coordinates, but its own tooling writes them
+            // `group/artifact`, so accept either separator rather than making
+            // one of the two spellings a validation failure.
+            Self::Clojars => is_valid_maven_package(&package.replacen('/', ":", 1)),
+            // Hex, opam, Nimble, Shards, and Zig all require lowercase.
+            // Accepting an uppercase name here would produce a route that the
+            // host rejects at upload time, long after the plan was reviewed.
+            Self::Hex | Self::Opam | Self::Nimble | Self::Shards | Self::Zig => {
+                is_valid_lower_identity(package)
+            }
+            Self::LuaRocks | Self::ConanCenter | Self::CocoaPods => {
+                is_valid_lower_identity(package)
+            }
+            Self::Hackage
+            | Self::Stackage
+            | Self::Cpan
+            | Self::Cran
+            | Self::JuliaGeneral
+            | Self::Racket
+            | Self::PowerShellGallery => is_valid_simple_identity(package),
+            // SE-0292 identifies a package as `scope.name`; DUB uses
+            // `package:subpackage`.
+            Self::SwiftPackageIndex => package
+                .split_once('.')
+                .is_some_and(|(scope, name)| {
+                    is_valid_simple_identity(scope) && is_valid_simple_identity(name)
+                }),
+            Self::Dub => match package.split_once(':') {
+                Some((root, sub)) => {
+                    is_valid_lower_identity(root) && is_valid_lower_identity(sub)
+                }
+                None => is_valid_lower_identity(package),
+            },
+            // A VCS route names a repository, not a registry package, so it
+            // carries the same shape a Go module path does.
+            Self::Vcs => is_valid_go_module(package),
         };
         if valid {
             Ok(())
@@ -520,8 +612,15 @@ impl NativeRegistry {
 
     fn canonical_package(self, package: &str) -> String {
         match self {
-            Self::PyPi => normalize_pypi_package(package),
-            Self::NuGet => package.to_ascii_lowercase(),
+            Self::PyPi | Self::TestPyPi => normalize_pypi_package(package),
+            // These hosts compare names case-insensitively, so two routes that
+            // differ only in case are one destination and must collide.
+            Self::NuGet
+            | Self::PowerShellGallery
+            | Self::LuaRocks
+            | Self::CocoaPods
+            | Self::ConanCenter => package.to_ascii_lowercase(),
+            Self::Clojars => package.replacen('/', ":", 1),
             _ => package.to_string(),
         }
     }
@@ -531,20 +630,10 @@ impl NativeRegistry {
     /// The two enums describe the same thing from opposite directions —
     /// `NativeRegistry` is where a slice is *mirrored to*, `Ecosystem` is what a
     /// consumer needs to *install* it — so a target declaring both must not
-    /// disagree. Mapping them here keeps that check in one place instead of
-    /// letting each caller re-derive it.
+    /// disagree. Delegating to the host keeps one table rather than two that
+    /// can drift.
     pub fn ecosystem(self) -> Ecosystem {
-        match self {
-            Self::Npm => Ecosystem::Npm,
-            Self::CratesIo => Ecosystem::Cargo,
-            Self::PubDev => Ecosystem::Pub,
-            Self::PyPi => Ecosystem::Pypi,
-            Self::MavenCentral => Ecosystem::Jvm,
-            Self::RubyGems => Ecosystem::Gem,
-            Self::NuGet => Ecosystem::Nuget,
-            Self::Packagist => Ecosystem::Composer,
-            Self::GoModules => Ecosystem::Gomod,
-        }
+        self.host().ecosystem()
     }
 }
 
