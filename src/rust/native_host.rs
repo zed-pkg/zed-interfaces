@@ -159,17 +159,21 @@ impl RegistryProtocol {
         }
     }
 
-    /// Whether this protocol accepts an artifact upload over HTTP.
+    /// Whether this protocol moves artifact bytes over HTTP at publish time.
     ///
     /// False means the "publish" step is a VCS tag (plus, for some hosts, an
-    /// unauthenticated index ping). Callers must not prompt for an upload
-    /// credential in that case — asking for a token that is never used is how
-    /// CI ends up with unnecessary secrets in scope.
+    /// unauthenticated index ping) or a pull request against a registry repo.
+    /// Callers must not prompt for an upload credential in that case — asking
+    /// for a token that is never used is how CI ends up with unnecessary
+    /// secrets in scope.
+    ///
+    /// Orthogonal to [`RegistryProtocol::is_moderated`]: CRAN does upload a
+    /// tarball, but a human decides whether it lands.
     pub fn uploads_artifact(self) -> bool {
         use RegistryProtocol::*;
         !matches!(
             self,
-            VcsIndexed | GoProxy | DirectUrl | JuliaGeneral | OpamRepository | CranSubmit
+            VcsIndexed | GoProxy | DirectUrl | JuliaGeneral | OpamRepository
         )
     }
 
