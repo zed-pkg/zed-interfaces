@@ -789,6 +789,30 @@ fn is_valid_packagist_package(value: &str) -> bool {
     !package.contains('/') && is_valid_npm_component(vendor) && is_valid_npm_component(package)
 }
 
+/// The conservative identity shape shared by registries whose naming rules are
+/// supersets of "starts and ends alphanumeric, ASCII alphanumerics plus `.`,
+/// `_`, or `-` in between": Hackage, CPAN, CRAN, Julia, Racket, the PowerShell
+/// Gallery.
+///
+/// Deliberately narrower than several of them allow. A name this rejects can
+/// still be published by hand; a name it accepts is portable across all of
+/// them, which is what a *route* declaration needs — the point is to fail while
+/// a plan is being reviewed rather than at upload time.
+fn is_valid_simple_identity(value: &str) -> bool {
+    !value.is_empty()
+        && value.as_bytes()[0].is_ascii_alphanumeric()
+        && value.as_bytes()[value.len() - 1].is_ascii_alphanumeric()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+/// [`is_valid_simple_identity`] for the registries that additionally reject
+/// uppercase — Hex, opam, Nimble, Shards, Zig, LuaRocks, Conan, CocoaPods.
+fn is_valid_lower_identity(value: &str) -> bool {
+    !value.bytes().any(|byte| byte.is_ascii_uppercase()) && is_valid_simple_identity(value)
+}
+
 fn is_valid_go_module(value: &str) -> bool {
     !value.is_empty()
         && value.contains('/')
