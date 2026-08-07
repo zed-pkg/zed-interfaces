@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::language::{Ecosystem, Language};
+use crate::native_host::{NativeHost, ReleaseChannel, UniversalHost};
 use crate::nix::NixExportSection;
 use crate::vcs::Vcs;
 use crate::version::{Requirement, VersionScheme};
