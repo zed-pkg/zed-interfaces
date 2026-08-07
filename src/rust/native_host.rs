@@ -293,7 +293,10 @@ impl ReleaseChannel {
         }
     }
 
-    pub fn is_default(self) -> bool {
+    /// True for the default (`stable`); lets manifests omit the field. Takes
+    /// `&self` to match the other manifest defaults, which serde's
+    /// `skip_serializing_if` calls by reference.
+    pub fn is_default(&self) -> bool {
         matches!(self, ReleaseChannel::Stable)
     }
 
