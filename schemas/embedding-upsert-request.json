@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EmbeddingUpsertRequest",
+  "description": "Body of `PUT /v1/packages/{org}/{name}/embedding` — upsert a package's\nembedding for one model (re-embedding replaces in place).",
+  "type": "object",
+  "properties": {
+    "content": {
+      "description": "The text that was embedded (kept for provenance / re-embedding).",
+      "type": "string"
+    },
+    "embedding": {
+      "description": "The embedding (native width; padded to 2050 server-side).",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "format": "float"
+      }
+    },
+    "model": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "model",
+    "embedding",
+    "content"
+  ]
+}

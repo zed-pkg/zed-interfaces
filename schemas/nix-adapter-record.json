@@ -1,37 +1,84 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Lockfile",
-  "description": "The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.\n\nSerialized as TOML with one `[[package]]` table per locked Zed package,\noptional `[[native-dependency]]` tables for exact npm/Cargo resolutions,\nand optional `[[nix-adapter]]` tables for completed Nix translations.\nEvery entry pins exact immutable identity so frozen restore never needs to\nreinterpret a native range or repeat an environment translation.",
-  "type": "object",
-  "properties": {
-    "native-dependency": {
-      "description": "Exact source-aware npm/Cargo resolutions. This additive field keeps\nexisting lockfile version 1 documents readable while newer writers can\npreserve native requirement translation and immutable artifact identity.",
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/NativeDependencyLock"
-      }
+  "title": "NixAdapterRecord",
+  "description": "Final, immutable provenance record for one completed translation.\n\n`direction` is internally tagged in JSON so consumers cannot deserialize a\ndirection whose required origin/result fields are absent.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": "string",
+          "const": "zed-to-nix"
+        },
+        "flake_bundle_sha256": {
+          "description": "Hash of a canonical inventory of the generated standalone flake\nbundle, not a filesystem-dependent archive of the output directory.",
+          "type": "string"
+        },
+        "intent": {
+          "$ref": "#/$defs/NixExportSection"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NixRealizedOutput"
+          }
+        },
+        "package": {
+          "$ref": "#/$defs/NixPackageIdentity"
+        },
+        "policy": {
+          "$ref": "#/$defs/NixPolicyEvidence"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ZedArtifactOrigin"
+        }
+      },
+      "required": [
+        "direction",
+        "schema",
+        "package",
+        "source",
+        "intent",
+        "flake_bundle_sha256",
+        "outputs",
+        "policy"
+      ]
     },
-    "nix-adapter": {
-      "description": "Optional immutable provenance for completed Nix interoperability\ntranslations. This additive field keeps lockfile version 1 readable by\ncurrent consumers while allowing newer writers to preserve evidence.",
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/NixAdapterRecord"
-      }
-    },
-    "package": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/LockedPackage"
-      }
-    },
-    "version": {
-      "type": "integer",
-      "format": "uint32",
-      "minimum": 0
+    {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/NixInteropArtifact"
+        },
+        "direction": {
+          "type": "string",
+          "const": "nix-to-zed"
+        },
+        "package": {
+          "$ref": "#/$defs/NixPackageIdentity"
+        },
+        "policy": {
+          "$ref": "#/$defs/NixPolicyEvidence"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/NixOutputOrigin"
+        }
+      },
+      "required": [
+        "direction",
+        "schema",
+        "package",
+        "source",
+        "artifact",
+        "policy"
+      ]
     }
-  },
-  "required": [
-    "version"
   ],
   "$defs": {
     "ArtifactFormat": {
@@ -40,244 +87,6 @@
       "enum": [
         "tar.gz",
         "zip"
-      ]
-    },
-    "LockedPackage": {
-      "type": "object",
-      "properties": {
-        "format": {
-          "description": "Explicit archive format. A missing value must never be inferred during\na frozen install because the format is part of immutable artifact identity.",
-          "$ref": "#/$defs/ArtifactFormat"
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "org": {
-          "type": "string",
-          "minLength": 1
-        },
-        "sha256": {
-          "description": "Canonical lowercase hex sha256 of the artifact archive; also its store address.",
-          "type": "string",
-          "maxLength": 64,
-          "minLength": 64,
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "size": {
-          "description": "Artifact size in bytes. Zero-byte package artifacts are invalid.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 1
-        },
-        "source": {
-          "description": "Base URL of the registry the artifact was resolved from.",
-          "type": "string",
-          "minLength": 1
-        },
-        "vcs_commit": {
-          "description": "Exact immutable source revision associated with the published artifact.\nThe optional Rust representation preserves API compatibility for\nbuilders. Parsing and JSON Schema validation require an explicit value;\nthe canonical writer upgrades a legacy in-memory `None` to the exact\ncontent-addressed `artifact-sha256:<digest>` revision before emission.",
-          "type": "string",
-          "maxLength": 128,
-          "minLength": 7,
-          "pattern": "^[A-Za-z0-9._+:/-]+$"
-        },
-        "vcs_tag": {
-          "description": "VCS tag the version was published from, e.g. `v1.2.0`.",
-          "type": "string",
-          "minLength": 1
-        },
-        "version": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "org",
-        "name",
-        "version",
-        "sha256",
-        "size",
-        "format",
-        "vcs_tag",
-        "vcs_commit",
-        "source"
-      ]
-    },
-    "NativeArtifact": {
-      "description": "Exact immutable bytes published under one native package identity.",
-      "type": "object",
-      "properties": {
-        "format": {
-          "$ref": "#/$defs/ArtifactFormat",
-          "default": "tar.gz"
-        },
-        "sha256": {
-          "description": "Lowercase hexadecimal SHA-256 of the exact uploaded archive bytes.",
-          "type": "string"
-        },
-        "size": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "sha256",
-        "size"
-      ]
-    },
-    "NativeDependencyLock": {
-      "description": "Frozen native dependency identity. The declaration remains auditable, while\n`package.version` and `artifact` are the only restore-time identities.",
-      "type": "object",
-      "properties": {
-        "artifact": {
-          "$ref": "#/$defs/NativeArtifact"
-        },
-        "package": {
-          "$ref": "#/$defs/NativePackageIdentity"
-        },
-        "requirement": {
-          "$ref": "#/$defs/NativeVersionRequirement"
-        },
-        "schema": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "schema",
-        "requirement",
-        "package",
-        "artifact"
-      ]
-    },
-    "NativePackageIdentity": {
-      "description": "Public identity selected in npm or a Cargo-compatible registry.",
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "version": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "version"
-      ]
-    },
-    "NativeRegistry": {
-      "description": "Native registries with a first-class publication identity contract.",
-      "type": "string",
-      "enum": [
-        "npm",
-        "cargo"
-      ]
-    },
-    "NativeVersionRequirement": {
-      "description": "One source-aware native requirement and its canonical SemVer translation.",
-      "type": "object",
-      "properties": {
-        "canonical": {
-          "description": "Deterministic `semver::VersionReq` representation used by Zed.",
-          "type": "string"
-        },
-        "declared": {
-          "description": "Exact project declaration before translation.",
-          "type": "string"
-        },
-        "registry": {
-          "$ref": "#/$defs/NativeRegistry"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "registry",
-        "declared",
-        "canonical"
-      ]
-    },
-    "NixAdapterRecord": {
-      "description": "Final, immutable provenance record for one completed translation.\n\n`direction` is internally tagged in JSON so consumers cannot deserialize a\ndirection whose required origin/result fields are absent.",
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "direction": {
-              "type": "string",
-              "const": "zed-to-nix"
-            },
-            "flake_bundle_sha256": {
-              "description": "Hash of a canonical inventory of the generated standalone flake\nbundle, not a filesystem-dependent archive of the output directory.",
-              "type": "string"
-            },
-            "intent": {
-              "$ref": "#/$defs/NixExportSection"
-            },
-            "outputs": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/NixRealizedOutput"
-              }
-            },
-            "package": {
-              "$ref": "#/$defs/NixPackageIdentity"
-            },
-            "policy": {
-              "$ref": "#/$defs/NixPolicyEvidence"
-            },
-            "schema": {
-              "type": "string"
-            },
-            "source": {
-              "$ref": "#/$defs/ZedArtifactOrigin"
-            }
-          },
-          "required": [
-            "direction",
-            "schema",
-            "package",
-            "source",
-            "intent",
-            "flake_bundle_sha256",
-            "outputs",
-            "policy"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "artifact": {
-              "$ref": "#/$defs/NixInteropArtifact"
-            },
-            "direction": {
-              "type": "string",
-              "const": "nix-to-zed"
-            },
-            "package": {
-              "$ref": "#/$defs/NixPackageIdentity"
-            },
-            "policy": {
-              "$ref": "#/$defs/NixPolicyEvidence"
-            },
-            "schema": {
-              "type": "string"
-            },
-            "source": {
-              "$ref": "#/$defs/NixOutputOrigin"
-            }
-          },
-          "required": [
-            "direction",
-            "schema",
-            "package",
-            "source",
-            "artifact",
-            "policy"
-          ]
-        }
       ]
     },
     "NixBuilderNetwork": {

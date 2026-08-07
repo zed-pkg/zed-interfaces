@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NativeDependencyLock",
+  "description": "Frozen native dependency identity. The declaration remains auditable, while\n`package.version` and `artifact` are the only restore-time identities.",
+  "type": "object",
+  "properties": {
+    "artifact": {
+      "$ref": "#/$defs/NativeArtifact"
+    },
+    "package": {
+      "$ref": "#/$defs/NativePackageIdentity"
+    },
+    "requirement": {
+      "$ref": "#/$defs/NativeVersionRequirement"
+    },
+    "schema": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "requirement",
+    "package",
+    "artifact"
+  ],
+  "$defs": {
+    "ArtifactFormat": {
+      "description": "On-the-wire formats for published package artifacts.",
+      "type": "string",
+      "enum": [
+        "tar.gz",
+        "zip"
+      ]
+    },
+    "NativeArtifact": {
+      "description": "Exact immutable bytes published under one native package identity.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/ArtifactFormat",
+          "default": "tar.gz"
+        },
+        "sha256": {
+          "description": "Lowercase hexadecimal SHA-256 of the exact uploaded archive bytes.",
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sha256",
+        "size"
+      ]
+    },
+    "NativePackageIdentity": {
+      "description": "Public identity selected in npm or a Cargo-compatible registry.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ]
+    },
+    "NativeRegistry": {
+      "description": "Native registries with a first-class publication identity contract.",
+      "type": "string",
+      "enum": [
+        "npm",
+        "cargo"
+      ]
+    },
+    "NativeVersionRequirement": {
+      "description": "One source-aware native requirement and its canonical SemVer translation.",
+      "type": "object",
+      "properties": {
+        "canonical": {
+          "description": "Deterministic `semver::VersionReq` representation used by Zed.",
+          "type": "string"
+        },
+        "declared": {
+          "description": "Exact project declaration before translation.",
+          "type": "string"
+        },
+        "registry": {
+          "$ref": "#/$defs/NativeRegistry"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "declared",
+        "canonical"
+      ]
+    }
+  }
+}

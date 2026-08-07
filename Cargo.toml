@@ -6,10 +6,21 @@ description = "Core interface definitions for the zed-pkg universal package mana
 license = "MIT"
 repository = "https://github.com/zed-pkg/zed-interfaces"
 
+# The Rust sources live under `src/rust/` so that `src/dart/` and `src/ts/`
+# (generated from `schemas/`) can sit beside them as sibling language slices.
+# The package manifest deliberately stays at the repository root: consumers
+# depend on this crate as `{ git = ".../zed-interfaces" }` or
+# `{ path = "../zed-interfaces" }`, and both keep resolving only while the
+# root is the crate. See `docs/multi-language-layout.md`.
+[lib]
+path = "src/rust/lib.rs"
+
 [dependencies]
+hex = "0.4"
 schemars = "1.2.1"
 semver = { version = "1.0.28", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+sha2 = "0.10"
 thiserror = "2.0.19"
 toml = "1.1.3"

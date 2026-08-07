@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OciAdapterRecord",
+  "description": "Final immutable provenance record connecting a Zed package identity to one\nOCI manifest digest and all of its typed blobs.",
+  "type": "object",
+  "properties": {
+    "annotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "config": {
+      "$ref": "#/$defs/OciDescriptor"
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OciLayer"
+      }
+    },
+    "manifest": {
+      "$ref": "#/$defs/OciDescriptor"
+    },
+    "package": {
+      "$ref": "#/$defs/OciPackageIdentity"
+    },
+    "reference": {
+      "$ref": "#/$defs/OciReference"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "subject": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OciDescriptor"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "package",
+    "reference",
+    "manifest",
+    "config",
+    "layers"
+  ],
+  "$defs": {
+    "OciDescriptor": {
+      "description": "One immutable OCI descriptor.",
+      "type": "object",
+      "properties": {
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "digest": {
+          "$ref": "#/$defs/OciDigest"
+        },
+        "mediaType": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "mediaType",
+        "digest",
+        "size"
+      ]
+    },
+    "OciDigest": {
+      "description": "One canonical OCI content digest.\n\nContract v1 intentionally accepts only lowercase SHA-256 digests. OCI can\ncarry other digest algorithms, but Zed's existing artifact and lock model\nis SHA-256 based; accepting an algorithm the rest of the system cannot\nverify would create a false portability guarantee.",
+      "type": "string"
+    },
+    "OciLayer": {
+      "description": "One typed layer in the finalized artifact record.",
+      "type": "object",
+      "properties": {
+        "descriptor": {
+          "$ref": "#/$defs/OciDescriptor"
+        },
+        "kind": {
+          "$ref": "#/$defs/OciLayerKind"
+        },
+        "platform": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OciPlatform"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "descriptor"
+      ]
+    },
+    "OciLayerKind": {
+      "description": "Semantic role of a layer within a Zed OCI artifact.",
+      "type": "string",
+      "enum": [
+        "package-tar-gz",
+        "package-zip",
+        "manifest",
+        "lockfile",
+        "binary",
+        "spdx-sbom",
+        "cyclone-dx-sbom",
+        "provenance"
+      ]
+    },
+    "OciPackageIdentity": {
+      "description": "Public Zed identity associated with an OCI artifact.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "org",
+        "name",
+        "version"
+      ]
+    },
+    "OciPlatform": {
+      "description": "OCI platform selector for multi-platform package payloads.",
+      "type": "object",
+      "properties": {
+        "architecture": {
+          "type": "string"
+        },
+        "os": {
+          "type": "string"
+        },
+        "variant": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "os",
+        "architecture"
+      ]
+    },
+    "OciReference": {
+      "description": "A normalized OCI registry reference.\n\nThe textual form is `oci://registry/repository[:tag][@sha256:digest]`.\nAt least one tag or digest is required. A final adapter record additionally\nrequires the digest because a tag alone is mutable.",
+      "type": "object",
+      "properties": {
+        "digest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OciDigest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "registry": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "registry",
+        "repository"
+      ]
+    }
+  }
+}

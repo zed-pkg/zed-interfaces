@@ -1,24 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "SearchResponse",
+  "title": "SemanticSearchResponse",
   "type": "object",
   "properties": {
     "items": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/PackageSummary"
+        "$ref": "#/$defs/SemanticHit"
       }
-    },
-    "query": {
-      "type": "string"
     }
   },
   "required": [
-    "query",
     "items"
   ],
   "$defs": {
-    "PackageSummary": {
+    "SemanticHit": {
       "type": "object",
       "properties": {
         "description": {
@@ -27,11 +23,10 @@
             "null"
           ]
         },
-        "latest": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "distance": {
+          "description": "Cosine distance (0 = identical direction, 2 = opposite). Lower is nearer.",
+          "type": "number",
+          "format": "double"
         },
         "name": {
           "type": "string"
@@ -40,7 +35,6 @@
           "type": "string"
         },
         "tags": {
-          "description": "Free-form tags for filtering/discovery.",
           "type": "array",
           "items": {
             "type": "string"
@@ -49,7 +43,8 @@
       },
       "required": [
         "org",
-        "name"
+        "name",
+        "distance"
       ]
     }
   }

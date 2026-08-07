@@ -14,6 +14,9 @@ This crate is the contract everything else builds against:
 - **Filesystem layout** — `$HOME/.zed-pkg` store, `zed_modules/` symlink dir,
   archive structure (`paths`)
 - **VCS + artifact enums** — `git`/`hg`, `tar.gz`/`zip` (`vcs`, `artifact`)
+- **Polyglot release routes** — language/ecosystem identity plus canonical
+  native registries and compatible GitHub/GitLab/Bitbucket package mirrors
+  (`language`, `manifest`)
 
 ## The model in one page
 
@@ -39,6 +42,41 @@ stay self-contained across multi-stage builds.
 
 The lockfile pins `sha256`, `size`, `vcs_tag`, and `vcs_commit` per package:
 installs are reproducible and every artifact traces back to source.
+
+For a polyglot repository, each `[targets.<language>]` slice becomes its own
+Zed artifact. An optional `[targets.<language>.native]` block declares the
+same version for the ecosystem's canonical registry, and `forge` declares
+additional package-registry copies:
+
+```toml
+[targets.nodejs]
+dir = "clients/typescript"
+
+[targets.nodejs.native]
+registry = "npm"
+package = "@acme/client"
+forge = ["github-packages", "gitlab-packages", "bitbucket-packages"]
+```
+
+Forge compatibility is validated in the interface contract. A manifest cannot
+claim Cargo support in GitHub Packages or PyPI support in Bitbucket Packages;
+those combinations fail during manifest parsing, before any release job sees
+credentials.
+
+Tag-resolved ecosystems can override the repository release tag. A Go module
+below `clients/go`, for example, declares
+`tag_format = "clients/go/v{version}"`; validation rejects a subdirectory Go
+route without that prefix.
+
+A single-language package whose native manifest is at the repository root uses
+the same shape under `[publish.native]`:
+
+```toml
+[publish.native]
+registry = "npm"
+package = "r2g"
+forge = ["github-packages", "gitlab-packages", "bitbucket-packages"]
+```
 
 ## Registry API surface
 

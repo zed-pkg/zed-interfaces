@@ -36,9 +36,23 @@
         "type": "string"
       }
     },
+    "hooks": {
+      "description": "Package-local lifecycle hooks. They run in a writable staging copy,\nnever in the immutable source store and never in the consumer project.\n`pre-install` runs before `[build]`; `post-install` runs after it and\nbefore the finalized artifact is promoted to the platform cache.",
+      "$ref": "#/$defs/InstallHooksSection"
+    },
     "install": {
       "description": "Where zed materializes the (few, hand-picked) dependencies it sources —\nzed complements npm/maven/etc. rather than replacing them, so this dir\nsits alongside the native one and the ecosystem adapter wires it into\nthe toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`\ndefaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or\n`.deps/.zed`.",
       "$ref": "#/$defs/InstallSection"
+    },
+    "native-dependencies": {
+      "description": "Host-native packages required before this package's install hooks or\nbuild step can run. Keys are supported package-manager names (`apt`,\n`apk`, `brew`, `nix`, ...); values are package specs passed as argv,\nnever interpolated into a shell command. Installing these prerequisites\nis an explicitly consented zed operation, separate from build-hook\nconsent.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
     },
     "overrides": {
       "description": "Consumer-side patches for dependencies (e.g. fixing a dependency's\nbroken or missing `[build]` step without waiting on upstream).",
@@ -60,6 +74,13 @@
       "$ref": "#/$defs/ScriptsSection",
       "default": {
         "test": null
+      }
+    },
+    "targets": {
+      "description": "Language subtrees for a **polyglot package** — one repo shipping the\nsame library for several ecosystems (e.g. `node/`, `python/`, `go/`).\nKeyed by ecosystem name; the value says which subdirectory is that\necosystem's package root. On install the consumer resolves one target\nand only that subtree is materialized, so a Python project gets the\nPython source at its import root rather than a tree it has to reach\ninto. Absent (the common case) = single-language package, whole tree.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/TargetSection"
       }
     },
     "workspace": {
@@ -98,6 +119,82 @@
         "command"
       ]
     },
+    "Ecosystem": {
+      "description": "How a consumer's build system takes a dependency in: the resolution\nmechanism, not the language. Drives the install guard and which toolchain\nwiring file `zed install` writes.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "cargo",
+            "cmake",
+            "composer",
+            "cran",
+            "gem",
+            "gomod",
+            "hackage",
+            "julia",
+            "luarocks",
+            "matlab",
+            "nimble",
+            "npm",
+            "nuget",
+            "opam",
+            "psgallery",
+            "pypi",
+            "shards",
+            "shell",
+            "swiftpm",
+            "zig"
+          ]
+        },
+        {
+          "description": "No ecosystem constraint. Installs into any project; never gated.",
+          "type": "string",
+          "const": "universal"
+        },
+        {
+          "description": "Elixir, Erlang and Gleam share Hex and the BEAM.",
+          "type": "string",
+          "const": "hex"
+        },
+        {
+          "description": "Anything consumed off a JVM classpath: Java, Kotlin, Scala, Clojure.",
+          "type": "string",
+          "const": "jvm"
+        },
+        {
+          "description": "Dart and Flutter (`pub`).",
+          "type": "string",
+          "const": "pub"
+        }
+      ]
+    },
+    "ForgeRegistry": {
+      "type": "string",
+      "enum": [
+        "github-packages",
+        "gitlab-packages",
+        "bitbucket-packages"
+      ]
+    },
+    "InstallHooksSection": {
+      "description": "Package-local lifecycle hooks. Commands are author-controlled shell code,\nbut execution is separately consented by the installer and occurs only in\na writable staging tree.",
+      "type": "object",
+      "properties": {
+        "post-install": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pre-install": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "InstallSection": {
       "description": "Install-layout controls: where zed's dependency tree lands and which\necosystem adapter to emit so those deps are visible to the native toolchain.",
       "type": "object",
@@ -115,6 +212,155 @@
             "string",
             "null"
           ]
+        },
+        "target": {
+          "description": "Which language subtree to take from **polyglot** dependencies (see\n[`TargetSection`]). Omitted = infer from the project (`package.json` →\n`node`, `go.mod` → `go`, `pyproject.toml` → `python`, …). Naming a\ntarget a dependency does not publish is an error rather than a silent\nfallback: the consumer asked for something specific.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Language": {
+      "description": "The language a package's code is written for. Names the published package\n(`<repo>-<language>`), and implies an [`Ecosystem`] via\n[`Language::ecosystem`].\n\nCanonical tokens are the colloquial names people search for — `nodejs`, not\n`node`; `golang`, not `go` — because that is what ends up in a package name\na human has to recall. The shorter spellings, and near-synonyms like\n`typescript`, are accepted by [`Language::from_token`] and by umbrella\nvariant aliases, so both spellings resolve.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "c",
+            "clojure",
+            "cpp",
+            "crystal",
+            "csharp",
+            "dart",
+            "elixir",
+            "erlang",
+            "fsharp",
+            "gleam",
+            "golang",
+            "haskell",
+            "java",
+            "julia",
+            "kotlin",
+            "lua",
+            "matlab",
+            "nim",
+            "ocaml",
+            "php",
+            "powershell",
+            "python",
+            "r",
+            "ruby",
+            "rust",
+            "scala",
+            "shell",
+            "swift",
+            "zig"
+          ]
+        },
+        {
+          "description": "Not language-specific: protocol schemas, docs, `.proto` files, an\numbrella package. Never subject to the install ecosystem guard.",
+          "type": "string",
+          "const": "universal"
+        },
+        {
+          "description": "Flutter is a framework rather than a language, but a Flutter client is a\nseparate package from a plain Dart one (different `pubspec.yaml`,\ndifferent deps), so it gets its own token.",
+          "type": "string",
+          "const": "flutter"
+        },
+        {
+          "description": "Covers JavaScript and TypeScript alike: for a client library they are\none artifact published to one ecosystem, so `typescript`, `javascript`,\n`ts`, `js` and `node` all resolve here rather than splitting the package.",
+          "type": "string",
+          "const": "nodejs"
+        },
+        {
+          "description": "Rust compiled to WebAssembly. Distinct from [`Language::Rust`] because\nthe artifact is consumed by a JS bundler, not by Cargo.",
+          "type": "string",
+          "const": "rust-wasm"
+        }
+      ]
+    },
+    "NativeRegistry": {
+      "type": "string",
+      "enum": [
+        "npm",
+        "crates-io",
+        "pub.dev",
+        "pypi",
+        "maven-central",
+        "rubygems",
+        "nuget",
+        "packagist",
+        "go-modules"
+      ]
+    },
+    "NativeReleaseSection": {
+      "type": "object",
+      "properties": {
+        "forge": {
+          "description": "Optional copies in package registries run by source forges. The native\nregistry remains the canonical ecosystem destination; these mirrors\nuse the same native package format and version.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ForgeRegistry"
+          }
+        },
+        "package": {
+          "type": "string"
+        },
+        "registry": {
+          "$ref": "#/$defs/NativeRegistry"
+        },
+        "tag_format": {
+          "description": "Optional VCS tag template for native ecosystems whose package is\nresolved from a tag rather than uploaded. It must contain `{version}`.\nGo modules below a repository subdirectory need the directory prefix,\nfor example `clients/go/v{version}`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "registry",
+        "package"
+      ]
+    },
+    "NixExportMode": {
+      "oneOf": [
+        {
+          "description": "Export the exact immutable Zed artifact. Source-builder translation is\nintentionally not inferred from native manifests in contract v1.",
+          "type": "string",
+          "const": "artifact"
+        }
+      ]
+    },
+    "NixExportSection": {
+      "description": "Author intent for exporting a package or target to Nix.\n\nThis structure contains no realized store paths, hashes, commands,\ncredentials, cache keys, or service deployment policy. Those belong in a\nversioned adapter record after planning/realization.",
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "description": "Optional Nix package attribute. Omit it to use the Zed package name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "$ref": "#/$defs/NixExportMode",
+          "default": "artifact"
+        },
+        "outputs": {
+          "description": "Explicit derivation outputs. Contract v1 never silently selects the\nfirst output of a multi-output derivation.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "systems": {
+          "description": "Explicit Nix systems this package claims to support.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -140,11 +386,19 @@
             "null"
           ]
         },
+        "ecosystem": {
+          "description": "How consumers take this package in: `jvm`, `npm`, `gomod`, … Drives the\ninstall-time guard that refuses to drop a Java client into a Node\nproject, and picks the toolchain wiring `zed install` writes.\n\nOmit it and it is derived from `language` (see\n[`Language::ecosystem`]) — declare it only when the language does not\ndetermine consumption. Read through [`PackageSection::ecosystem`]\nrather than touching this field, so the fallback always applies.",
+          "$ref": "#/$defs/Ecosystem"
+        },
         "keywords": {
           "type": "array",
           "items": {
             "type": "string"
           }
+        },
+        "language": {
+          "description": "The language this package's code targets. A multi-language repository\npublishes one package per language, all at one version, and each names\nits own — `acme-clients-java`, `acme-clients-nodejs`. Defaults to\n`universal` (language-agnostic), which is never subject to the install\necosystem guard.",
+          "$ref": "#/$defs/Language"
         },
         "license": {
           "type": [
@@ -195,6 +449,28 @@
           "type": "boolean",
           "default": false
         },
+        "native": {
+          "description": "Optional native-registry route for a single-language package whose\npackage-manager manifest lives at the repository root. Polyglot\npackages declare this metadata on each `[targets.*.native]` section\ninstead.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeReleaseSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nix": {
+          "description": "Optional deterministic export of this single-language package as a\nstandalone Nix flake. Nix is a typed interop adapter, not a native\nregistry destination, so its intent remains separate from `native`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NixExportSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "smoke_test": {
           "description": "Command run by `zed r2g` (alias `zed test-local`) inside a throwaway\nconsumer project that has this package installed the same way a real\nconsumer would.",
           "type": [
@@ -238,6 +514,73 @@
           "default": null
         }
       }
+    },
+    "TargetSection": {
+      "description": "One ecosystem's slice of a polyglot package — and, on publish, its own\nindependently installable package.\n\nA repo like `fiducia-clients` carrying `clients/ts`, `clients/java`, and\n`clients/go` declares one target each. `zed publish` then emits **one\nartifact per target**, named `<name>-<target>` by default:\n\n```text\nfiducia/fiducia-clients-nodejs@1.1.2   <- clients/ts only\nfiducia/fiducia-clients-java@1.1.2     <- clients/java only\nfiducia/fiducia-clients-golang@1.1.2   <- clients/go only\n```\n\nOne source of truth and one version in the repo; N packages on the wire.\nA Java consumer downloads only Java bytes — the decisive advantage over\nshipping one fat artifact and slicing it at install time.",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "description": "Ecosystem adapter consumers of THIS target should use (`node`, `java`,\n`none`). Recorded in the published per-target manifest so a consumer\ngets the right wiring without configuring it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir": {
+          "description": "Package-relative directory that is this ecosystem's package root, e.g.\n`python` or `clients/go`. Must be a safe relative path (no leading `/`,\nno `..`) so a target can never escape the package.",
+          "type": "string"
+        },
+        "ecosystem": {
+          "description": "Override the ecosystem this target publishes into. Omit it (the normal\ncase) and it is derived from the target key via [`Language::ecosystem`].\nDeclare it when the key does not determine consumption — a `rust-wasm`\ntarget is consumed by a JS bundler, not by Cargo.",
+          "$ref": "#/$defs/Ecosystem"
+        },
+        "hooks": {
+          "description": "Target-specific lifecycle hooks, appended after package-level hooks in\neach phase when the target is selected.",
+          "$ref": "#/$defs/InstallHooksSection"
+        },
+        "name": {
+          "description": "Published package name for this target. Defaults to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to\nbreak out of the suffix convention when an ecosystem expects a\ndifferent spelling.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "native": {
+          "description": "Optional routing to this target's native ecosystem registry. This is\ndeclarative metadata only: the native manifest remains authoritative,\nand arbitrary commands are intentionally not representable here.\n\nNote the difference from [`TargetSection::ecosystem`]: `native` is\n**outbound** (where this slice is mirrored to — npm, crates.io), while\n`ecosystem` is **inbound** (what toolchain a consumer must have to\ninstall it from zed). They describe the same ecosystem from two sides,\nso when both are set they must agree — see\n[`NativeRegistry::ecosystem`] and the check in [`Manifest::validate`].",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NativeReleaseSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "native-dependencies": {
+          "description": "Native prerequisites added by this target. Entries merge with the\npackage-level `[native-dependencies]` table when this target is selected.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "nix": {
+          "description": "Optional deterministic Nix export intent for this isolated target.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NixExportSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "dir"
+      ]
     },
     "Vcs": {
       "description": "Version-control systems a package's source repository can live on.\n\nzed-pkg is VCS-agnostic by design: what gets installed is always a\nregistry artifact, and the VCS is where provenance (tags) is anchored.\nAuthors must create a matching tag on their declared backing repo\n(GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo, Gitea, Azure\nDevOps, CodeCommit, Radicle, or self-hosted) before publishing.\n\n`jj` and Sapling are git-compatible and push to git remotes, so their\nprovenance is verified through git tags.",
