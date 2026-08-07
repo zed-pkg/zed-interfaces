@@ -402,24 +402,24 @@ function dartEncode(ref, name, kinds) {
 function dartLiteral(ref, value, kinds) {
   if (value === null || value === undefined) return "null";
   if (ref.kind === "ref" && kinds.get(ref.name) === "enum") {
-    return `${ref.name}.${dartIdent(String(value))}`;
+    return `${ref.name}.${dartEnumIdent(String(value))}`;
   }
   if (ref.kind === "list") return "const []";
   if (ref.kind === "map") return "const {}";
-  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "string") return dartStr(value);
   if (typeof value === "boolean" || typeof value === "number") return String(value);
   return fail(`unsupported default ${JSON.stringify(value)}`);
 }
 
 function dartEnum(type) {
-  const members = type.values.map((v) => ({ ...v, dart: dartIdent(v.wire) }));
+  const members = type.values.map((v) => ({ ...v, dart: dartEnumIdent(v.wire) }));
   const seen = new Set();
   for (const m of members) {
     if (seen.has(m.dart)) fail(`enum ${type.name}: values ${m.wire} collide on Dart name ${m.dart}`);
     seen.add(m.dart);
   }
   const body = members
-    .map((m, i) => `${dartDoc(m.description, "  ")}  ${m.dart}(${JSON.stringify(m.wire)})${i === members.length - 1 ? ";" : ","}`)
+    .map((m, i) => `${dartDoc(m.description, "  ")}  ${m.dart}(${dartStr(m.wire)})${i === members.length - 1 ? ";" : ","}`)
     .join("\n");
   return `${dartDoc(type.description)}enum ${type.name} {
 ${body}
@@ -429,49 +429,61 @@ ${body}
   /// The value as it appears in JSON.
   final String wire;
 
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
   static ${type.name} fromJson(String value) => values.firstWhere(
-        (candidate) => candidate.wire == value,
-        orElse: () => throw FormatException('unknown ${type.name}: $value'),
-      );
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown ${type.name}: \\$value'),
+  );
+
+  static ${type.name}? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
 
   String toJson() => wire;
 }`;
 }
 
+/** How a property is modelled in Dart: nullable unless required or defaulted. */
+function dartFieldRef(prop) {
+  if (prop.type.kind === "any") return { ...prop.type, nullable: true };
+  // A non-required field with a serde default is still always meaningful — the
+  // default fills in — so it stays non-nullable.
+  const nullable = prop.type.nullable || (!prop.required && !prop.hasDefault);
+  return { ...prop.type, nullable };
+}
+
 function dartClass(type, kinds) {
   const ctorParams = type.props
     .map((p) => {
-      if (p.required) return `    required this.${p.dart},`;
-      if (p.hasDefault && !p.type.nullable) {
+      const ref = dartFieldRef(p);
+      if (!ref.nullable && p.hasDefault && !p.required) {
         return `    this.${p.dart} = ${dartLiteral(p.type, p.default, kinds)},`;
       }
-      return `    this.${p.dart},`;
+      return ref.nullable ? `    this.${p.dart},` : `    required this.${p.dart},`;
     })
     .join("\n");
 
   const decode = type.props
     .map((p) => {
-      const raw = `json[${JSON.stringify(p.wire)}]`;
-      const expr = dartDecode(p.type, raw, kinds);
-      if (p.required && !p.type.nullable && p.type.kind !== "any") return `          ${p.dart}: ${expr},`;
-      const fallback = p.hasDefault && !p.type.nullable ? dartLiteral(p.type, p.default, kinds) : "null";
-      if (p.type.kind === "any") return `          ${p.dart}: ${raw},`;
-      return `          ${p.dart}: ${raw} == null ? ${fallback} : ${expr},`;
+      const ref = dartFieldRef(p);
+      const raw = `json[${dartStr(p.wire)}]`;
+      if (p.type.kind === "any") return `    ${p.dart}: ${raw},`;
+      if (!ref.nullable && p.hasDefault && !p.required) {
+        // Absent means "take the default", which is what the Rust side does.
+        return `    ${p.dart}: ${raw} == null\n        ? ${dartLiteral(p.type, p.default, kinds)}\n        : ${dartDecode(p.type, raw, kinds)},`;
+      }
+      return `    ${p.dart}: ${dartDecode(p.type, raw, kinds, ref.nullable)},`;
     })
     .join("\n");
 
   const fields = type.props
-    .map((p) => {
-      // A non-required field with a serde default is still always present in
-      // the model — the default fills in, so it stays non-nullable.
-      const nullable = p.type.nullable || (!p.required && !p.hasDefault);
-      const ref = { ...p.type, nullable: nullable && p.type.kind !== "any" };
-      return `${dartDoc(p.description, "  ")}  final ${dartType(ref, kinds)} ${p.dart};`;
-    })
+    .map((p) => `${dartDoc(p.description, "  ")}  final ${dartType(dartFieldRef(p), kinds)} ${p.dart};`)
     .join("\n\n");
 
+  // Every key is written, with an explicit null for absent optionals: serde
+  // decodes null into None, so the round-trip back into Rust is lossless.
   const encode = type.props
-    .map((p) => `        ${JSON.stringify(p.wire)}: ${dartEncode(p.type, p.dart, kinds)},`)
+    .map((p) => `    ${dartStr(p.wire)}: ${dartEncode(dartFieldRef(p), p.dart, kinds)},`)
     .join("\n");
 
   return `${dartDoc(type.description)}class ${type.name} {
@@ -481,13 +493,13 @@ ${ctorParams}
 
   factory ${type.name}.fromJson(Map<String, dynamic> json) => ${type.name}(
 ${decode}
-      );
+  );
 
 ${fields}
 
   Map<String, dynamic> toJson() => <String, dynamic>{
 ${encode}
-      };
+  };
 }`;
 }
 
