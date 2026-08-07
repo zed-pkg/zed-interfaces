@@ -109,6 +109,7 @@ pub enum RegistryProtocol {
     CocoapodsTrunk,
     /// PowerShell Gallery, which is NuGet V2 under the hood but with its own
     /// push endpoint and metadata conventions.
+    #[serde(rename = "powershell-gallery")]
     PowerShellGallery,
     /// Julia's General registry: a Git-backed registry updated by pull
     /// request, with package sources resolved from VCS.
@@ -552,6 +553,7 @@ pub enum NativeHost {
     /// pkgs.racket-lang.org
     Racket,
     /// powershellgallery.com
+    #[serde(rename = "powershell-gallery")]
     PowerShellGallery,
     /// Zig, which has no registry: dependencies are URLs pinned by hash.
     Zig,

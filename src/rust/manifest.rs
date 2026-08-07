@@ -429,6 +429,7 @@ pub enum NativeRegistry {
     Nimble,
     Shards,
     Racket,
+    #[serde(rename = "powershell-gallery")]
     PowerShellGallery,
     /// Zig, which has no registry: dependencies are URLs pinned by hash.
     #[serde(rename = "zig")]
