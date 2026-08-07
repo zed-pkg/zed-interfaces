@@ -360,6 +360,17 @@ pub struct NativeReleaseSection {
     pub forge: Vec<ForgeRegistry>,
 }
 
+/// The ecosystem registry a target is mirrored into.
+///
+/// One variant per registry zed can route to, including the three that store
+/// no artifact — Zig, plain VCS, and Go's proxy — because a release plan still
+/// has to name where those packages come from.
+///
+/// This enum is the *manifest token*. Everything else about a registry — its
+/// URLs, wire protocol, auth scheme, and how it spells a release candidate —
+/// lives on [`crate::native_host::NativeHost`], reached through
+/// [`NativeRegistry::host`]. Keeping the token separate from the host facts is
+/// what lets the manifest spelling stay frozen while endpoints move.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -371,6 +382,9 @@ pub enum NativeRegistry {
     PubDev,
     #[serde(rename = "pypi")]
     PyPi,
+    /// test.pypi.org, a full mirror used as a rehearsal track.
+    #[serde(rename = "test-pypi")]
+    TestPyPi,
     MavenCentral,
     #[serde(rename = "rubygems")]
     RubyGems,
@@ -378,6 +392,39 @@ pub enum NativeRegistry {
     NuGet,
     Packagist,
     GoModules,
+    #[serde(rename = "hex")]
+    Hex,
+    Hackage,
+    /// Curated Hackage snapshots. Resolve-only: nothing publishes here.
+    Stackage,
+    Clojars,
+    #[serde(rename = "luarocks")]
+    LuaRocks,
+    #[serde(rename = "cpan")]
+    Cpan,
+    #[serde(rename = "cran")]
+    Cran,
+    ConanCenter,
+    SwiftPackageIndex,
+    #[serde(rename = "cocoapods")]
+    CocoaPods,
+    JuliaGeneral,
+    #[serde(rename = "opam")]
+    Opam,
+    #[serde(rename = "dub")]
+    Dub,
+    #[serde(rename = "nimble")]
+    Nimble,
+    Shards,
+    Racket,
+    PowerShellGallery,
+    /// Zig, which has no registry: dependencies are URLs pinned by hash.
+    #[serde(rename = "zig")]
+    Zig,
+    /// A plain Git or Mercurial remote on GitHub, GitLab, or Bitbucket —
+    /// first-class in zed, and a complete route on its own.
+    #[serde(rename = "vcs")]
+    Vcs,
 }
 
 #[derive(
