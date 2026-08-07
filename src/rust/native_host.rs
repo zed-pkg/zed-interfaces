@@ -1151,7 +1151,14 @@ impl UniversalHost {
             BitbucketPackages => matches!(protocol, P::Npm | P::Maven2),
             AwsCodeArtifact => matches!(
                 protocol,
-                P::Npm | P::Maven2 | P::PypiLegacyUpload | P::NuGetV3 | P::CargoSparse | P::GoProxy
+                P::Npm
+                    | P::Maven2
+                    | P::PypiLegacyUpload
+                    | P::NuGetV3
+                    | P::CargoSparse
+                    | P::GoProxy
+                    | P::RubyGemsApi
+                    | P::SwiftRegistry
             ),
             Cloudsmith => matches!(
                 protocol,
