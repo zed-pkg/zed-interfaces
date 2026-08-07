@@ -23,17 +23,34 @@ Map<String, dynamic> caseOf(String name, String key) =>
     fixture(name)[key] as Map<String, dynamic>;
 
 /// Every key the server sent must survive a decode/encode round trip with an
-/// equal value. The reverse does not hold — Dart writes explicit nulls where
-/// serde omits the key — so this is a one-way containment check by design.
-void expectRoundTrip(Map<String, dynamic> original, Map<String, dynamic> encoded) {
-  for (final entry in original.entries) {
-    expect(
-      encoded[entry.key],
-      equals(entry.value),
-      reason: 'key `${entry.key}` did not survive the round trip',
-    );
+/// equal value, at every depth. The reverse does not hold — Dart writes an
+/// explicit null where serde omits the key entirely — so this is a one-way
+/// containment check by design, and it has to recurse: a nested `AuditEntry`
+/// gains those explicit nulls too, which a shallow `equals` would reject.
+void expectContains(Object? original, Object? encoded, [String path = r'$']) {
+  if (original is Map) {
+    expect(encoded, isA<Map>(), reason: '$path should still be an object');
+    final actual = encoded! as Map;
+    for (final entry in original.entries) {
+      expect(actual.containsKey(entry.key), isTrue, reason: '$path.${entry.key} was dropped');
+      expectContains(entry.value, actual[entry.key], '$path.${entry.key}');
+    }
+    return;
   }
+  if (original is List) {
+    expect(encoded, isA<List>(), reason: '$path should still be a list');
+    final actual = encoded! as List;
+    expect(actual.length, original.length, reason: '$path changed length');
+    for (var i = 0; i < original.length; i++) {
+      expectContains(original[i], actual[i], '$path[$i]');
+    }
+    return;
+  }
+  expect(encoded, equals(original), reason: '$path changed value');
 }
+
+void expectRoundTrip(Map<String, dynamic> original, Map<String, dynamic> encoded) =>
+    expectContains(original, encoded);
 
 void main() {
   group('PackageMetadata', () {
