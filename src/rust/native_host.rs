@@ -181,6 +181,24 @@ impl RegistryProtocol {
         )
     }
 
+    /// The protocol a *mirror* has to speak in order to serve this one's
+    /// artifacts.
+    ///
+    /// Ingest and distribution are different things.
+    /// [`RegistryProtocol::MavenCentralPortal`] describes only how Maven
+    /// Central *accepts* a release — a zipped bundle plus a deployment poll —
+    /// and nothing about the artifact, which is an ordinary Maven 2 jar. Every
+    /// registry that hosts Maven hosts it, so mirroring compatibility must be
+    /// keyed on the family, not the ingest protocol; otherwise a
+    /// `maven-central` route would be refused by GitHub Packages, which has
+    /// served Maven since it launched.
+    pub fn mirror_family(self) -> RegistryProtocol {
+        match self {
+            RegistryProtocol::MavenCentralPortal => RegistryProtocol::Maven2,
+            other => other,
+        }
+    }
+
     /// Whether publication completes without a human in the loop.
     ///
     /// CRAN reviews every submission, and the Git-backed registries merge a
