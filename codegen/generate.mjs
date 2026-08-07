@@ -433,7 +433,7 @@ ${body}
   /// unrecognized variant is a version skew, not something to decode past.
   static ${type.name} fromJson(String value) => values.firstWhere(
     (candidate) => candidate.wire == value,
-    orElse: () => throw FormatException('unknown ${type.name}: \\$value'),
+    orElse: () => throw FormatException('unknown ${type.name}: $value'),
   );
 
   static ${type.name}? maybeFromJson(String? value) =>
