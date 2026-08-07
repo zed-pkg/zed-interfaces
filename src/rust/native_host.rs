@@ -1299,6 +1299,50 @@ mod tests {
     }
 
     #[test]
+    fn the_serde_token_is_always_the_as_str_token() {
+        // `as_str` is what diagnostics and `zed release plan` print; serde is
+        // what a manifest is parsed with. When they disagree, a host is
+        // reported under a name that cannot be typed back in — which is
+        // exactly what `rename_all = "kebab-case"` does to a name like
+        // `PowerShellGallery` (`power-shell-gallery`).
+        for host in NativeHost::ALL {
+            let encoded = serde_json::to_string(host).unwrap();
+            assert_eq!(
+                encoded,
+                format!("\"{}\"", host.as_str()),
+                "`{host}` serializes as {encoded}"
+            );
+        }
+        for universal in UniversalHost::ALL {
+            let encoded = serde_json::to_string(universal).unwrap();
+            assert_eq!(encoded, format!("\"{}\"", universal.as_str()));
+        }
+        for host in NativeHost::ALL {
+            let protocol = host.protocol();
+            let encoded = serde_json::to_string(&protocol).unwrap();
+            assert_eq!(
+                encoded,
+                format!("\"{}\"", protocol.as_str()),
+                "`{protocol}` serializes as {encoded}"
+            );
+        }
+        for channel in [
+            ReleaseChannel::Stable,
+            ReleaseChannel::Rc,
+            ReleaseChannel::Beta,
+            ReleaseChannel::Alpha,
+            ReleaseChannel::Nightly,
+            ReleaseChannel::Snapshot,
+        ] {
+            assert_eq!(
+                serde_json::to_string(&channel).unwrap(),
+                format!("\"{}\"", channel.as_str())
+            );
+            assert_eq!(ReleaseChannel::from_token(channel.as_str()), Some(channel));
+        }
+    }
+
+    #[test]
     fn host_tokens_accept_the_domain_people_actually_type() {
         assert_eq!(NativeHost::from_token("crates.io"), Some(NativeHost::CratesIo));
         assert_eq!(NativeHost::from_token("pub.dev"), Some(NativeHost::PubDev));
