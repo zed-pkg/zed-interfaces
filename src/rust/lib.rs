@@ -15,6 +15,7 @@ pub mod language;
 pub mod lockfile;
 pub mod manifest;
 pub mod native_dependency;
+pub mod native_host;
 pub mod native_registry;
 pub mod nix;
 pub mod nix_plan;
