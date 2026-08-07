@@ -150,6 +150,46 @@ test("an unsupported construct fails loudly instead of emitting a wrong type", (
   );
 });
 
+// --- regressions found by auditing the generated output ----------------------
+
+test("a long unbroken description is wrapped, never truncated", () => {
+  // The wrapper was a regex that kept only the last chunk that happened to fit,
+  // silently dropping 112 of these 200 characters from the generated docs.
+  const description = "x".repeat(200);
+  const dart = dartOf("Thing", { ...OBJ({ a: { type: "string" } }, ["a"]), description });
+  const emitted = dart.split("\n").filter((line) => line.trim().startsWith("///")).join("");
+  assert.equal((emitted.match(/x/g) ?? []).length, 200);
+});
+
+test("a description with words wraps on word boundaries", () => {
+  const description = `${"word ".repeat(40)}end`;
+  const dart = dartOf("Thing", { ...OBJ({ a: { type: "string" } }, ["a"]), description });
+  const docLines = dart.split("\n").filter((line) => line.trim().startsWith("///"));
+  assert.ok(docLines.length > 1, "should wrap onto several lines");
+  assert.ok(docLines.every((line) => line.length <= 95), "no line runs away");
+  assert.ok(dart.includes("end"), "the tail survives");
+});
+
+test("generated TS imports carry a .ts extension", () => {
+  // This package ships source. Node's type-stripping resolver cannot follow an
+  // extensionless relative import, so a runtime consumer would crash on
+  // `Cannot find module ./api-error` even though tsc was happy.
+  const emitted = build();
+  assert.match(emitted["ts/index.ts"], /export \* from "\.\/api-error\.ts";/);
+  assert.match(emitted["ts/package-list-response.ts"], /from "\.\/common\.ts";/);
+});
+
+test("a type name that would shadow dart:core is rejected", () => {
+  // An explicit import wins over the implicit dart:core, so a generated
+  // `Duration` would not be ambiguous — it would silently break consumers.
+  assert.throws(
+    () => buildType("Duration", OBJ({ a: { type: "string" } }, ["a"]), "t.json", []),
+    (error) => error instanceof GenError && /collides with dart:core/.test(error.message),
+  );
+  assert.throws(() => buildType("Comparator", OBJ({}, []), "t.json", []), /collides with dart:core/);
+  assert.throws(() => buildType("notPascal", OBJ({}, []), "t.json", []), /must be PascalCase/);
+});
+
 // --- the index is the demarcation, so its rules get their own coverage -------
 
 function withSchemaDir(files, fn) {
