@@ -85,11 +85,34 @@ const dartStr = (value) =>
 const TS_IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const tsKey = (wire) => (TS_IDENT_RE.test(wire) ? wire : JSON.stringify(wire));
 
+/**
+ * Greedy word wrap. A word longer than `width` gets its own over-long line
+ * rather than being dropped: this used to be a regex that silently discarded
+ * everything before the last fitting chunk, which lost 112 of 200 characters
+ * on a description with no spaces.
+ */
+function wrap(text, width) {
+  const lines = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    if (!word) continue;
+    if (!line) line = word;
+    else if (line.length + 1 + word.length <= width) line += ` ${word}`;
+    else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 // Doc-comment escapers: a description can never break out of the comment.
-const dartDoc = (s, indent = "") =>
-  oneLine(s)
-    ? oneLine(s).replace(/\r?\n/g, " ").match(/.{1,88}(\s|$)/g).map((line) => `${indent}/// ${line.trim()}`).join("\n") + "\n"
-    : "";
+const dartDoc = (s, indent = "") => {
+  const text = oneLine(s);
+  if (!text) return "";
+  return `${wrap(text, 88).map((line) => `${indent}/// ${line}`).join("\n")}\n`;
+};
 const tsDoc = (s, indent = "") => {
   const text = oneLine(s).replace(/\*\//g, "*\\/");
   if (!text) return "";
