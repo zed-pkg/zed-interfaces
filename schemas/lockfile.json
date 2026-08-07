@@ -1,38 +1,4 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Lockfile",
-  "description": "The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.\n\nSerialized as TOML with one `[[package]]` table per locked Zed package,\noptional `[[native-dependency]]` tables for exact npm/Cargo resolutions,\nand optional `[[nix-adapter]]` tables for completed Nix translations.\nEvery entry pins exact immutable identity so frozen restore never needs to\nreinterpret a native range or repeat an environment translation.",
-  "type": "object",
-  "properties": {
-    "native-dependency": {
-      "description": "Exact source-aware npm/Cargo resolutions. This additive field keeps\nexisting lockfile version 1 documents readable while newer writers can\npreserve native requirement translation and immutable artifact identity.",
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/NativeDependencyLock"
-      }
-    },
-    "nix-adapter": {
-      "description": "Optional immutable provenance for completed Nix interoperability\ntranslations. This additive field keeps lockfile version 1 readable by\ncurrent consumers while allowing newer writers to preserve evidence.",
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/NixAdapterRecord"
-      }
-    },
-    "package": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/LockedPackage"
-      }
-    },
-    "version": {
-      "type": "integer",
-      "format": "uint32",
-      "minimum": 0
-    }
-  },
-  "required": [
-    "version"
-  ],
   "$defs": {
     "ArtifactFormat": {
       "description": "On-the-wire formats for published package artifacts.",
@@ -560,5 +526,39 @@
         "vcs_commit"
       ]
     }
-  }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.\n\nSerialized as TOML with one `[[package]]` table per locked Zed package,\noptional `[[native-dependency]]` tables for exact npm/Cargo resolutions,\nand optional `[[nix-adapter]]` tables for completed Nix translations.\nEvery entry pins exact immutable identity so frozen restore never needs to\nreinterpret a native range or repeat an environment translation.",
+  "properties": {
+    "native-dependency": {
+      "description": "Exact source-aware npm/Cargo resolutions. This additive field keeps\nexisting lockfile version 1 documents readable while newer writers can\npreserve native requirement translation and immutable artifact identity.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NativeDependencyLock"
+      }
+    },
+    "nix-adapter": {
+      "description": "Optional immutable provenance for completed Nix interoperability\ntranslations. This additive field keeps lockfile version 1 readable by\ncurrent consumers while allowing newer writers to preserve evidence.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NixAdapterRecord"
+      }
+    },
+    "package": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LockedPackage"
+      }
+    },
+    "version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "title": "Lockfile",
+  "type": "object"
 }
