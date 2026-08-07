@@ -29,8 +29,8 @@ Map<String, dynamic> caseOf(String name, String key) =>
 /// gains those explicit nulls too, which a shallow `equals` would reject.
 void expectContains(Object? original, Object? encoded, [String path = r'$']) {
   if (original is Map) {
-    expect(encoded, isA<Map>(), reason: '$path should still be an object');
-    final actual = encoded! as Map;
+    expect(encoded, isA<Map<String, dynamic>>(), reason: '$path should still be an object');
+    final actual = encoded! as Map<String, dynamic>;
     for (final entry in original.entries) {
       expect(actual.containsKey(entry.key), isTrue, reason: '$path.${entry.key} was dropped');
       expectContains(entry.value, actual[entry.key], '$path.${entry.key}');
@@ -38,8 +38,8 @@ void expectContains(Object? original, Object? encoded, [String path = r'$']) {
     return;
   }
   if (original is List) {
-    expect(encoded, isA<List>(), reason: '$path should still be a list');
-    final actual = encoded! as List;
+    expect(encoded, isA<List<dynamic>>(), reason: '$path should still be a list');
+    final actual = encoded! as List<dynamic>;
     expect(actual.length, original.length, reason: '$path changed length');
     for (var i = 0; i < original.length; i++) {
       expectContains(original[i], actual[i], '$path[$i]');
