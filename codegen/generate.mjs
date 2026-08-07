@@ -254,6 +254,14 @@ export function loadIndex(dir = schemaDir) {
   const listed = new Map();
   for (const entry of index.schemas) {
     if (!entry || typeof entry.file !== "string") fail(`schemas/${INDEX_FILE}: every entry needs a \`file\``);
+    // The file name becomes an output path under src/, so it may not escape
+    // the schema directory. `manifest.rs` applies the same rule to target
+    // dirs; codegen should not be the looser of the two.
+    if (!/^[a-z0-9][a-z0-9-]*\.json$/.test(entry.file)) {
+      fail(
+        `schemas/${INDEX_FILE}: \`${entry.file}\` must be a kebab-case *.json file name in this directory`,
+      );
+    }
     if (listed.has(entry.file)) fail(`schemas/${INDEX_FILE}: ${entry.file} is listed twice`);
     if (!Array.isArray(entry.targets)) fail(`schemas/${INDEX_FILE}: ${entry.file} needs a \`targets\` array`);
     for (const target of entry.targets) {
