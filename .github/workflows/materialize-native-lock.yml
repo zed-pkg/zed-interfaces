@@ -1,0 +1,92 @@
+name: materialize native lockfile semantic merge
+
+on:
+  pull_request:
+  push:
+    branches:
+      - agent/den-1565-native-lock-materialize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-lock-materialize-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact helper candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install stable Rust with formatter and Clippy
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+          rustc --version --verbose
+          cargo --version --verbose
+
+      - name: Materialize asserted semantic merge
+        run: |
+          set -euo pipefail
+          python3 -B scripts/materialize_native_lockfile_merge.py
+          cargo fmt --all
+          cargo run --locked --example generate_schemas
+          git diff --check
+
+      - name: Verify complete current-stack contract
+        run: |
+          set -euo pipefail
+          cargo test --locked --all-targets
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Verify generated lockfile schema is stable
+        run: |
+          set -euo pipefail
+          cp schemas/lockfile.json "$RUNNER_TEMP/lockfile.first.json"
+          cargo run --locked --example generate_schemas
+          cmp "$RUNNER_TEMP/lockfile.first.json" schemas/lockfile.json
+          sha256sum schemas/lockfile.json \
+            | tee "$RUNNER_TEMP/lockfile.sha256"
+
+      - name: Capture resolved files and semantic diff
+        if: always()
+        run: |
+          set +e
+          evidence="$RUNNER_TEMP/native-lock-materialized"
+          mkdir -p "$evidence/src" "$evidence/schemas" "$evidence/docs" "$evidence/tests"
+          cp src/lockfile.rs "$evidence/src/" 2>/dev/null
+          cp schemas/lockfile.json "$evidence/schemas/" 2>/dev/null
+          cp docs/native-dependency-lockfile.md "$evidence/docs/" 2>/dev/null
+          cp tests/native_dependency_lockfile_contract.rs "$evidence/tests/" 2>/dev/null
+          cp tests/native_dependency_lockfile_schema_contract.rs "$evidence/tests/" 2>/dev/null
+          cp "$RUNNER_TEMP/lockfile.sha256" "$evidence/" 2>/dev/null
+          git diff --binary > "$evidence/semantic-merge.patch" 2>&1
+          git status --porcelain=v1 --untracked-files=all \
+            > "$evidence/repository-status.txt" 2>&1
+
+      - name: Upload resolved semantic merge
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-lock-materialized-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-lock-materialized
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
