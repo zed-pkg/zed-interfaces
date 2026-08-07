@@ -4,15 +4,3 @@
 # zed-pkg local state
 /zed_modules/
 /.zed/pack/
-/.vendor/
-tmp
-temp
-tmp/worktrees
-temp/worktrees
-
-# Language-slice tooling state. The slices themselves are generated and
-# committed; their toolchains' scratch dirs are not.
-node_modules/
-src/dart/.dart_tool/
-src/dart/pubspec.lock
-src/dart/build/

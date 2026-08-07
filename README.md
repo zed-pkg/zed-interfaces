@@ -3,25 +3,7 @@
 Core interface definitions for [zed-pkg](https://github.com/zed-pkg), the
 universal package manager backed by the VCS hosts you already use.
 
-One contract, three language slices, each published as its own zed-package:
-
-| slice      | path       | what it is                                            |
-| ---------- | ---------- | ----------------------------------------------------- |
-| Rust       | `src/rust` | hand-written source of truth (the `zed-interfaces` crate) |
-| Dart       | `src/dart` | generated front-end types (`package:zed_interfaces`)  |
-| TypeScript | `src/ts`   | generated front-end types (`@zed-pkg/zed-interfaces`) |
-
-Rust covers the whole contract. Dart and TypeScript cover only the part a
-browser or Flutter client decodes — the registry API and the sync stream — as
-demarcated in [`schemas/index.json`](schemas/index.json). See
-[docs/multi-language-layout.md](docs/multi-language-layout.md) for the layout,
-the generation pipeline, and why the crate manifest lives in `src/rust/`.
-
-Implementations that compose these types live in
-[`zed-lib`](https://github.com/zed-pkg/zed-lib); this repository stays types
-and validation.
-
-The Rust crate is the contract everything else builds against:
+This crate is the contract everything else builds against:
 
 - **`.zpkg.toml`** — the package manifest at the repo root, TOML only (`manifest` module)
 - **`.zpkg.lock`** — the lockfile with artifact hashes and VCS provenance (`lockfile`)
@@ -111,38 +93,20 @@ forge = ["github-packages", "gitlab-packages", "bitbucket-packages"]
 Errors use `ApiError { code, message }`. Authenticated routes take
 `Authorization: Bearer <token>`.
 
-## JSON Schemas and the generated slices
+## JSON Schemas
 
-`schemas/` holds generated JSON Schema files for every wire type. They are the
-source of truth for every non-Rust consumer: the SDKs in
-[zed-clients](https://github.com/zed-pkg/zed-clients) codegen and validate
-against them, and `codegen/generate.mjs` turns the front-end-facing subset into
-the Dart and TypeScript slices.
+`schemas/` holds generated JSON Schema files for every wire type, used by the
+non-Rust SDKs in [zed-clients](https://github.com/zed-pkg/zed-clients).
+Regenerate after changing any type:
 
 ```sh
-cargo run --locked --example generate_schemas   # src/rust  -> schemas/
-npm run codegen                                 # schemas/  -> src/dart, src/ts
-npm run codegen:check                           # what CI runs; fails on drift
+cargo run --example generate_schemas
 ```
-
-`schemas/index.json` decides which schemas cross the language boundary. Every
-file in `schemas/` must be listed there — the generator errors on an unlisted
-schema rather than skipping it — with `"targets": ["dart", "ts"]` for the
-registry/sync DTOs a front end decodes, or `"targets": []` for the toolchain
-formats (`manifest`, `lockfile`, environment plans, nix/oci/native records)
-that only `zed-cli` and the servers read.
-
-Generated files are never hand-edited: change the Rust type, regenerate both
-hops, commit the result.
 
 ## Development
 
-This repo is developed side by side with its siblings. Rust consumers depend on
-the crate slice:
-
-```toml
-zed-interfaces = { path = "../zed-interfaces/src/rust" }
-```
+This repo is developed side by side with its siblings; the other Rust repos
+depend on it via `zed-interfaces = { path = "../zed-interfaces" }`:
 
 ```sh
 git clone https://github.com/zed-pkg/zed-interfaces
@@ -151,10 +115,7 @@ git clone https://github.com/zed-pkg/zed-cli
 ```
 
 ```sh
-cargo test                                 # Rust slice (virtual workspace root)
-npm test                                   # generator unit tests + drift check
-cd src/dart && dart pub get && dart analyze
-cd src/ts   && npm install && npx tsc --noEmit
+cargo test
 ```
 
 ## License

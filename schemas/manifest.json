@@ -170,17 +170,11 @@
       ]
     },
     "ForgeRegistry": {
-      "description": "A multi-format registry that re-serves a canonical registry's wire protocol\nat its own base URL: a source forge's package registry, or an enterprise\nbinary repository that proxies public registries and hosts private ones.\n\nThese add no protocol of their own, which is why they are a separate axis\nfrom [`NativeRegistry`] — an org proxying npm through Artifactory needs a\ndifferent URL and credential, not a different client.",
       "type": "string",
       "enum": [
         "github-packages",
         "gitlab-packages",
-        "bitbucket-packages",
-        "artifactory",
-        "nexus",
-        "aws-codeartifact",
-        "cloudsmith",
-        "azure-artifacts"
+        "bitbucket-packages"
       ]
     },
     "InstallHooksSection": {
@@ -288,69 +282,24 @@
       ]
     },
     "NativeRegistry": {
-      "description": "The ecosystem registry a target is mirrored into.\n\nOne variant per registry zed can route to, including the three that store\nno artifact — Zig, plain VCS, and Go's proxy — because a release plan still\nhas to name where those packages come from.\n\nThis enum is the *manifest token*. Everything else about a registry — its\nURLs, wire protocol, auth scheme, and how it spells a release candidate —\nlives on [`crate::native_host::NativeHost`], reached through\n[`NativeRegistry::host`]. Keeping the token separate from the host facts is\nwhat lets the manifest spelling stay frozen while endpoints move.",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "npm",
-            "crates-io",
-            "pub.dev",
-            "pypi",
-            "maven-central",
-            "rubygems",
-            "nuget",
-            "packagist",
-            "go-modules",
-            "hex",
-            "hackage",
-            "clojars",
-            "luarocks",
-            "cpan",
-            "cran",
-            "conan-center",
-            "swift-package-index",
-            "cocoapods",
-            "julia-general",
-            "opam",
-            "dub",
-            "nimble",
-            "shards",
-            "racket",
-            "powershell-gallery"
-          ]
-        },
-        {
-          "description": "test.pypi.org, a full mirror used as a rehearsal track.",
-          "type": "string",
-          "const": "test-pypi"
-        },
-        {
-          "description": "Curated Hackage snapshots. Resolve-only: nothing publishes here.",
-          "type": "string",
-          "const": "stackage"
-        },
-        {
-          "description": "Zig, which has no registry: dependencies are URLs pinned by hash.",
-          "type": "string",
-          "const": "zig"
-        },
-        {
-          "description": "A plain Git or Mercurial remote on GitHub, GitLab, or Bitbucket —\nfirst-class in zed, and a complete route on its own.",
-          "type": "string",
-          "const": "vcs"
-        }
+      "type": "string",
+      "enum": [
+        "npm",
+        "crates-io",
+        "pub.dev",
+        "pypi",
+        "maven-central",
+        "rubygems",
+        "nuget",
+        "packagist",
+        "go-modules"
       ]
     },
     "NativeReleaseSection": {
       "type": "object",
       "properties": {
-        "channel": {
-          "description": "Default release track for this route. Overridden per release by\n`zed release --channel`; declared here when a target is *only* ever\npublished to a pre-release track — a client generated from an unstable\nAPI surface, say.\n\nThe version is not spelled here. How a channel becomes a version string\nis the host's business and differs per ecosystem, so it is resolved by\n[`crate::native_host::NativeHost::channel_route`] at plan time.",
-          "$ref": "#/$defs/ReleaseChannel"
-        },
         "forge": {
-          "description": "Optional copies in package registries run by source forges or\nenterprise binary repositories. The native registry remains the\ncanonical ecosystem destination; these mirrors use the same native\npackage format and version.",
+          "description": "Optional copies in package registries run by source forges. The native\nregistry remains the canonical ecosystem destination; these mirrors\nuse the same native package format and version.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/ForgeRegistry"
@@ -536,34 +485,6 @@
           "default": "v{version}"
         }
       }
-    },
-    "ReleaseChannel": {
-      "description": "A release track. `Stable` is the default everywhere; the rest are the\npre-release tracks a language ecosystem exposes, in descending maturity.",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "stable",
-            "beta",
-            "alpha"
-          ]
-        },
-        {
-          "description": "Release candidate: feature-complete, expected to become the release.",
-          "type": "string",
-          "const": "rc"
-        },
-        {
-          "description": "Built from the tip of a branch on a schedule. Immutable per build.",
-          "type": "string",
-          "const": "nightly"
-        },
-        {
-          "description": "Deliberately **mutable**: one coordinate, republished repeatedly.\nMaven `-SNAPSHOT`, Packagist `dev-*`, LuaRocks `dev`. The release\ninvariant that rejects same-version/different-content output has to be\nrelaxed here — see [`ReleaseChannel::is_mutable`].",
-          "type": "string",
-          "const": "snapshot"
-        }
-      ]
     },
     "RepositorySection": {
       "description": "Where the package's source of truth lives. Any Git or Mercurial host\nworks: GitHub, GitLab, Bitbucket, or a self-hosted server.",

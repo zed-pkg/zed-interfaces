@@ -8,9 +8,9 @@ on:
     paths:
       - Cargo.toml
       - Cargo.lock
-      - src/rust/environment_lock.rs
-      - src/rust/lib.rs
-      - src/rust/examples/generate_schemas.rs
+      - src/environment_lock.rs
+      - src/lib.rs
+      - examples/generate_schemas.rs
       - schemas/environment-lock-v1.json
       - .github/workflows/environment-lock-contract.yml
   pull_request:
@@ -19,9 +19,9 @@ on:
     paths:
       - Cargo.toml
       - Cargo.lock
-      - src/rust/environment_lock.rs
-      - src/rust/lib.rs
-      - src/rust/examples/generate_schemas.rs
+      - src/environment_lock.rs
+      - src/lib.rs
+      - examples/generate_schemas.rs
       - schemas/environment-lock-v1.json
       - .github/workflows/environment-lock-contract.yml
 
