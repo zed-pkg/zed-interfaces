@@ -497,7 +497,12 @@ fn every_language_host_is_routable_from_a_manifest() {
         ("ocaml", "opam", "acme-client", "opam"),
         ("nim", "nimble", "acme_client", "nimble"),
         ("crystal", "shards", "acme-client", "shards"),
-        ("powershell", "powershell-gallery", "Acme.Client", "psgallery"),
+        (
+            "powershell",
+            "powershell-gallery",
+            "Acme.Client",
+            "psgallery",
+        ),
         ("zig", "zig", "acme-client", "zig"),
     ] {
         let parsed = Manifest::parse(&manifest(&format!(
@@ -565,7 +570,13 @@ package = "@acme/client"
 "#,
     ))
     .unwrap();
-    let native = stable.targets.get("nodejs").unwrap().native.as_ref().unwrap();
+    let native = stable
+        .targets
+        .get("nodejs")
+        .unwrap()
+        .native
+        .as_ref()
+        .unwrap();
     assert!(native.channel.is_default());
     assert!(!toml::to_string(&stable).unwrap().contains("channel"));
 }

@@ -612,15 +612,11 @@ impl NativeRegistry {
             | Self::PowerShellGallery => is_valid_simple_identity(package),
             // SE-0292 identifies a package as `scope.name`; DUB uses
             // `package:subpackage`.
-            Self::SwiftPackageIndex => package
-                .split_once('.')
-                .is_some_and(|(scope, name)| {
-                    is_valid_simple_identity(scope) && is_valid_simple_identity(name)
-                }),
+            Self::SwiftPackageIndex => package.split_once('.').is_some_and(|(scope, name)| {
+                is_valid_simple_identity(scope) && is_valid_simple_identity(name)
+            }),
             Self::Dub => match package.split_once(':') {
-                Some((root, sub)) => {
-                    is_valid_lower_identity(root) && is_valid_lower_identity(sub)
-                }
+                Some((root, sub)) => is_valid_lower_identity(root) && is_valid_lower_identity(sub),
                 None => is_valid_lower_identity(package),
             },
             // A VCS route names a repository, not a registry package, so it

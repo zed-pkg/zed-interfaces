@@ -772,21 +772,15 @@ impl NativeHost {
             ),
             GoProxy => HostEndpoints::new(None, "https://proxy.golang.org", None),
             ConanCenter => HostEndpoints::new(None, "https://center.conan.io", None),
-            SwiftPackageIndex => HostEndpoints::new(
-                None,
-                "https://swiftpackageindex.com/api",
-                None,
-            ),
+            SwiftPackageIndex => {
+                HostEndpoints::new(None, "https://swiftpackageindex.com/api", None)
+            }
             CocoaPods => HostEndpoints::new(
                 Some("https://trunk.cocoapods.org/api/v1"),
                 "https://cdn.cocoapods.org",
                 None,
             ),
-            PubDev => HostEndpoints::new(
-                Some("https://pub.dev/api"),
-                "https://pub.dev/api",
-                None,
-            ),
+            PubDev => HostEndpoints::new(Some("https://pub.dev/api"), "https://pub.dev/api", None),
             Hex => HostEndpoints::new(
                 Some("https://hex.pm/api"),
                 "https://repo.hex.pm",
@@ -818,11 +812,7 @@ impl NativeHost {
                 "https://luarocks.org/manifest",
                 Some("https://luarocks.org"),
             ),
-            JuliaGeneral => HostEndpoints::new(
-                None,
-                "https://pkg.julialang.org/registry",
-                None,
-            ),
+            JuliaGeneral => HostEndpoints::new(None, "https://pkg.julialang.org/registry", None),
             Opam => HostEndpoints::new(None, "https://opam.ocaml.org/packages", None),
             Dub => HostEndpoints::new(None, "https://code.dlang.org/api/packages", None),
             Nimble => HostEndpoints::new(None, "https://nimble.directory/api/v1", None),
@@ -907,11 +897,13 @@ impl NativeHost {
             NativeHost::Npm => Some(channel.as_str().to_string()),
             // Conan's channel is part of the reference, so it is always
             // present and `testing` is the conventional non-stable one.
-            NativeHost::ConanCenter => Some(match channel {
-                ReleaseChannel::Stable => "stable",
-                _ => "testing",
-            }
-            .to_string()),
+            NativeHost::ConanCenter => Some(
+                match channel {
+                    ReleaseChannel::Stable => "stable",
+                    _ => "testing",
+                }
+                .to_string(),
+            ),
             _ => None,
         }
     }
@@ -1146,10 +1138,7 @@ impl UniversalHost {
             ),
             // No Cargo and no PyPI endpoint: GitHub Packages serves npm,
             // Maven/Gradle, RubyGems, NuGet, and containers only.
-            GithubPackages => matches!(
-                protocol,
-                P::Npm | P::Maven2 | P::RubyGemsApi | P::NuGetV3
-            ),
+            GithubPackages => matches!(protocol, P::Npm | P::Maven2 | P::RubyGemsApi | P::NuGetV3),
             GitlabPackages => matches!(
                 protocol,
                 P::Npm
@@ -1245,7 +1234,9 @@ impl std::fmt::Display for UniversalHost {
 pub enum NativeHostError {
     #[error("release channel `{channel}` cannot be encoded in this version syntax")]
     ChannelUnsupported { channel: ReleaseChannel },
-    #[error("`{host}` has no `{channel}` track; publish to the stable channel or pick another host")]
+    #[error(
+        "`{host}` has no `{channel}` track; publish to the stable channel or pick another host"
+    )]
     HostChannelUnsupported {
         host: NativeHost,
         channel: ReleaseChannel,
@@ -1355,11 +1346,20 @@ mod tests {
 
     #[test]
     fn host_tokens_accept_the_domain_people_actually_type() {
-        assert_eq!(NativeHost::from_token("crates.io"), Some(NativeHost::CratesIo));
+        assert_eq!(
+            NativeHost::from_token("crates.io"),
+            Some(NativeHost::CratesIo)
+        );
         assert_eq!(NativeHost::from_token("pub.dev"), Some(NativeHost::PubDev));
         assert_eq!(NativeHost::from_token("hex.pm"), Some(NativeHost::Hex));
-        assert_eq!(NativeHost::from_token("Maven"), Some(NativeHost::MavenCentral));
-        assert_eq!(NativeHost::from_token("go_modules"), Some(NativeHost::GoProxy));
+        assert_eq!(
+            NativeHost::from_token("Maven"),
+            Some(NativeHost::MavenCentral)
+        );
+        assert_eq!(
+            NativeHost::from_token("go_modules"),
+            Some(NativeHost::GoProxy)
+        );
         assert_eq!(NativeHost::from_token("cobol-central"), None);
     }
 
@@ -1468,7 +1468,10 @@ mod tests {
             .unwrap();
         assert_eq!(rc.version, "1.0.0-RC2");
         assert!(!rc.mutable);
-        assert_eq!(rc.endpoints.publish, NativeHost::MavenCentral.endpoints().publish);
+        assert_eq!(
+            rc.endpoints.publish,
+            NativeHost::MavenCentral.endpoints().publish
+        );
     }
 
     #[test]
@@ -1491,14 +1494,19 @@ mod tests {
                 "{host} should reject a candidate, got {error:?}"
             );
             // …but the stable track still works.
-            assert!(host.channel_route("1.0.0", ReleaseChannel::Stable, 1).is_ok());
+            assert!(
+                host.channel_route("1.0.0", ReleaseChannel::Stable, 1)
+                    .is_ok()
+            );
         }
     }
 
     #[test]
     fn stable_never_rewrites_the_version_or_demands_opt_in() {
         for host in NativeHost::ALL {
-            let route = host.channel_route("3.1.4", ReleaseChannel::Stable, 1).unwrap();
+            let route = host
+                .channel_route("3.1.4", ReleaseChannel::Stable, 1)
+                .unwrap();
             assert_eq!(route.version, "3.1.4", "{host} rewrote a stable version");
             assert!(!route.requires_opt_in);
             assert!(!route.mutable);
@@ -1520,9 +1528,11 @@ mod tests {
             Err(NativeHostError::EmptyVersion { .. })
         ));
         // Iteration is irrelevant to a stable release, so 0 is fine there.
-        assert!(NativeHost::Npm
-            .channel_route("1.0.0", ReleaseChannel::Stable, 0)
-            .is_ok());
+        assert!(
+            NativeHost::Npm
+                .channel_route("1.0.0", ReleaseChannel::Stable, 0)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -1552,14 +1562,19 @@ mod tests {
             NativeHost::NuGet,
         ] {
             assert!(host.protocol().uploads_artifact(), "{host} uploads bytes");
-            assert!(host.endpoints().publish.is_some(), "{host} needs an upload URL");
+            assert!(
+                host.endpoints().publish.is_some(),
+                "{host} needs an upload URL"
+            );
         }
     }
 
     #[test]
     fn moderated_hosts_are_flagged_so_automation_stops_at_submitted() {
         for host in [NativeHost::Cran, NativeHost::JuliaGeneral, NativeHost::Opam] {
-            let route = host.channel_route("1.0.0", ReleaseChannel::Stable, 1).unwrap();
+            let route = host
+                .channel_route("1.0.0", ReleaseChannel::Stable, 1)
+                .unwrap();
             assert!(route.moderated, "{host} publication is reviewed");
         }
         assert!(
@@ -1592,7 +1607,10 @@ mod tests {
         for host in NativeHost::ALL {
             let endpoints = host.endpoints();
             if matches!(host, NativeHost::Zig | NativeHost::Vcs) {
-                assert!(endpoints.index.is_empty(), "{host} resolves from the VCS remote");
+                assert!(
+                    endpoints.index.is_empty(),
+                    "{host} resolves from the VCS remote"
+                );
                 continue;
             }
             assert!(
@@ -1603,7 +1621,10 @@ mod tests {
                 .into_iter()
                 .flatten()
             {
-                assert!(url.starts_with("https://"), "{host} url `{url}` is not https");
+                assert!(
+                    url.starts_with("https://"),
+                    "{host} url `{url}` is not https"
+                );
             }
         }
     }
@@ -1611,7 +1632,10 @@ mod tests {
     #[test]
     fn pypi_pins_the_basic_auth_username_registries_actually_require() {
         assert_eq!(NativeHost::PyPi.basic_auth_username(), Some("__token__"));
-        assert_eq!(NativeHost::TestPyPi.basic_auth_username(), Some("__token__"));
+        assert_eq!(
+            NativeHost::TestPyPi.basic_auth_username(),
+            Some("__token__")
+        );
         assert_eq!(NativeHost::MavenCentral.basic_auth_username(), None);
     }
 
@@ -1660,13 +1684,19 @@ mod tests {
     #[test]
     fn universal_hosts_rewrite_the_url_and_keep_the_protocol() {
         let endpoints = UniversalHost::Artifactory
-            .endpoints_for(NativeHost::Npm, "https://acme.jfrog.io/artifactory/npm-local/")
+            .endpoints_for(
+                NativeHost::Npm,
+                "https://acme.jfrog.io/artifactory/npm-local/",
+            )
             .unwrap();
         assert_eq!(
             endpoints.publish.as_deref(),
             Some("https://acme.jfrog.io/artifactory/npm-local")
         );
-        assert_eq!(endpoints.download_base(), "https://acme.jfrog.io/artifactory/npm-local");
+        assert_eq!(
+            endpoints.download_base(),
+            "https://acme.jfrog.io/artifactory/npm-local"
+        );
     }
 
     #[test]
@@ -1682,7 +1712,10 @@ mod tests {
         ));
         assert!(
             UniversalHost::GitlabPackages
-                .endpoints_for(NativeHost::PyPi, "https://gitlab.com/api/v4/projects/1/packages/pypi")
+                .endpoints_for(
+                    NativeHost::PyPi,
+                    "https://gitlab.com/api/v4/projects/1/packages/pypi"
+                )
                 .is_ok(),
             "GitLab does serve PyPI"
         );
@@ -1715,11 +1748,20 @@ mod tests {
             ReleaseChannel::from_token("release-candidate"),
             Some(ReleaseChannel::Rc)
         );
-        assert_eq!(ReleaseChannel::from_token("canary"), Some(ReleaseChannel::Nightly));
-        assert_eq!(ReleaseChannel::from_token("latest"), Some(ReleaseChannel::Stable));
+        assert_eq!(
+            ReleaseChannel::from_token("canary"),
+            Some(ReleaseChannel::Nightly)
+        );
+        assert_eq!(
+            ReleaseChannel::from_token("latest"),
+            Some(ReleaseChannel::Stable)
+        );
         // Publish-time input must not degrade: an unknown track is an error,
         // not a silent stable release.
         assert_eq!(ReleaseChannel::from_token("gamma"), None);
-        assert_eq!(ReleaseChannel::from_str_lenient("gamma"), ReleaseChannel::Stable);
+        assert_eq!(
+            ReleaseChannel::from_str_lenient("gamma"),
+            ReleaseChannel::Stable
+        );
     }
 }
