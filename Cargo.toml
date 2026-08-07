@@ -1,0 +1,15 @@
+# Virtual workspace. The `zed-interfaces` crate itself lives in `src/rust/`,
+# beside the generated `src/dart/` and `src/ts/` slices.
+#
+# The root stays a workspace (rather than the crate) for two reasons:
+#   * `.zpkg.toml` publishes each language slice as its own zed-package, and a
+#     target may not own `dir = "."`, so the Rust slice needs its own subtree.
+#   * `zed-interfaces = { git = "…/zed-interfaces" }` consumers keep resolving,
+#     because Cargo finds the package through this workspace's members.
+#
+# Sibling repos that used `{ path = "../zed-interfaces" }` must now point at
+# `{ path = "../zed-interfaces/src/rust" }`.
+[workspace]
+resolver = "3"
+members = ["src/rust"]
+default-members = ["src/rust"]
