@@ -76,6 +76,18 @@ const dartIdent = (raw, reserved = DART_CLASS_MEMBERS) => {
   return DART_KEYWORDS.has(id) || reserved.has(id) ? `${id}_` : id;
 };
 const dartEnumIdent = (raw) => dartIdent(raw, DART_ENUM_MEMBERS);
+// Types exported by dart:core. dart:core is imported implicitly, and an
+// explicit import *wins* over it — so a generated class named `Duration` would
+// not raise an ambiguity error, it would silently shadow the real one and
+// break unrelated consumer code with a baffling message. Fail at generation
+// time instead. (zed-lib shipped exactly this bug with a `Comparator` class.)
+const DART_CORE_TYPES = new Set([
+  "BigInt", "Comparable", "Comparator", "DateTime", "Deprecated", "Duration", "Enum", "Error",
+  "Exception", "Expando", "Function", "Future", "Invocation", "Iterable", "Iterator", "List",
+  "Map", "MapEntry", "Match", "Null", "Object", "Pattern", "Record", "RegExp", "RegExpMatch",
+  "Rune", "Runes", "Set", "Sink", "StackTrace", "Stopwatch", "Stream", "String", "StringBuffer",
+  "StringSink", "Symbol", "Type", "Uri", "UriData", "WeakReference",
+]);
 // Dart's own lints prefer single quotes; `$` starts an interpolation, so it
 // has to be escaped even inside a plain literal.
 const dartStr = (value) =>
@@ -662,7 +674,7 @@ function emitTs(built) {
       "\n";
     const importBlock = [...imports.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([owner, names]) => `import type { ${[...names].sort().join(", ")} } from "./${owner}";`)
+      .map(([owner, names]) => `import type { ${[...names].sort().join(", ")} } from "./${owner}.ts";`)
       .join("\n");
     const body = module.types
       .map((type) => (type.kind === "enum" ? tsEnum(type) : tsInterface(type, kinds)))
@@ -674,7 +686,7 @@ function emitTs(built) {
   files["ts/index.ts"] =
     BANNER.split("\n").map((line) => `// ${line}`).join("\n") +
     "\n\n" +
-    moduleFiles.sort().map((m) => `export * from "./${m}";`).join("\n") +
+    moduleFiles.sort().map((m) => `export * from "./${m}.ts";`).join("\n") +
     "\n";
   return files;
 }
