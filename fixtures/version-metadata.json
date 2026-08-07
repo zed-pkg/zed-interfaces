@@ -1,0 +1,15 @@
+{
+  "published": {
+    "download_url": "/v1/artifacts/abc",
+    "format": "tar.gz",
+    "name": "http-kit",
+    "org": "acme",
+    "published_at": "2026-08-06T00:00:00Z",
+    "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "size": 4096,
+    "vcs_commit": "cccccccccccccccccccccccccccccccccccccccc",
+    "vcs_tag": "v1.0.0",
+    "version": "1.0.0",
+    "yanked": false
+  }
+}

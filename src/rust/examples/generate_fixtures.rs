@@ -124,7 +124,7 @@ fn main() {
         &[(
             "page",
             PackageListResponse {
-                packages: vec![summary.clone()],
+                items: vec![summary.clone()],
                 total: 1,
             },
         )],
@@ -135,7 +135,8 @@ fn main() {
         &[(
             "hit",
             SearchResponse {
-                results: vec![summary.clone()],
+                query: "http".into(),
+                items: vec![summary.clone()],
             },
         )],
     );
@@ -157,7 +158,7 @@ fn main() {
                     subject: "acme/http-kit@1.0.0".into(),
                     detail: None,
                     prev_hash: None,
-                    entry_hash: Some("a".repeat(64)),
+                    entry_hash: "a".repeat(64),
                 }],
             },
         )],
@@ -178,7 +179,7 @@ fn main() {
                     actor: "server-1".into(),
                 },
                 at_ms: 1_754_400_000_001,
-                row: serde_json::json!({ "org": "acme" }),
+                row: Some(serde_json::json!({ "org": "acme" })),
                 sync_sequence: Some(42),
                 write_key: None,
             },
@@ -219,13 +220,13 @@ fn main() {
             ),
             (
                 "claim_org_request",
-                serde_json::to_value(ClaimOrgRequest { org: "acme".into() }).unwrap(),
+                serde_json::to_value(ClaimOrgRequest { slug: "acme".into() }).unwrap(),
             ),
             (
                 "claim_org_response",
                 serde_json::to_value(ClaimOrgResponse {
-                    org: "acme".into(),
-                    token: "zed_pat_x".into(),
+                    slug: "acme".into(),
+                    created: true,
                 })
                 .unwrap(),
             ),
@@ -247,30 +248,33 @@ fn main() {
                 "audit_integrity",
                 serde_json::to_value(AuditIntegrityResponse {
                     org: "acme".into(),
-                    entries: 1,
                     intact: true,
-                    broken_at: None,
-                    detail: None,
+                    entries_checked: 1,
+                    first_bad_seq: None,
+                    problem: None,
+                    head_hash: Some("a".repeat(64)),
                 })
                 .unwrap(),
             ),
             (
                 "semantic_search_request",
                 serde_json::to_value(SemanticSearchRequest {
-                    query: "http".into(),
-                    limit: Some(5),
-                    embedding: None,
+                    model: "openai/text-embedding-3-small".into(),
+                    embedding: vec![0.1, 0.2, 0.3],
+                    limit: 5,
+                    tags: vec!["http".into()],
                 })
                 .unwrap(),
             ),
             (
                 "semantic_search_response",
                 serde_json::to_value(SemanticSearchResponse {
-                    results: vec![SemanticHit {
+                    items: vec![SemanticHit {
                         org: "acme".into(),
                         name: "http-kit".into(),
                         description: None,
-                        score: 0.75,
+                        distance: 0.25,
+                        tags: vec!["http".into()],
                     }],
                 })
                 .unwrap(),
