@@ -2,7 +2,7 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/package-list-response.json
 
-import type { PackageSummary } from "./common";
+import type { PackageSummary } from "./common.ts";
 
 /** Response for `GET /v1/packages` (list all). */
 export interface PackageListResponse {
