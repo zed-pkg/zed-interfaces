@@ -46,10 +46,8 @@ const camel = (s) => {
 };
 const snake = (s) => words(s).join("_").toLowerCase();
 
-// Dart keywords that cannot be identifiers, plus the members every class and
-// enum already has — a field called `hashCode` or an enum value called `values`
-// would produce a file that does not compile.
-const DART_RESERVED = new Set([
+// Reserved words that cannot be identifiers at all.
+const DART_KEYWORDS = new Set([
   "abstract", "as", "assert", "async", "await", "break", "case", "catch", "class", "const",
   "continue", "covariant", "default", "deferred", "do", "dynamic", "else", "enum", "export",
   "extends", "extension", "external", "factory", "false", "final", "finally", "for", "function",
@@ -57,15 +55,28 @@ const DART_RESERVED = new Set([
   "new", "null", "on", "operator", "part", "required", "rethrow", "return", "sealed", "set",
   "show", "static", "super", "switch", "sync", "this", "throw", "true", "try", "typedef", "var",
   "void", "when", "while", "with", "yield",
-  "hashCode", "runtimeType", "toString", "noSuchMethod", "index", "values", "name", "wire",
-  "fromJson", "toJson",
 ]);
-const dartIdent = (raw) => {
+// Members every Object already has, plus the ones this generator adds. A field
+// named `hashCode` or `toJson` would not compile.
+const DART_CLASS_MEMBERS = new Set([
+  "hashCode", "runtimeType", "toString", "noSuchMethod", "fromJson", "toJson",
+]);
+// Enums carry more: `name`, `index` and `values` are real members there, so an
+// enum value called `name` collides even though a *field* called `name` is fine.
+const DART_ENUM_MEMBERS = new Set([
+  ...DART_CLASS_MEMBERS, "index", "values", "name", "compareTo", "wire",
+]);
+const dartIdent = (raw, reserved = DART_CLASS_MEMBERS) => {
   let id = camel(raw);
   if (!id) fail(`cannot derive a Dart identifier from ${JSON.stringify(raw)}`);
   if (/^[0-9]/.test(id)) id = `v${id}`;
-  return DART_RESERVED.has(id) ? `${id}_` : id;
+  return DART_KEYWORDS.has(id) || reserved.has(id) ? `${id}_` : id;
 };
+const dartEnumIdent = (raw) => dartIdent(raw, DART_ENUM_MEMBERS);
+// Dart's own lints prefer single quotes; `$` starts an interpolation, so it
+// has to be escaped even inside a plain literal.
+const dartStr = (value) =>
+  `'${String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\$/g, "\\$").replace(/\n/g, "\\n")}'`;
 // TS keeps wire keys verbatim so a decoded response is the interface; only
 // non-identifier keys need quoting.
 const TS_IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
