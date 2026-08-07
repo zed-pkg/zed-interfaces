@@ -3,7 +3,25 @@
 Core interface definitions for [zed-pkg](https://github.com/zed-pkg), the
 universal package manager backed by the VCS hosts you already use.
 
-This crate is the contract everything else builds against:
+One contract, three language slices, each published as its own zed-package:
+
+| slice      | path       | what it is                                            |
+| ---------- | ---------- | ----------------------------------------------------- |
+| Rust       | `src/rust` | hand-written source of truth (the `zed-interfaces` crate) |
+| Dart       | `src/dart` | generated front-end types (`package:zed_interfaces`)  |
+| TypeScript | `src/ts`   | generated front-end types (`@zed-pkg/zed-interfaces`) |
+
+Rust covers the whole contract. Dart and TypeScript cover only the part a
+browser or Flutter client decodes — the registry API and the sync stream — as
+demarcated in [`schemas/index.json`](schemas/index.json). See
+[docs/multi-language-layout.md](docs/multi-language-layout.md) for the layout,
+the generation pipeline, and why the crate manifest lives in `src/rust/`.
+
+Implementations that compose these types live in
+[`zed-lib`](https://github.com/zed-pkg/zed-lib); this repository stays types
+and validation.
+
+The Rust crate is the contract everything else builds against:
 
 - **`.zpkg.toml`** — the package manifest at the repo root, TOML only (`manifest` module)
 - **`.zpkg.lock`** — the lockfile with artifact hashes and VCS provenance (`lockfile`)
