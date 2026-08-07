@@ -217,6 +217,15 @@ test("a schema that is not classified in index.json is an error, not a silent sk
   );
 });
 
+test("index.json cannot point outside the schema directory", () => {
+  // `file` becomes an output path under src/, so a traversing entry would make
+  // codegen write anywhere. manifest.rs holds target dirs to the same rule.
+  withSchemaDir({ "index.json": { schemas: [{ file: "../../../evil.json", targets: ["ts"] }] } }, (dir) =>
+    assert.throws(() => loadIndex(dir), /must be a kebab-case \*\.json file name/));
+  withSchemaDir({ "index.json": { schemas: [{ file: "Sub/Dir.json", targets: [] }] } }, (dir) =>
+    assert.throws(() => loadIndex(dir), /must be a kebab-case/));
+});
+
 test("index.json rejects unknown targets, missing files, and duplicates", () => {
   withSchemaDir({ "index.json": { schemas: [{ file: "a.json", targets: ["swift"] }] }, "a.json": {} }, (dir) =>
     assert.throws(() => loadIndex(dir), /unknown target "swift"/));
