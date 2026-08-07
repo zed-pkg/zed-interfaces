@@ -181,6 +181,24 @@ impl RegistryProtocol {
         )
     }
 
+    /// The protocol a *mirror* has to speak in order to serve this one's
+    /// artifacts.
+    ///
+    /// Ingest and distribution are different things.
+    /// [`RegistryProtocol::MavenCentralPortal`] describes only how Maven
+    /// Central *accepts* a release — a zipped bundle plus a deployment poll —
+    /// and nothing about the artifact, which is an ordinary Maven 2 jar. Every
+    /// registry that hosts Maven hosts it, so mirroring compatibility must be
+    /// keyed on the family, not the ingest protocol; otherwise a
+    /// `maven-central` route would be refused by GitHub Packages, which has
+    /// served Maven since it launched.
+    pub fn mirror_family(self) -> RegistryProtocol {
+        match self {
+            RegistryProtocol::MavenCentralPortal => RegistryProtocol::Maven2,
+            other => other,
+        }
+    }
+
     /// Whether publication completes without a human in the loop.
     ///
     /// CRAN reviews every submission, and the Git-backed registries merge a
@@ -1118,6 +1136,9 @@ impl UniversalHost {
     pub fn supports(self, protocol: RegistryProtocol) -> bool {
         use RegistryProtocol as P;
         use UniversalHost::*;
+        // Mirrors host artifacts; they do not re-implement a canonical host's
+        // ingest handshake. See `RegistryProtocol::mirror_family`.
+        let protocol = protocol.mirror_family();
         match self {
             // The two universal binary repositories: everything with an
             // HTTP-upload protocol, plus Conan, which Artifactory originated.
@@ -1697,6 +1718,36 @@ mod tests {
             endpoints.download_base(),
             "https://acme.jfrog.io/artifactory/npm-local"
         );
+    }
+
+    #[test]
+    fn a_mirror_serves_maven_however_maven_central_ingests_it() {
+        // The Central Portal's bundle-and-poll upload is Maven Central's
+        // ingest, not the artifact format. Keying mirror support on it would
+        // refuse a `maven-central` route on GitHub Packages, which has served
+        // Maven since it launched.
+        assert_eq!(
+            RegistryProtocol::MavenCentralPortal.mirror_family(),
+            RegistryProtocol::Maven2
+        );
+        assert_eq!(
+            RegistryProtocol::Npm.mirror_family(),
+            RegistryProtocol::Npm,
+            "every other protocol mirrors as itself"
+        );
+        for mirror in [
+            UniversalHost::GithubPackages,
+            UniversalHost::GitlabPackages,
+            UniversalHost::BitbucketPackages,
+            UniversalHost::Artifactory,
+            UniversalHost::Nexus,
+        ] {
+            assert!(
+                mirror.supports(NativeHost::MavenCentral.protocol()),
+                "{mirror} hosts Maven artifacts"
+            );
+            assert!(mirror.supports(NativeHost::Clojars.protocol()));
+        }
     }
 
     #[test]
