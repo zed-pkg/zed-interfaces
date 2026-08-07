@@ -80,9 +80,11 @@ pub enum RegistryProtocol {
     PypiLegacyUpload,
     /// RubyGems API: `POST /api/v1/gems` with raw `.gem` bytes; versions from
     /// `/api/v1/versions/{name}.json` or the compact index.
+    #[serde(rename = "rubygems-api")]
     RubyGemsApi,
     /// NuGet V3: `PUT /api/v2/package` to push, service index -> flat
     /// container to resolve.
+    #[serde(rename = "nuget-v3")]
     NuGetV3,
     /// Hex: `POST /api/publish` with a tarball; tarballs served from
     /// `repo.hex.pm`.
@@ -94,6 +96,7 @@ pub enum RegistryProtocol {
     /// as a first-class candidate track.
     HackageApi,
     /// LuaRocks: `POST /api/1/{api_key}/upload` with a rockspec.
+    #[serde(rename = "luarocks-api")]
     LuaRocksApi,
     /// PAUSE, the CPAN upload gateway: multipart `authenquery?ACTION=add_uri`.
     /// Resolution goes through MetaCPAN rather than PAUSE.
@@ -226,6 +229,7 @@ pub enum RegistryAuth {
 #[serde(rename_all = "kebab-case")]
 pub enum ApiKeyHeader {
     /// `X-NuGet-ApiKey`, used by NuGet and the PowerShell Gallery.
+    #[serde(rename = "x-nuget-api-key")]
     XNuGetApiKey,
     /// `Authorization: Token <token>`, CocoaPods Trunk's spelling.
     AuthorizationToken,
@@ -507,14 +511,18 @@ pub enum NativeHost {
     /// Maven Central via the Sonatype Central Portal.
     MavenCentral,
     /// pypi.org
+    #[serde(rename = "pypi")]
     PyPi,
     /// test.pypi.org — a full mirror used as a rehearsal track.
+    #[serde(rename = "test-pypi")]
     TestPyPi,
     /// rubygems.org
+    #[serde(rename = "rubygems")]
     RubyGems,
     /// packagist.org
     Packagist,
     /// nuget.org
+    #[serde(rename = "nuget")]
     NuGet,
     /// proxy.golang.org
     GoProxy,
@@ -523,6 +531,7 @@ pub enum NativeHost {
     /// swiftpackageindex.com
     SwiftPackageIndex,
     /// cocoapods.org trunk
+    #[serde(rename = "cocoapods")]
     CocoaPods,
     /// pub.dev
     PubDev,
@@ -539,6 +548,7 @@ pub enum NativeHost {
     /// clojars.org
     Clojars,
     /// luarocks.org
+    #[serde(rename = "luarocks")]
     LuaRocks,
     /// The Julia General registry.
     JuliaGeneral,
@@ -1070,6 +1080,7 @@ pub enum UniversalHost {
     GithubPackages,
     GitlabPackages,
     BitbucketPackages,
+    #[serde(rename = "aws-codeartifact")]
     AwsCodeArtifact,
     Cloudsmith,
     AzureArtifacts,
