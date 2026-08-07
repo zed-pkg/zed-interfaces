@@ -4,20 +4,20 @@
 
 class PublishResponse {
   const PublishResponse({
-    required this.name_,
+    required this.name,
     required this.org,
     required this.sha256,
     required this.version,
   });
 
   factory PublishResponse.fromJson(Map<String, dynamic> json) => PublishResponse(
-          name_: json["name"] as String,
-          org: json["org"] as String,
-          sha256: json["sha256"] as String,
-          version: json["version"] as String,
-      );
+    name: json['name'] as String,
+    org: json['org'] as String,
+    sha256: json['sha256'] as String,
+    version: json['version'] as String,
+  );
 
-  final String name_;
+  final String name;
 
   final String org;
 
@@ -26,9 +26,9 @@ class PublishResponse {
   final String version;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "name": name_,
-        "org": org,
-        "sha256": sha256,
-        "version": version,
-      };
+    'name': name,
+    'org': org,
+    'sha256': sha256,
+    'version': version,
+  };
 }

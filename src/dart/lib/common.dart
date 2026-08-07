@@ -6,24 +6,24 @@ class PackageSummary {
   const PackageSummary({
     this.description,
     this.latest,
-    required this.name_,
+    required this.name,
     required this.org,
     this.tags,
   });
 
   factory PackageSummary.fromJson(Map<String, dynamic> json) => PackageSummary(
-          description: json["description"] == null ? null : json["description"] as String,
-          latest: json["latest"] == null ? null : json["latest"] as String,
-          name_: json["name"] as String,
-          org: json["org"] as String,
-          tags: json["tags"] == null ? null : (json["tags"] as List<dynamic>).map((e) => e as String).toList(),
-      );
+    description: json['description'] as String?,
+    latest: json['latest'] as String?,
+    name: json['name'] as String,
+    org: json['org'] as String,
+    tags: (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList(),
+  );
 
   final String? description;
 
   final String? latest;
 
-  final String name_;
+  final String name;
 
   final String org;
 
@@ -31,10 +31,10 @@ class PackageSummary {
   final List<String>? tags;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "description": description,
-        "latest": latest,
-        "name": name_,
-        "org": org,
-        "tags": tags,
-      };
+    'description': description,
+    'latest': latest,
+    'name': name,
+    'org': org,
+    'tags': tags,
+  };
 }

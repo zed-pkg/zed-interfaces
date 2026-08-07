@@ -10,9 +10,9 @@ class ApiError {
   });
 
   factory ApiError.fromJson(Map<String, dynamic> json) => ApiError(
-          code: json["code"] as String,
-          message: json["message"] as String,
-      );
+    code: json['code'] as String,
+    message: json['message'] as String,
+  );
 
   /// Stable machine-readable code, e.g. `not_found`, `sha256_mismatch`, `tag_not_found`,
   /// `unauthorized`, `org_taken`.
@@ -21,7 +21,7 @@ class ApiError {
   final String message;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "code": code,
-        "message": message,
-      };
+    'code': code,
+    'message': message,
+  };
 }

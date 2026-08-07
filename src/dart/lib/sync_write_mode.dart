@@ -5,21 +5,26 @@
 /// Per-write optimism level (mirrors zed-sync `WriteMode`). Enum, not a boolean: a write
 /// names its exact behavior.
 enum SyncWriteMode {
-  localOnly("local_only"),
-  optimisticQueue("optimistic_queue"),
-  optimisticAwaitAck("optimistic_await_ack"),
-  serverFirst("server_first"),
-  serverOnly("server_only");
+  localOnly('local_only'),
+  optimisticQueue('optimistic_queue'),
+  optimisticAwaitAck('optimistic_await_ack'),
+  serverFirst('server_first'),
+  serverOnly('server_only');
 
   const SyncWriteMode(this.wire);
 
   /// The value as it appears in JSON.
   final String wire;
 
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
   static SyncWriteMode fromJson(String value) => values.firstWhere(
-        (candidate) => candidate.wire == value,
-        orElse: () => throw FormatException('unknown SyncWriteMode: $value'),
-      );
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown SyncWriteMode: $value'),
+  );
+
+  static SyncWriteMode? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
 
   String toJson() => wire;
 }

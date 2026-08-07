@@ -8,12 +8,12 @@ class ClaimOrgRequest {
   });
 
   factory ClaimOrgRequest.fromJson(Map<String, dynamic> json) => ClaimOrgRequest(
-          slug: json["slug"] as String,
-      );
+    slug: json['slug'] as String,
+  );
 
   final String slug;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "slug": slug,
-      };
+    'slug': slug,
+  };
 }

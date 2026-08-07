@@ -6,7 +6,7 @@ class PackageMetadata {
   const PackageMetadata({
     this.description,
     this.latest,
-    required this.name_,
+    required this.name,
     required this.org,
     required this.repoUrl,
     this.tags,
@@ -16,22 +16,22 @@ class PackageMetadata {
   });
 
   factory PackageMetadata.fromJson(Map<String, dynamic> json) => PackageMetadata(
-          description: json["description"] == null ? null : json["description"] as String,
-          latest: json["latest"] == null ? null : json["latest"] as String,
-          name_: json["name"] as String,
-          org: json["org"] as String,
-          repoUrl: json["repo_url"] as String,
-          tags: json["tags"] == null ? null : (json["tags"] as List<dynamic>).map((e) => e as String).toList(),
-          vcs: Vcs.fromJson(json["vcs"] as String),
-          versionScheme: json["version_scheme"] == null ? null : VersionScheme.fromJson(json["version_scheme"] as String),
-          versions: (json["versions"] as List<dynamic>).map((e) => e as String).toList(),
-      );
+    description: json['description'] as String?,
+    latest: json['latest'] as String?,
+    name: json['name'] as String,
+    org: json['org'] as String,
+    repoUrl: json['repo_url'] as String,
+    tags: (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList(),
+    vcs: Vcs.fromJson(json['vcs'] as String),
+    versionScheme: VersionScheme.maybeFromJson(json['version_scheme'] as String?),
+    versions: (json['versions'] as List<dynamic>).map((e) => e as String).toList(),
+  );
 
   final String? description;
 
   final String? latest;
 
-  final String name_;
+  final String name;
 
   final String org;
 
@@ -49,16 +49,16 @@ class PackageMetadata {
   final List<String> versions;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "description": description,
-        "latest": latest,
-        "name": name_,
-        "org": org,
-        "repo_url": repoUrl,
-        "tags": tags,
-        "vcs": vcs.toJson(),
-        "version_scheme": versionScheme.toJson(),
-        "versions": versions,
-      };
+    'description': description,
+    'latest': latest,
+    'name': name,
+    'org': org,
+    'repo_url': repoUrl,
+    'tags': tags,
+    'vcs': vcs.toJson(),
+    'version_scheme': versionScheme?.toJson(),
+    'versions': versions,
+  };
 }
 
 /// Version-control systems a package's source repository can live on. zed-pkg is
@@ -69,22 +69,27 @@ class PackageMetadata {
 /// are git-compatible and push to git remotes, so their provenance is verified through git
 /// tags.
 enum Vcs {
-  git("git"),
-  hg("hg"),
-  jj("jj"),
-  sapling("sapling"),
-  fossil("fossil"),
-  pijul("pijul");
+  git('git'),
+  hg('hg'),
+  jj('jj'),
+  sapling('sapling'),
+  fossil('fossil'),
+  pijul('pijul');
 
   const Vcs(this.wire);
 
   /// The value as it appears in JSON.
   final String wire;
 
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
   static Vcs fromJson(String value) => values.firstWhere(
-        (candidate) => candidate.wire == value,
-        orElse: () => throw FormatException('unknown Vcs: $value'),
-      );
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown Vcs: $value'),
+  );
+
+  static Vcs? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
 
   String toJson() => wire;
 }
@@ -95,24 +100,29 @@ enum Vcs {
 enum VersionScheme {
   /// Semantic Versioning. `package.version` must be valid semver; ranges (`^1.2`, `>=0.2
   /// <0.5`) resolve to the max satisfying stable version.
-  semver("semver"),
+  semver('semver'),
   /// Calendar Versioning (`2026.07.24`, `2026.07`). Normalized to a semver total order
   /// (leading zeros dropped, padded to major.minor.patch) so the same range algebra applies.
   /// See [`normalize_calver`].
-  calver("calver"),
+  calver('calver'),
   /// Arbitrary tags (`release-candidate-1`, `legacy-api`). No range algebra: a requirement
   /// must match a published version **exactly**.
-  opaque("opaque");
+  opaque('opaque');
 
   const VersionScheme(this.wire);
 
   /// The value as it appears in JSON.
   final String wire;
 
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
   static VersionScheme fromJson(String value) => values.firstWhere(
-        (candidate) => candidate.wire == value,
-        orElse: () => throw FormatException('unknown VersionScheme: $value'),
-      );
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown VersionScheme: $value'),
+  );
+
+  static VersionScheme? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
 
   String toJson() => wire;
 }

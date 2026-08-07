@@ -12,9 +12,9 @@ class PackageListResponse {
   });
 
   factory PackageListResponse.fromJson(Map<String, dynamic> json) => PackageListResponse(
-          items: (json["items"] as List<dynamic>).map((e) => PackageSummary.fromJson(e as Map<String, dynamic>)).toList(),
-          total: (json["total"] as num).toInt(),
-      );
+    items: (json['items'] as List<dynamic>).map((e) => PackageSummary.fromJson(e as Map<String, dynamic>)).toList(),
+    total: (json['total'] as num).toInt(),
+  );
 
   final List<PackageSummary> items;
 
@@ -22,7 +22,7 @@ class PackageListResponse {
   final int total;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "items": items.map((e) => e.toJson()).toList(),
-        "total": total,
-      };
+    'items': items.map((e) => e.toJson()).toList(),
+    'total': total,
+  };
 }

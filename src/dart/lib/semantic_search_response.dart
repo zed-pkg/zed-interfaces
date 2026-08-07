@@ -6,37 +6,37 @@ class SemanticHit {
   const SemanticHit({
     this.description,
     required this.distance,
-    required this.name_,
+    required this.name,
     required this.org,
     this.tags,
   });
 
   factory SemanticHit.fromJson(Map<String, dynamic> json) => SemanticHit(
-          description: json["description"] == null ? null : json["description"] as String,
-          distance: (json["distance"] as num).toDouble(),
-          name_: json["name"] as String,
-          org: json["org"] as String,
-          tags: json["tags"] == null ? null : (json["tags"] as List<dynamic>).map((e) => e as String).toList(),
-      );
+    description: json['description'] as String?,
+    distance: (json['distance'] as num).toDouble(),
+    name: json['name'] as String,
+    org: json['org'] as String,
+    tags: (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList(),
+  );
 
   final String? description;
 
   /// Cosine distance (0 = identical direction, 2 = opposite). Lower is nearer.
   final double distance;
 
-  final String name_;
+  final String name;
 
   final String org;
 
   final List<String>? tags;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "description": description,
-        "distance": distance,
-        "name": name_,
-        "org": org,
-        "tags": tags,
-      };
+    'description': description,
+    'distance': distance,
+    'name': name,
+    'org': org,
+    'tags': tags,
+  };
 }
 
 class SemanticSearchResponse {
@@ -45,12 +45,12 @@ class SemanticSearchResponse {
   });
 
   factory SemanticSearchResponse.fromJson(Map<String, dynamic> json) => SemanticSearchResponse(
-          items: (json["items"] as List<dynamic>).map((e) => SemanticHit.fromJson(e as Map<String, dynamic>)).toList(),
-      );
+    items: (json['items'] as List<dynamic>).map((e) => SemanticHit.fromJson(e as Map<String, dynamic>)).toList(),
+  );
 
   final List<SemanticHit> items;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "items": items.map((e) => e.toJson()).toList(),
-      };
+    'items': items.map((e) => e.toJson()).toList(),
+  };
 }

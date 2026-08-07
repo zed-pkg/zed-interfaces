@@ -12,10 +12,10 @@ class Hlc {
   });
 
   factory Hlc.fromJson(Map<String, dynamic> json) => Hlc(
-          actor: json["actor"] as String,
-          counter: (json["counter"] as num).toInt(),
-          wallMs: (json["wall_ms"] as num).toInt(),
-      );
+    actor: json['actor'] as String,
+    counter: (json['counter'] as num).toInt(),
+    wallMs: (json['wall_ms'] as num).toInt(),
+  );
 
   final String actor;
 
@@ -24,10 +24,10 @@ class Hlc {
   final int wallMs;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "actor": actor,
-        "counter": counter,
-        "wall_ms": wallMs,
-      };
+    'actor': actor,
+    'counter': counter,
+    'wall_ms': wallMs,
+  };
 }
 
 /// The change envelope both transports decode to (mirrors zed-sync `ChangeEvent`).
@@ -46,15 +46,15 @@ class SyncChangeEvent {
   });
 
   factory SyncChangeEvent.fromJson(Map<String, dynamic> json) => SyncChangeEvent(
-          atMs: (json["at_ms"] as num).toInt(),
-          id: json["id"] as String,
-          op: SyncOp.fromJson(json["op"] as String),
-          row: json["row"],
-          syncSequence: json["sync_sequence"] == null ? null : (json["sync_sequence"] as num).toInt(),
-          table: json["table"] as String,
-          version: Hlc.fromJson(json["version"] as Map<String, dynamic>),
-          writeKey: json["write_key"] == null ? null : json["write_key"] as String,
-      );
+    atMs: (json['at_ms'] as num).toInt(),
+    id: json['id'] as String,
+    op: SyncOp.fromJson(json['op'] as String),
+    row: json['row'],
+    syncSequence: (json['sync_sequence'] as num?)?.toInt(),
+    table: json['table'] as String,
+    version: Hlc.fromJson(json['version'] as Map<String, dynamic>),
+    writeKey: json['write_key'] as String?,
+  );
 
   final int atMs;
 
@@ -73,30 +73,35 @@ class SyncChangeEvent {
   final String? writeKey;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "at_ms": atMs,
-        "id": id,
-        "op": op.toJson(),
-        "row": row,
-        "sync_sequence": syncSequence,
-        "table": table,
-        "version": version.toJson(),
-        "write_key": writeKey,
-      };
+    'at_ms': atMs,
+    'id': id,
+    'op': op.toJson(),
+    'row': row,
+    'sync_sequence': syncSequence,
+    'table': table,
+    'version': version.toJson(),
+    'write_key': writeKey,
+  };
 }
 
 enum SyncOp {
-  upsert("upsert"),
-  delete("delete");
+  upsert('upsert'),
+  delete('delete');
 
   const SyncOp(this.wire);
 
   /// The value as it appears in JSON.
   final String wire;
 
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
   static SyncOp fromJson(String value) => values.firstWhere(
-        (candidate) => candidate.wire == value,
-        orElse: () => throw FormatException('unknown SyncOp: $value'),
-      );
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown SyncOp: $value'),
+  );
+
+  static SyncOp? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
 
   String toJson() => wire;
 }

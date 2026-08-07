@@ -7,23 +7,28 @@
 /// changed what" without drowning in traffic.
 enum AuditAction {
   /// A version was published.
-  publish("publish"),
+  publish('publish'),
   /// A version was yanked (hidden from fresh resolution).
-  yank("yank"),
+  yank('yank'),
   /// A previously yanked version was restored.
-  unyank("unyank"),
+  unyank('unyank'),
   /// The org namespace was claimed.
-  orgClaim("org_claim");
+  orgClaim('org_claim');
 
   const AuditAction(this.wire);
 
   /// The value as it appears in JSON.
   final String wire;
 
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
   static AuditAction fromJson(String value) => values.firstWhere(
-        (candidate) => candidate.wire == value,
-        orElse: () => throw FormatException('unknown AuditAction: $value'),
-      );
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown AuditAction: $value'),
+  );
+
+  static AuditAction? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
 
   String toJson() => wire;
 }
@@ -46,17 +51,19 @@ class AuditEntry {
   });
 
   factory AuditEntry.fromJson(Map<String, dynamic> json) => AuditEntry(
-          action: json["action"] as String,
-          actionKind: json["action_kind"] == null ? null : AuditAction.fromJson(json["action_kind"] as String),
-          actorRole: json["actor_role"] as String,
-          actorTokenName: json["actor_token_name"] as String,
-          at: json["at"] as String,
-          detail: json["detail"] == null ? null : json["detail"] as String,
-          entryHash: json["entry_hash"] == null ? null : json["entry_hash"] as String,
-          prevHash: json["prev_hash"] == null ? null : json["prev_hash"] as String,
-          seq: json["seq"] == null ? 0 : (json["seq"] as num).toInt(),
-          subject: json["subject"] as String,
-      );
+    action: json['action'] as String,
+    actionKind: AuditAction.maybeFromJson(json['action_kind'] as String?),
+    actorRole: json['actor_role'] as String,
+    actorTokenName: json['actor_token_name'] as String,
+    at: json['at'] as String,
+    detail: json['detail'] as String?,
+    entryHash: json['entry_hash'] as String?,
+    prevHash: json['prev_hash'] as String?,
+    seq: json['seq'] == null
+        ? 0
+        : (json['seq'] as num).toInt(),
+    subject: json['subject'] as String,
+  );
 
   /// Raw action string; `action_kind` is the parsed form when recognized.
   final String action;
@@ -92,17 +99,17 @@ class AuditEntry {
   final String subject;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "action": action,
-        "action_kind": actionKind?.toJson(),
-        "actor_role": actorRole,
-        "actor_token_name": actorTokenName,
-        "at": at,
-        "detail": detail,
-        "entry_hash": entryHash,
-        "prev_hash": prevHash,
-        "seq": seq,
-        "subject": subject,
-      };
+    'action': action,
+    'action_kind': actionKind?.toJson(),
+    'actor_role': actorRole,
+    'actor_token_name': actorTokenName,
+    'at': at,
+    'detail': detail,
+    'entry_hash': entryHash,
+    'prev_hash': prevHash,
+    'seq': seq,
+    'subject': subject,
+  };
 }
 
 class AuditLogResponse {
@@ -112,9 +119,9 @@ class AuditLogResponse {
   });
 
   factory AuditLogResponse.fromJson(Map<String, dynamic> json) => AuditLogResponse(
-          entries: (json["entries"] as List<dynamic>).map((e) => AuditEntry.fromJson(e as Map<String, dynamic>)).toList(),
-          org: json["org"] as String,
-      );
+    entries: (json['entries'] as List<dynamic>).map((e) => AuditEntry.fromJson(e as Map<String, dynamic>)).toList(),
+    org: json['org'] as String,
+  );
 
   /// Most recent first.
   final List<AuditEntry> entries;
@@ -122,7 +129,7 @@ class AuditLogResponse {
   final String org;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "entries": entries.map((e) => e.toJson()).toList(),
-        "org": org,
-      };
+    'entries': entries.map((e) => e.toJson()).toList(),
+    'org': org,
+  };
 }

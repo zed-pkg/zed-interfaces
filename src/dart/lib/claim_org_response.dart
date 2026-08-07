@@ -9,9 +9,9 @@ class ClaimOrgResponse {
   });
 
   factory ClaimOrgResponse.fromJson(Map<String, dynamic> json) => ClaimOrgResponse(
-          created: json["created"] as bool,
-          slug: json["slug"] as String,
-      );
+    created: json['created'] as bool,
+    slug: json['slug'] as String,
+  );
 
   /// False when the caller already owned the org.
   final bool created;
@@ -19,7 +19,7 @@ class ClaimOrgResponse {
   final String slug;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "created": created,
-        "slug": slug,
-      };
+    'created': created,
+    'slug': slug,
+  };
 }

@@ -4,18 +4,23 @@
 
 /// How a dirty-vs-newer-remote conflict resolves (mirrors zed-sync `ConflictResolution`).
 enum SyncConflictResolution {
-  serverWins("server_wins"),
-  lastWriteWins("last_write_wins");
+  serverWins('server_wins'),
+  lastWriteWins('last_write_wins');
 
   const SyncConflictResolution(this.wire);
 
   /// The value as it appears in JSON.
   final String wire;
 
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
   static SyncConflictResolution fromJson(String value) => values.firstWhere(
-        (candidate) => candidate.wire == value,
-        orElse: () => throw FormatException('unknown SyncConflictResolution: $value'),
-      );
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown SyncConflictResolution: $value'),
+  );
+
+  static SyncConflictResolution? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
 
   String toJson() => wire;
 }

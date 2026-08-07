@@ -4,20 +4,25 @@
 
 /// How write/flush errors are surfaced (mirrors zed-sync `ErrorPolicy`).
 enum SyncErrorPolicy {
-  throwOnly("throw_only"),
-  emitOnly("emit_only"),
-  throwAndEmit("throw_and_emit"),
-  silent("silent");
+  throwOnly('throw_only'),
+  emitOnly('emit_only'),
+  throwAndEmit('throw_and_emit'),
+  silent('silent');
 
   const SyncErrorPolicy(this.wire);
 
   /// The value as it appears in JSON.
   final String wire;
 
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
   static SyncErrorPolicy fromJson(String value) => values.firstWhere(
-        (candidate) => candidate.wire == value,
-        orElse: () => throw FormatException('unknown SyncErrorPolicy: $value'),
-      );
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown SyncErrorPolicy: $value'),
+  );
+
+  static SyncErrorPolicy? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
 
   String toJson() => wire;
 }

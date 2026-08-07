@@ -9,12 +9,12 @@ class YankRequest {
   });
 
   factory YankRequest.fromJson(Map<String, dynamic> json) => YankRequest(
-          yanked: json["yanked"] as bool,
-      );
+    yanked: json['yanked'] as bool,
+  );
 
   final bool yanked;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "yanked": yanked,
-      };
+    'yanked': yanked,
+  };
 }

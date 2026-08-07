@@ -11,16 +11,16 @@ class SearchResponse {
   });
 
   factory SearchResponse.fromJson(Map<String, dynamic> json) => SearchResponse(
-          items: (json["items"] as List<dynamic>).map((e) => PackageSummary.fromJson(e as Map<String, dynamic>)).toList(),
-          query: json["query"] as String,
-      );
+    items: (json['items'] as List<dynamic>).map((e) => PackageSummary.fromJson(e as Map<String, dynamic>)).toList(),
+    query: json['query'] as String,
+  );
 
   final List<PackageSummary> items;
 
   final String query;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "items": items.map((e) => e.toJson()).toList(),
-        "query": query,
-      };
+    'items': items.map((e) => e.toJson()).toList(),
+    'query': query,
+  };
 }

@@ -4,18 +4,23 @@
 
 /// On-the-wire formats for published package artifacts.
 enum ArtifactFormat {
-  tarGz("tar.gz"),
-  zip("zip");
+  tarGz('tar.gz'),
+  zip('zip');
 
   const ArtifactFormat(this.wire);
 
   /// The value as it appears in JSON.
   final String wire;
 
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
   static ArtifactFormat fromJson(String value) => values.firstWhere(
-        (candidate) => candidate.wire == value,
-        orElse: () => throw FormatException('unknown ArtifactFormat: $value'),
-      );
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown ArtifactFormat: $value'),
+  );
+
+  static ArtifactFormat? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
 
   String toJson() => wire;
 }
@@ -24,7 +29,7 @@ class VersionMetadata {
   const VersionMetadata({
     required this.downloadUrl,
     this.format = ArtifactFormat.tarGz,
-    required this.name_,
+    required this.name,
     required this.org,
     required this.publishedAt,
     required this.sha256,
@@ -36,25 +41,29 @@ class VersionMetadata {
   });
 
   factory VersionMetadata.fromJson(Map<String, dynamic> json) => VersionMetadata(
-          downloadUrl: json["download_url"] as String,
-          format: json["format"] == null ? ArtifactFormat.tarGz : ArtifactFormat.fromJson(json["format"] as String),
-          name_: json["name"] as String,
-          org: json["org"] as String,
-          publishedAt: json["published_at"] as String,
-          sha256: json["sha256"] as String,
-          size: (json["size"] as num).toInt(),
-          vcsCommit: json["vcs_commit"] == null ? null : json["vcs_commit"] as String,
-          vcsTag: json["vcs_tag"] as String,
-          version: json["version"] as String,
-          yanked: json["yanked"] == null ? false : json["yanked"] as bool,
-      );
+    downloadUrl: json['download_url'] as String,
+    format: json['format'] == null
+        ? ArtifactFormat.tarGz
+        : ArtifactFormat.fromJson(json['format'] as String),
+    name: json['name'] as String,
+    org: json['org'] as String,
+    publishedAt: json['published_at'] as String,
+    sha256: json['sha256'] as String,
+    size: (json['size'] as num).toInt(),
+    vcsCommit: json['vcs_commit'] as String?,
+    vcsTag: json['vcs_tag'] as String,
+    version: json['version'] as String,
+    yanked: json['yanked'] == null
+        ? false
+        : json['yanked'] as bool,
+  );
 
   /// Absolute or registry-relative URL the artifact can be fetched from.
   final String downloadUrl;
 
   final ArtifactFormat format;
 
-  final String name_;
+  final String name;
 
   final String org;
 
@@ -74,16 +83,16 @@ class VersionMetadata {
   final bool yanked;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "download_url": downloadUrl,
-        "format": format.toJson(),
-        "name": name_,
-        "org": org,
-        "published_at": publishedAt,
-        "sha256": sha256,
-        "size": size,
-        "vcs_commit": vcsCommit,
-        "vcs_tag": vcsTag,
-        "version": version,
-        "yanked": yanked,
-      };
+    'download_url': downloadUrl,
+    'format': format.toJson(),
+    'name': name,
+    'org': org,
+    'published_at': publishedAt,
+    'sha256': sha256,
+    'size': size,
+    'vcs_commit': vcsCommit,
+    'vcs_tag': vcsTag,
+    'version': version,
+    'yanked': yanked,
+  };
 }

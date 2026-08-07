@@ -14,13 +14,13 @@ class AuditIntegrityResponse {
   });
 
   factory AuditIntegrityResponse.fromJson(Map<String, dynamic> json) => AuditIntegrityResponse(
-          entriesChecked: (json["entries_checked"] as num).toInt(),
-          firstBadSeq: json["first_bad_seq"] == null ? null : (json["first_bad_seq"] as num).toInt(),
-          headHash: json["head_hash"] == null ? null : json["head_hash"] as String,
-          intact: json["intact"] as bool,
-          org: json["org"] as String,
-          problem: json["problem"] == null ? null : json["problem"] as String,
-      );
+    entriesChecked: (json['entries_checked'] as num).toInt(),
+    firstBadSeq: (json['first_bad_seq'] as num?)?.toInt(),
+    headHash: json['head_hash'] as String?,
+    intact: json['intact'] as bool,
+    org: json['org'] as String,
+    problem: json['problem'] as String?,
+  );
 
   final int entriesChecked;
 
@@ -42,11 +42,11 @@ class AuditIntegrityResponse {
   final String? problem;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "entries_checked": entriesChecked,
-        "first_bad_seq": firstBadSeq,
-        "head_hash": headHash,
-        "intact": intact,
-        "org": org,
-        "problem": problem,
-      };
+    'entries_checked': entriesChecked,
+    'first_bad_seq': firstBadSeq,
+    'head_hash': headHash,
+    'intact': intact,
+    'org': org,
+    'problem': problem,
+  };
 }

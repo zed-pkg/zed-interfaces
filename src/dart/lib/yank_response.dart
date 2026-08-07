@@ -4,20 +4,20 @@
 
 class YankResponse {
   const YankResponse({
-    required this.name_,
+    required this.name,
     required this.org,
     required this.version,
     required this.yanked,
   });
 
   factory YankResponse.fromJson(Map<String, dynamic> json) => YankResponse(
-          name_: json["name"] as String,
-          org: json["org"] as String,
-          version: json["version"] as String,
-          yanked: json["yanked"] as bool,
-      );
+    name: json['name'] as String,
+    org: json['org'] as String,
+    version: json['version'] as String,
+    yanked: json['yanked'] as bool,
+  );
 
-  final String name_;
+  final String name;
 
   final String org;
 
@@ -26,9 +26,9 @@ class YankResponse {
   final bool yanked;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "name": name_,
-        "org": org,
-        "version": version,
-        "yanked": yanked,
-      };
+    'name': name,
+    'org': org,
+    'version': version,
+    'yanked': yanked,
+  };
 }

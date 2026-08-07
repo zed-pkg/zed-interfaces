@@ -14,11 +14,13 @@ class SemanticSearchRequest {
   });
 
   factory SemanticSearchRequest.fromJson(Map<String, dynamic> json) => SemanticSearchRequest(
-          embedding: (json["embedding"] as List<dynamic>).map((e) => (e as num).toDouble()).toList(),
-          limit: json["limit"] == null ? 20 : (json["limit"] as num).toInt(),
-          model: json["model"] as String,
-          tags: json["tags"] == null ? null : (json["tags"] as List<dynamic>).map((e) => e as String).toList(),
-      );
+    embedding: (json['embedding'] as List<dynamic>).map((e) => (e as num).toDouble()).toList(),
+    limit: json['limit'] == null
+        ? 20
+        : (json['limit'] as num).toInt(),
+    model: json['model'] as String,
+    tags: (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList(),
+  );
 
   /// The query embedding (native width; padded to 2050 server-side).
   final List<double> embedding;
@@ -33,9 +35,9 @@ class SemanticSearchRequest {
   final List<String>? tags;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        "embedding": embedding,
-        "limit": limit,
-        "model": model,
-        "tags": tags,
-      };
+    'embedding': embedding,
+    'limit': limit,
+    'model': model,
+    'tags': tags,
+  };
 }

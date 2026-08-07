@@ -38,7 +38,10 @@ const fail = (msg) => {
 // --- naming ------------------------------------------------------------------
 
 const oneLine = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
-const words = (s) => String(s).split(/[^A-Za-z0-9]+/).filter(Boolean);
+// Splits on separators *and* camelCase humps, so `VersionScheme` becomes
+// VERSION_SCHEME rather than VERSIONSCHEME.
+const words = (s) =>
+  String(s).replace(/([a-z0-9])([A-Z])/g, "$1 $2").split(/[^A-Za-z0-9]+/).filter(Boolean);
 const pascal = (s) => words(s).map((w) => w[0].toUpperCase() + w.slice(1)).join("");
 const camel = (s) => {
   const p = pascal(s);
