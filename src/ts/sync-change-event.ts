@@ -14,7 +14,7 @@ export interface SyncChangeEvent {
   readonly at_ms: number;
   readonly id: string;
   readonly op: SyncOp;
-  readonly row?: unknown | null;
+  readonly row?: unknown;
   readonly sync_sequence?: number | null;
   readonly table: string;
   readonly version: Hlc;
