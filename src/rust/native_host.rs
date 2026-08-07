@@ -1131,9 +1131,11 @@ impl UniversalHost {
                     | P::CocoapodsTrunk
                     | P::SwiftRegistry
             ),
+            // No Cargo and no PyPI endpoint: GitHub Packages serves npm,
+            // Maven/Gradle, RubyGems, NuGet, and containers only.
             GithubPackages => matches!(
                 protocol,
-                P::Npm | P::Maven2 | P::RubyGemsApi | P::NuGetV3 | P::CargoSparse
+                P::Npm | P::Maven2 | P::RubyGemsApi | P::NuGetV3
             ),
             GitlabPackages => matches!(
                 protocol,
