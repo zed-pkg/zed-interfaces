@@ -61,7 +61,9 @@ fn the_rust_slice_is_the_crate_that_publishes_to_crates_io() {
     // is why the crate manifest lives in `src/rust/` rather than at the root.
     assert_ne!(rust.dir, ".");
     assert!(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml").is_file(),
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("Cargo.toml")
+            .is_file(),
         "the crate manifest must sit inside the Rust slice"
     );
 }
@@ -69,8 +71,14 @@ fn the_rust_slice_is_the_crate_that_publishes_to_crates_io() {
 #[test]
 fn selecting_a_target_yields_that_slice_alone() {
     let manifest = own_manifest();
-    assert_eq!(manifest.target_subdir(Some("dart")).unwrap(), Some("src/dart"));
-    assert_eq!(manifest.target_subdir(Some("typescript")).unwrap(), Some("src/ts"));
+    assert_eq!(
+        manifest.target_subdir(Some("dart")).unwrap(),
+        Some("src/dart")
+    );
+    assert_eq!(
+        manifest.target_subdir(Some("typescript")).unwrap(),
+        Some("src/ts")
+    );
     // An unpublished language must fail loudly rather than silently install the
     // whole repository.
     assert!(manifest.target_subdir(Some("swift")).is_err());
