@@ -7,7 +7,6 @@
 //! source environment manager.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -820,17 +819,19 @@ fn validate_relative_path(
             .first()
             .is_some_and(u8::is_ascii_alphabetic);
     let has_parent = value.split(['/', '\\']).any(|part| part == "..");
+    // Portable locks are a wire contract, so root detection must not depend on
+    // the current host's filesystem parser. A leading separator is rooted in
+    // at least one supported path family, including UNC/device paths.
+    let rooted = value.starts_with('/') || value.starts_with('\\');
     let dot_is_invalid = value == "." && !allow_dot;
     let unsafe_path = value.is_empty()
         || dot_is_invalid
-        || Path::new(value).is_absolute()
+        || rooted
         || windows_drive
         || value.starts_with('~')
         || value.starts_with("$HOME")
         || value.starts_with("${HOME}")
         || value.starts_with("%USERPROFILE%")
-        || value.starts_with("//")
-        || value.starts_with("\\\\")
         || has_parent
         || value.chars().any(char::is_control);
     if unsafe_path {
@@ -1073,7 +1074,16 @@ mod tests {
 
     #[test]
     fn unsafe_install_paths_are_rejected_cross_platform() {
-        for path in ["../bin", "/usr/bin", r"C:\\tool\\bin", r"\\\\server\\share"] {
+        for path in [
+            "../bin",
+            r"..\bin",
+            "/usr/bin",
+            r"\tool\bin",
+            r"C:\tool\bin",
+            r"C:tool\bin",
+            r"\\server\share",
+            "//server/share",
+        ] {
             let mut tool = registry_tool("22.4.0", "x86_64-unknown-linux-gnu");
             tool.install.executables[0].path = path.to_string();
             let lock = lock_with(tool);
@@ -1081,6 +1091,19 @@ mod tests {
                 lock.validate(EnvironmentLockValidationMode::Portable),
                 Err(EnvironmentLockError::UnsafeRelativePath { .. })
             ));
+        }
+    }
+
+    #[test]
+    fn valid_relative_install_paths_are_accepted_cross_platform() {
+        for path in ["bin/tool", r"bin\tool.exe", "tools/v1/bin"] {
+            let mut tool = registry_tool("22.4.0", "x86_64-unknown-linux-gnu");
+            tool.install.executables[0].path = path.to_string();
+            let lock = lock_with(tool);
+            assert_eq!(
+                lock.validate(EnvironmentLockValidationMode::Portable),
+                Ok(())
+            );
         }
     }
 
