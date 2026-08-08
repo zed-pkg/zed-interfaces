@@ -561,6 +561,8 @@ pub enum DependencyGraphError {
     InvalidDigest { field: &'static str, value: String },
     #[error("dependency graph does not contain graph_digest")]
     MissingGraphDigest,
+    #[error("dependency graph JSON is not in canonical form")]
+    NotCanonical,
     #[error("dependency graph digest mismatch: expected {expected}, got {actual}")]
     DigestMismatch { expected: String, actual: String },
     #[error("canonical dependency graph JSON forbids non-integer number: {0}")]
