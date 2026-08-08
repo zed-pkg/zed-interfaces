@@ -4,21 +4,21 @@ on:
   pull_request:
     paths:
       - docs/native-registry-contract.md
-      - examples/generate_schemas.rs
+      - src/rust/examples/generate_schemas.rs
       - schemas/native-registry-adapter-record.json
-      - src/lib.rs
-      - src/native_registry.rs
-      - tests/native_registry_schema_contract.rs
+      - src/rust/lib.rs
+      - src/rust/native_registry.rs
+      - src/rust/tests/native_registry_schema_contract.rs
       - .github/workflows/native-registry.yml
   push:
     branches: [main]
     paths:
       - docs/native-registry-contract.md
-      - examples/generate_schemas.rs
+      - src/rust/examples/generate_schemas.rs
       - schemas/native-registry-adapter-record.json
-      - src/lib.rs
-      - src/native_registry.rs
-      - tests/native_registry_schema_contract.rs
+      - src/rust/lib.rs
+      - src/rust/native_registry.rs
+      - src/rust/tests/native_registry_schema_contract.rs
       - .github/workflows/native-registry.yml
   workflow_dispatch:
 

@@ -1,0 +1,54 @@
+{
+  "audit_integrity": {
+    "entries_checked": 1,
+    "head_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "intact": true,
+    "org": "acme"
+  },
+  "claim_org_request": {
+    "slug": "acme"
+  },
+  "claim_org_response": {
+    "created": true,
+    "slug": "acme"
+  },
+  "publish": {
+    "name": "http-kit",
+    "org": "acme",
+    "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "version": "1.0.0"
+  },
+  "semantic_search_request": {
+    "embedding": [
+      0.10000000149011612,
+      0.20000000298023224,
+      0.30000001192092896
+    ],
+    "limit": 5,
+    "model": "openai/text-embedding-3-small",
+    "tags": [
+      "http"
+    ]
+  },
+  "semantic_search_response": {
+    "items": [
+      {
+        "distance": 0.25,
+        "name": "http-kit",
+        "org": "acme",
+        "tags": [
+          "http"
+        ]
+      }
+    ]
+  },
+  "yank_request": {
+    "yanked": true
+  },
+  "yank_response": {
+    "name": "http-kit",
+    "org": "acme",
+    "version": "1.0.0",
+    "yanked": true
+  }
+}

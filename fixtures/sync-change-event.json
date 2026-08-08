@@ -1,0 +1,17 @@
+{
+  "upsert": {
+    "at_ms": 1754400000001,
+    "id": "acme/http-kit",
+    "op": "upsert",
+    "row": {
+      "org": "acme"
+    },
+    "sync_sequence": 42,
+    "table": "packages",
+    "version": {
+      "actor": "server-1",
+      "counter": 3,
+      "wall_ms": 1754400000000
+    }
+  }
+}
