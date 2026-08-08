@@ -73,15 +73,19 @@ jobs:
           cargo test --locked --test native_registry_schema_contract
           cargo clippy --locked --lib --test native_registry_schema_contract -- -D warnings
 
-      - name: Require deterministic generated schema
+      - name: Require deterministic generated schemas and fixtures
         run: |
           set -euo pipefail
           cargo run --locked --example generate_schemas
-          git diff --exit-code -- schemas
+          git diff --exit-code -- schemas fixtures
 
       - name: Require a clean checkout
         run: |
           set -euo pipefail
           git diff --exit-code
-          git status --porcelain=v1 --untracked-files=all | tee "$RUNNER_TEMP/native-registry-status.txt"
-          test ! -s "$RUNNER_TEMP/native-registry-status.txt"
+          git diff --cached --exit-code
+          untracked="$(git ls-files --others --exclude-standard)"
+          if [[ -n "$untracked" ]]; then
+            printf '%s\n' "$untracked" >&2
+            exit 1
+          fi

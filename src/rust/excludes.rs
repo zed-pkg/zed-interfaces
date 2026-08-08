@@ -11,7 +11,7 @@ pub const DEFAULT_EXCLUDES: &[&str] = &[
     ".git/**",
     ".hg/**",
     ".svn/**",
-    "tests/**",
+    "src/rust/tests/**",
     "test/**",
     "spec/**",
     "src/test/**",
