@@ -21,8 +21,11 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Apply exact reviewed source transformation
-        run: python3 .github/den-2854-snapshot-reconcile.py
+      - name: Apply exact reviewed source transformations
+        run: |
+          set -euo pipefail
+          python3 .github/den-2854-snapshot-reconcile.py
+          python3 .github/den-2854-archive-manifest-endpoint.py
 
       - name: Format, test, lint, and regenerate schemas
         run: |
@@ -45,12 +48,14 @@ jobs:
             src/registry_protocol_v1.rs \
             src/lib.rs \
             examples/generate_schemas.rs \
+            docs/registry-protocol-v1.md \
             fixtures/registry-v1/discovery.json \
             fixtures/registry-v1/index-snapshot.json \
             schemas/registry-discovery-v1.json \
             schemas/registry-index-snapshot-v1.json
           git rm \
             .github/den-2854-snapshot-reconcile.py \
+            .github/den-2854-archive-manifest-endpoint.py \
             .github/workflows/den-2854-snapshot-reconciliation.yml
           git diff --cached --check
           git commit -m "DEN-2854 authenticate immutable sparse-index snapshots"
