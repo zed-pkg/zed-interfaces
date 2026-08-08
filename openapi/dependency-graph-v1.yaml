@@ -22,12 +22,20 @@ paths:
           const: declared
         description: This package-version route exposes declared requirements only.
       - $ref: '#/components/parameters/Format'
+      - $ref: '#/components/parameters/IfNoneMatch'
     get:
       operationId: getDeclaredDependencyGraph
       summary: Download immutable declared requirements
+      security:
+        - {}
+        - bearerAuth: []
       responses:
         '200':
           $ref: '#/components/responses/DependencyGraph'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '400':
+          $ref: '#/components/responses/UnsupportedView'
         '404':
           $ref: '#/components/responses/NotFound'
         '406':
@@ -37,13 +45,22 @@ paths:
     head:
       operationId: headDeclaredDependencyGraph
       summary: Inspect declared graph metadata without a response body
+      security:
+        - {}
+        - bearerAuth: []
       responses:
         '200':
           $ref: '#/components/responses/DependencyGraphHead'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '400':
+          $ref: '#/components/responses/UnsupportedView'
         '404':
           $ref: '#/components/responses/NotFound'
         '406':
           $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/RepresentationTooLarge'
   /v1/resolutions/{resolution_digest}/dependency-graph:
     parameters:
       - name: resolution_digest
@@ -85,6 +102,7 @@ paths:
           format: uint32
           minimum: 0
         description: Explicit maximum traversal depth for a projected graph.
+      - $ref: '#/components/parameters/IfNoneMatch'
     get:
       operationId: getResolvedDependencyGraph
       summary: Download an exact resolution graph or explicit projection
@@ -94,6 +112,8 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/DependencyGraph'
+        '304':
+          $ref: '#/components/responses/NotModified'
         '404':
           $ref: '#/components/responses/NotFound'
         '406':
@@ -111,10 +131,16 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/DependencyGraphHead'
+        '304':
+          $ref: '#/components/responses/NotModified'
         '404':
           $ref: '#/components/responses/NotFound'
         '406':
           $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/RepresentationTooLarge'
+        '422':
+          $ref: '#/components/responses/GraphLimitExceeded'
 components:
   securitySchemes:
     bearerAuth:
@@ -153,6 +179,16 @@ components:
       description: >-
         Optional download-format override. If it conflicts with Accept, the
         server returns 406 rather than silently choosing one representation.
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      schema:
+        type: string
+      description: >-
+        Strong representation-specific validator from a previous response.
+        A match returns 304 with no body for the same representation only;
+        a JSON validator never matches a YAML or TOML request.
   schemas:
     DependencyGraphDocument:
       $ref: ../schemas/dependency-graph-v1.json
@@ -173,15 +209,33 @@ components:
           type: string
   headers:
     GraphDigest:
-      description: Semantic graph identity shared by JSON, YAML, and TOML.
+      description: >-
+        Semantic graph identity shared by JSON, YAML, and TOML. The example
+        value is the committed diamond golden fixture's digest, identical in
+        every authoritative representation of that graph.
       required: true
       schema:
         $ref: '#/components/schemas/Sha256Digest'
+      example: 'sha256:78265784f1e4f3f71125c1c4fd7a40b44abc3fb54994cab7aad9549a291565f8'
     ETag:
-      description: Strong representation-specific validator over encoded bytes.
+      description: >-
+        Strong representation-specific validator over the encoded response
+        bytes. For one graph the JSON, YAML, and TOML values all differ, and
+        none of them equals the x-zpkg-graph-digest value.
       required: true
       schema:
         type: string
+    ContentDisposition:
+      description: >-
+        Server-generated attachment filename derived from validated package
+        coordinates or the resolution digest plus the format extension.
+        Caller-supplied path separators, control characters, quotes, and
+        non-ASCII bytes are never reflected.
+      required: true
+      schema:
+        type: string
+        pattern: '^attachment; filename="[A-Za-z0-9._+-]+\.(json|yaml|toml|dot|mmd)"$'
+      example: 'attachment; filename="acme_app_1.0.0.dependency-graph.json"'
     CacheControl:
       description: >-
         Public immutable artifacts may be cached; private and indistinguishable
@@ -191,7 +245,11 @@ components:
         type: string
   responses:
     DependencyGraph:
-      description: Complete graph or explicit projection. Limits never silently truncate it.
+      description: >-
+        Complete graph or explicit projection. Limits never silently truncate
+        it. The three authoritative examples below are the committed declared
+        golden fixture: all three decode to one typed document and one
+        graph_digest, while each representation carries its own strong ETag.
       headers:
         x-zpkg-graph-digest:
           $ref: '#/components/headers/GraphDigest'
@@ -199,20 +257,105 @@ components:
           $ref: '#/components/headers/ETag'
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
+        Content-Disposition:
+          $ref: '#/components/headers/ContentDisposition'
       content:
         application/vnd.zpkg.dependency-graph.v1+json:
           schema:
             $ref: '#/components/schemas/DependencyGraphDocument'
+          example:
+            dependencies:
+              - default_features: true
+                kind: runtime
+                name: corelib
+                optional: false
+                org: acme
+                registry_id: registry:zpkg-primary
+                requirement: ^2
+              - default_features: false
+                features: [tls]
+                kind: runtime
+                name: tlslib
+                optional: true
+                org: acme
+                registry_id: registry:zpkg-primary
+                requirement: ^1.2
+                target: cfg(unix)
+            graph_digest: sha256:a4da2935ea46d23ebdd2f667976e537e111f20ce63c482b4eeeaab0cbee1eee8
+            package:
+              name: app
+              org: acme
+              registry_id: registry:zpkg-primary
+              version: 1.0.0
+            schema: zpkg/dependency-graph/v1
+            view: declared
         application/vnd.zpkg.dependency-graph.v1+yaml:
           schema:
             $ref: '#/components/schemas/DependencyGraphDocument'
+          example: |
+            dependencies:
+            - default_features: true
+              kind: runtime
+              name: corelib
+              optional: false
+              org: acme
+              registry_id: registry:zpkg-primary
+              requirement: ^2
+            - default_features: false
+              features:
+              - tls
+              kind: runtime
+              name: tlslib
+              optional: true
+              org: acme
+              registry_id: registry:zpkg-primary
+              requirement: ^1.2
+              target: cfg(unix)
+            graph_digest: sha256:a4da2935ea46d23ebdd2f667976e537e111f20ce63c482b4eeeaab0cbee1eee8
+            package:
+              name: app
+              org: acme
+              registry_id: registry:zpkg-primary
+              version: 1.0.0
+            schema: zpkg/dependency-graph/v1
+            view: declared
         application/vnd.zpkg.dependency-graph.v1+toml:
           schema:
             $ref: '#/components/schemas/DependencyGraphDocument'
-        text/vnd.graphviz:
+          example: |
+            schema = "zpkg/dependency-graph/v1"
+            view = "declared"
+            graph_digest = "sha256:a4da2935ea46d23ebdd2f667976e537e111f20ce63c482b4eeeaab0cbee1eee8"
+
+            [package]
+            name = "app"
+            org = "acme"
+            registry_id = "registry:zpkg-primary"
+            version = "1.0.0"
+
+            [[dependencies]]
+            default_features = true
+            kind = "runtime"
+            name = "corelib"
+            optional = false
+            org = "acme"
+            registry_id = "registry:zpkg-primary"
+            requirement = "^2"
+
+            [[dependencies]]
+            default_features = false
+            features = ["tls"]
+            kind = "runtime"
+            name = "tlslib"
+            optional = true
+            org = "acme"
+            registry_id = "registry:zpkg-primary"
+            requirement = "^1.2"
+            target = "cfg(unix)"
+        'text/vnd.graphviz; charset=utf-8':
           schema:
             type: string
-        text/vnd.mermaid:
+        'text/vnd.mermaid; charset=utf-8':
           schema:
             type: string
     DependencyGraphHead:
@@ -224,6 +367,33 @@ components:
           $ref: '#/components/headers/ETag'
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
+        Content-Disposition:
+          $ref: '#/components/headers/ContentDisposition'
+    NotModified:
+      description: >-
+        Representation unchanged for the presented If-None-Match validator.
+        Metadata headers match the 200 response; there is no body. Only the
+        representation whose strong ETag matched can produce this status.
+      headers:
+        x-zpkg-graph-digest:
+          $ref: '#/components/headers/GraphDigest'
+        ETag:
+          $ref: '#/components/headers/ETag'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+    UnsupportedView:
+      description: >-
+        Missing or non-declared view selection on the package-version route.
+        That route never serves a resolved graph; exact graphs are addressed
+        only by resolution digest, so there is no package-version-addressed
+        universal resolution.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: unsupported_view
+            message: package-version dependency graphs are declared-view only
     NotFound:
       description: Missing or unauthorized private graph; responses are intentionally indistinguishable.
       headers:

@@ -1,5 +1,8 @@
 {
   "schema": "zpkg/dependency-graph-discovery/v1",
+  "supported_schemas": [
+    "zpkg/dependency-graph/v1"
+  ],
   "routes": {
     "declared": "/v1/packages/{org}/{name}/versions/{version}/dependency-graph?view=declared",
     "resolved": "/v1/resolutions/{resolution_digest}/dependency-graph"
@@ -40,6 +43,11 @@
     "semantic_digest": "x-zpkg-graph-digest",
     "representation_validator": "ETag"
   },
+  "conditional_requests": {
+    "if_none_match": true,
+    "not_modified_status": 304,
+    "validator": "ETag"
+  },
   "projection_filters": [
     "target",
     "feature",
@@ -50,6 +58,12 @@
     "behavior": "error",
     "silent_truncation": false,
     "server_advertised": true,
+    "default_limits": {
+      "max_nodes": 50000,
+      "max_edges": 500000,
+      "max_projection_depth": 1000,
+      "max_encoded_bytes": 33554432
+    },
     "error_codes": [
       "graph_limit_exceeded",
       "graph_representation_too_large"

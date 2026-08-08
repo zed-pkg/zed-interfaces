@@ -28,12 +28,16 @@ pub mod version;
 
 pub use artifact::ArtifactFormat;
 pub use dependency_graph::{
-    DEPENDENCY_GRAPH_DIGEST_HEADER, DEPENDENCY_GRAPH_JSON_MEDIA_TYPE, DEPENDENCY_GRAPH_SCHEMA_V1,
-    DEPENDENCY_GRAPH_TOML_MEDIA_TYPE, DEPENDENCY_GRAPH_YAML_MEDIA_TYPE, DeclaredDependency,
-    DependencyGraphCompleteness, DependencyGraphData, DependencyGraphDocument,
-    DependencyGraphError, DependencyGraphFormat, DependencyGraphProjection, DependencyKind,
-    PackageVersionIdentity, RegistrySnapshot, ResolutionProvenance, ResolvedDependencyEdge,
-    ResolvedDependencyNode, declared_dependency_graph_path, resolution_dependency_graph_path,
+    DEPENDENCY_GRAPH_DECLARED_ROUTE_TEMPLATE, DEPENDENCY_GRAPH_DEFAULT_MAX_EDGES,
+    DEPENDENCY_GRAPH_DEFAULT_MAX_ENCODED_BYTES, DEPENDENCY_GRAPH_DEFAULT_MAX_NODES,
+    DEPENDENCY_GRAPH_DEFAULT_MAX_PROJECTION_DEPTH, DEPENDENCY_GRAPH_DIGEST_HEADER,
+    DEPENDENCY_GRAPH_JSON_MEDIA_TYPE, DEPENDENCY_GRAPH_RESOLUTION_ROUTE_TEMPLATE,
+    DEPENDENCY_GRAPH_SCHEMA_V1, DEPENDENCY_GRAPH_TOML_MEDIA_TYPE,
+    DEPENDENCY_GRAPH_YAML_MEDIA_TYPE, DeclaredDependency, DependencyGraphCompleteness,
+    DependencyGraphData, DependencyGraphDocument, DependencyGraphError, DependencyGraphFormat,
+    DependencyGraphProjection, DependencyKind, PackageVersionIdentity, RegistrySnapshot,
+    ResolutionProvenance, ResolvedDependencyEdge, ResolvedDependencyNode,
+    declared_dependency_graph_path, golden_fixture_documents, resolution_dependency_graph_path,
 };
 pub use environment::{
     ActivationPolicy, Checksum, ChecksumAlgorithm, EnvironmentManager, EnvironmentPlan,

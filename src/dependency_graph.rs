@@ -28,6 +28,22 @@ pub const DEPENDENCY_GRAPH_YAML_MEDIA_TYPE: &str = "application/vnd.zpkg.depende
 /// Lossless normalized TOML representation media type.
 pub const DEPENDENCY_GRAPH_TOML_MEDIA_TYPE: &str = "application/vnd.zpkg.dependency-graph.v1+toml";
 
+/// Route template advertised for declared graphs.
+pub const DEPENDENCY_GRAPH_DECLARED_ROUTE_TEMPLATE: &str =
+    "/v1/packages/{org}/{name}/versions/{version}/dependency-graph?view=declared";
+/// Route template advertised for immutable resolution artifacts.
+pub const DEPENDENCY_GRAPH_RESOLUTION_ROUTE_TEMPLATE: &str =
+    "/v1/resolutions/{resolution_digest}/dependency-graph";
+
+/// Default advertised limit on resolved nodes in one graph document.
+pub const DEPENDENCY_GRAPH_DEFAULT_MAX_NODES: u32 = 50_000;
+/// Default advertised limit on resolved edges in one graph document.
+pub const DEPENDENCY_GRAPH_DEFAULT_MAX_EDGES: u32 = 500_000;
+/// Default advertised limit on explicit projection depth.
+pub const DEPENDENCY_GRAPH_DEFAULT_MAX_PROJECTION_DEPTH: u32 = 1_000;
+/// Default advertised limit on one encoded representation, in bytes.
+pub const DEPENDENCY_GRAPH_DEFAULT_MAX_ENCODED_BYTES: u64 = 33_554_432;
+
 fn dependency_graph_schema_v1() -> String {
     DEPENDENCY_GRAPH_SCHEMA_V1.to_string()
 }
@@ -247,7 +263,10 @@ pub struct DependencyGraphDocument {
 
 impl DependencyGraphDocument {
     /// Sorts every set-like collection into its normative order and removes
-    /// exact duplicates. This operation is idempotent.
+    /// exact duplicates from roots, edges, and feature lists. Resolved nodes
+    /// are only sorted: a duplicate node id, exact or conflicting, is a
+    /// validation error rather than a normalization. This operation is
+    /// idempotent.
     pub fn normalize_in_place(&mut self) {
         match &mut self.graph {
             DependencyGraphData::Declared { dependencies, .. } => {
@@ -347,6 +366,26 @@ impl DependencyGraphDocument {
         document.normalize_in_place();
         document.validate()?;
         canonical_json_bytes(&serde_json::to_value(document)?)
+    }
+
+    /// Strict verifier entrypoint for received canonical JSON artifacts.
+    ///
+    /// Byte-exact: the input must equal the canonical serialization of the
+    /// parsed document, so unknown members, explicit `null` spellings of
+    /// absence, duplicate members, non-normative collection order,
+    /// insignificant whitespace, and non-integer number formats are all
+    /// rejected instead of being silently normalized away. Lenient serde
+    /// deserialization alone does not authenticate such content: an injected
+    /// unknown member survives the typed model and still digest-verifies.
+    /// The document must carry `graph_digest` and it must verify.
+    pub fn parse_verified_canonical(bytes: &[u8]) -> Result<Self, DependencyGraphError> {
+        let document: Self = serde_json::from_slice(bytes)?;
+        document.verify_digest()?;
+        let canonical = document.canonical_document_bytes()?;
+        if bytes != canonical.as_slice() {
+            return Err(DependencyGraphError::NotCanonical);
+        }
+        Ok(document)
     }
 
     fn validate_structure(&self) -> Result<(), DependencyGraphError> {
@@ -522,6 +561,8 @@ pub enum DependencyGraphError {
     InvalidDigest { field: &'static str, value: String },
     #[error("dependency graph does not contain graph_digest")]
     MissingGraphDigest,
+    #[error("dependency graph JSON is not in canonical form")]
+    NotCanonical,
     #[error("dependency graph digest mismatch: expected {expected}, got {actual}")]
     DigestMismatch { expected: String, actual: String },
     #[error("canonical dependency graph JSON forbids non-integer number: {0}")]
@@ -616,6 +657,264 @@ fn write_canonical_json(value: &Value, bytes: &mut Vec<u8>) -> Result<(), Depend
         }
     }
     Ok(())
+}
+
+/// Versioned conformance vectors whose canonical JSON bytes are committed
+/// under `fixtures/dependency-graph-v1/golden/` and must never change within
+/// schema v1.
+///
+/// Covers the golden cases required by the v1 RFC: declared view, diamond
+/// sharing, duplicate package coordinates across two registries, dependency
+/// cycle, optional feature activation, target predicate, and an explicit
+/// projection carrying its parent graph's digest. Regenerate the files with
+/// `cargo run --locked --example generate_schemas`; SDKs and conformance
+/// suites consume the committed bytes, not this function.
+pub fn golden_fixture_documents() -> Vec<(&'static str, DependencyGraphDocument)> {
+    const PRIMARY: &str = "registry:zpkg-primary";
+    const MIRROR: &str = "registry:zpkg-mirror";
+
+    fn fixture_digest(byte: char) -> String {
+        format!("sha256:{}", byte.to_string().repeat(64))
+    }
+
+    fn identity(registry_id: &str, name: &str, version: &str) -> PackageVersionIdentity {
+        PackageVersionIdentity {
+            registry_id: registry_id.to_string(),
+            org: "acme".to_string(),
+            name: name.to_string(),
+            version: version.to_string(),
+        }
+    }
+
+    fn node(id: PackageVersionIdentity, digest_byte: char) -> ResolvedDependencyNode {
+        ResolvedDependencyNode {
+            id,
+            artifact_digest: Some(fixture_digest(digest_byte)),
+            features: Vec::new(),
+        }
+    }
+
+    fn runtime_edge(
+        from: &PackageVersionIdentity,
+        to: &PackageVersionIdentity,
+    ) -> ResolvedDependencyEdge {
+        ResolvedDependencyEdge {
+            from: from.clone(),
+            to: to.clone(),
+            kind: DependencyKind::Runtime,
+            requirement: Some(format!("^{}", to.version)),
+            target: None,
+            optional: false,
+            features: Vec::new(),
+        }
+    }
+
+    fn provenance(registry_ids: &[&str]) -> ResolutionProvenance {
+        ResolutionProvenance {
+            resolver_version: "zed-resolver/1.0.0".to_string(),
+            target: "x86_64-unknown-linux-gnu".to_string(),
+            enabled_features: Vec::new(),
+            registry_snapshots: registry_ids
+                .iter()
+                .map(|registry_id| RegistrySnapshot {
+                    registry_id: registry_id.to_string(),
+                    checkpoint_digest: fixture_digest('c'),
+                })
+                .collect(),
+            lock_digest: fixture_digest('d'),
+        }
+    }
+
+    fn resolved(
+        roots: Vec<PackageVersionIdentity>,
+        nodes: Vec<ResolvedDependencyNode>,
+        edges: Vec<ResolvedDependencyEdge>,
+        provenance: ResolutionProvenance,
+    ) -> DependencyGraphDocument {
+        DependencyGraphDocument {
+            schema: DEPENDENCY_GRAPH_SCHEMA_V1.to_string(),
+            graph: DependencyGraphData::Resolved {
+                completeness: DependencyGraphCompleteness::Complete,
+                roots,
+                nodes,
+                edges,
+                provenance,
+                parent_graph_digest: None,
+                projection: None,
+            },
+            graph_digest: None,
+        }
+    }
+
+    fn finalized(document: DependencyGraphDocument) -> DependencyGraphDocument {
+        document
+            .finalize()
+            .expect("golden fixture documents are structurally valid")
+    }
+
+    let declared = finalized(DependencyGraphDocument {
+        schema: DEPENDENCY_GRAPH_SCHEMA_V1.to_string(),
+        graph: DependencyGraphData::Declared {
+            package: identity(PRIMARY, "app", "1.0.0"),
+            dependencies: vec![
+                DeclaredDependency {
+                    registry_id: PRIMARY.to_string(),
+                    org: "acme".to_string(),
+                    name: "corelib".to_string(),
+                    requirement: "^2".to_string(),
+                    kind: DependencyKind::Runtime,
+                    optional: false,
+                    default_features: true,
+                    features: Vec::new(),
+                    target: None,
+                },
+                DeclaredDependency {
+                    registry_id: PRIMARY.to_string(),
+                    org: "acme".to_string(),
+                    name: "tlslib".to_string(),
+                    requirement: "^1.2".to_string(),
+                    kind: DependencyKind::Runtime,
+                    optional: true,
+                    default_features: false,
+                    features: vec!["tls".to_string()],
+                    target: Some("cfg(unix)".to_string()),
+                },
+            ],
+        },
+        graph_digest: None,
+    });
+
+    let app = identity(PRIMARY, "app", "1.0.0");
+    let liba = identity(PRIMARY, "liba", "1.0.0");
+    let libb = identity(PRIMARY, "libb", "1.0.0");
+    let shared = identity(PRIMARY, "shared", "2.0.0");
+
+    // One shared node with two incoming edges.
+    let diamond = finalized(resolved(
+        vec![app.clone()],
+        vec![
+            node(app.clone(), '1'),
+            node(liba.clone(), '2'),
+            node(libb.clone(), '3'),
+            node(shared.clone(), '4'),
+        ],
+        vec![
+            runtime_edge(&app, &liba),
+            runtime_edge(&app, &libb),
+            runtime_edge(&liba, &shared),
+            runtime_edge(&libb, &shared),
+        ],
+        provenance(&[PRIMARY]),
+    ));
+    let diamond_digest = diamond
+        .graph_digest
+        .clone()
+        .expect("finalized fixture carries a digest");
+
+    // The same package coordinates from two immutable registries stay two
+    // distinct, non-colliding nodes.
+    let util_primary = identity(PRIMARY, "util", "3.0.0");
+    let util_mirror = identity(MIRROR, "util", "3.0.0");
+    let duplicate_registries = finalized(resolved(
+        vec![app.clone()],
+        vec![
+            node(app.clone(), '1'),
+            node(util_primary.clone(), '5'),
+            node(util_mirror.clone(), '6'),
+        ],
+        vec![
+            runtime_edge(&app, &util_primary),
+            runtime_edge(&app, &util_mirror),
+        ],
+        provenance(&[PRIMARY, MIRROR]),
+    ));
+
+    // Dependency cycles are representable; canonical form is set-based, so
+    // normalization and digesting terminate without traversal.
+    let alpha = identity(PRIMARY, "alpha", "1.0.0");
+    let beta = identity(PRIMARY, "beta", "1.0.0");
+    let cycle = finalized(resolved(
+        vec![alpha.clone()],
+        vec![node(alpha.clone(), '7'), node(beta.clone(), '8')],
+        vec![runtime_edge(&alpha, &beta), runtime_edge(&beta, &alpha)],
+        provenance(&[PRIMARY]),
+    ));
+
+    // Optional dependency activated with an explicit feature.
+    let tlslib = identity(PRIMARY, "tlslib", "1.2.3");
+    let optional_feature = finalized(resolved(
+        vec![app.clone()],
+        vec![
+            node(app.clone(), '1'),
+            ResolvedDependencyNode {
+                id: tlslib.clone(),
+                artifact_digest: Some(fixture_digest('9')),
+                features: vec!["tls".to_string()],
+            },
+        ],
+        vec![ResolvedDependencyEdge {
+            from: app.clone(),
+            to: tlslib.clone(),
+            kind: DependencyKind::Runtime,
+            requirement: Some("^1.2".to_string()),
+            target: None,
+            optional: true,
+            features: vec!["tls".to_string()],
+        }],
+        provenance(&[PRIMARY]),
+    ));
+
+    // Platform-conditional edge kept with its target predicate.
+    let winlib = identity(PRIMARY, "winlib", "0.5.0");
+    let target_predicate = finalized(resolved(
+        vec![app.clone()],
+        vec![node(app.clone(), '1'), node(winlib.clone(), 'a')],
+        vec![ResolvedDependencyEdge {
+            from: app.clone(),
+            to: winlib.clone(),
+            kind: DependencyKind::Build,
+            requirement: Some("^0.5".to_string()),
+            target: Some("cfg(windows)".to_string()),
+            optional: false,
+            features: Vec::new(),
+        }],
+        provenance(&[PRIMARY]),
+    ));
+
+    // Depth-1 runtime projection of the diamond graph: carries the parent
+    // digest, the canonical projection spec, and its own new digest.
+    let projected = finalized(DependencyGraphDocument {
+        schema: DEPENDENCY_GRAPH_SCHEMA_V1.to_string(),
+        graph: DependencyGraphData::Resolved {
+            completeness: DependencyGraphCompleteness::Projected,
+            roots: vec![app.clone()],
+            nodes: vec![
+                node(app.clone(), '1'),
+                node(liba.clone(), '2'),
+                node(libb.clone(), '3'),
+            ],
+            edges: vec![runtime_edge(&app, &liba), runtime_edge(&app, &libb)],
+            provenance: provenance(&[PRIMARY]),
+            parent_graph_digest: Some(diamond_digest),
+            projection: Some(DependencyGraphProjection {
+                target: None,
+                features: Vec::new(),
+                kinds: vec![DependencyKind::Runtime],
+                max_depth: Some(1),
+            }),
+        },
+        graph_digest: None,
+    });
+
+    vec![
+        ("declared", declared),
+        ("diamond", diamond),
+        ("duplicate-registries", duplicate_registries),
+        ("cycle", cycle),
+        ("optional-feature", optional_feature),
+        ("target-predicate", target_predicate),
+        ("projected", projected),
+    ]
 }
 
 #[cfg(test)]
@@ -782,6 +1081,212 @@ mod tests {
         assert_eq!(
             graph.finalize().unwrap_err(),
             DependencyGraphError::MissingProjectionMetadata
+        );
+    }
+
+    #[test]
+    fn golden_fixture_bytes_and_digests_are_pinned() {
+        for (name, document) in golden_fixture_documents() {
+            let committed: &[u8] = match name {
+                "declared" => include_bytes!("../fixtures/dependency-graph-v1/golden/declared.json"),
+                "diamond" => include_bytes!("../fixtures/dependency-graph-v1/golden/diamond.json"),
+                "duplicate-registries" => include_bytes!(
+                    "../fixtures/dependency-graph-v1/golden/duplicate-registries.json"
+                ),
+                "cycle" => include_bytes!("../fixtures/dependency-graph-v1/golden/cycle.json"),
+                "optional-feature" => include_bytes!(
+                    "../fixtures/dependency-graph-v1/golden/optional-feature.json"
+                ),
+                "target-predicate" => include_bytes!(
+                    "../fixtures/dependency-graph-v1/golden/target-predicate.json"
+                ),
+                "projected" => {
+                    include_bytes!("../fixtures/dependency-graph-v1/golden/projected.json")
+                }
+                other => panic!("golden fixture {other} has no committed file"),
+            };
+            let canonical = document.canonical_document_bytes().unwrap();
+            assert_eq!(
+                committed, canonical,
+                "committed golden fixture {name} drifted; regenerate via generate_schemas"
+            );
+            let reparsed = DependencyGraphDocument::parse_verified_canonical(committed)
+                .unwrap_or_else(|error| panic!("golden fixture {name} must verify: {error}"));
+            assert_eq!(reparsed.graph_digest, document.graph_digest);
+        }
+    }
+
+    #[test]
+    fn golden_diamond_shares_one_node_with_two_incoming_edges() {
+        let fixtures = golden_fixture_documents();
+        let (_, diamond) = fixtures
+            .iter()
+            .find(|(name, _)| *name == "diamond")
+            .unwrap();
+        let DependencyGraphData::Resolved { nodes, edges, .. } = &diamond.graph else {
+            panic!("diamond fixture is resolved");
+        };
+        let shared: Vec<_> = nodes.iter().filter(|node| node.id.name == "shared").collect();
+        assert_eq!(shared.len(), 1);
+        let incoming = edges
+            .iter()
+            .filter(|edge| edge.to == shared[0].id)
+            .count();
+        assert_eq!(incoming, 2);
+    }
+
+    #[test]
+    fn golden_duplicate_registry_coordinates_do_not_collide() {
+        let fixtures = golden_fixture_documents();
+        let (_, document) = fixtures
+            .iter()
+            .find(|(name, _)| *name == "duplicate-registries")
+            .unwrap();
+        let DependencyGraphData::Resolved { nodes, .. } = &document.graph else {
+            panic!("duplicate-registries fixture is resolved");
+        };
+        let utils: Vec<_> = nodes.iter().filter(|node| node.id.name == "util").collect();
+        assert_eq!(utils.len(), 2);
+        assert_ne!(utils[0].id.registry_id, utils[1].id.registry_id);
+    }
+
+    #[test]
+    fn strict_parse_rejects_unknown_member_injection() {
+        let finalized = sample_resolved_graph().finalize().unwrap();
+        let canonical = finalized.canonical_document_bytes().unwrap();
+        assert!(DependencyGraphDocument::parse_verified_canonical(&canonical).is_ok());
+
+        let mut value: Value = serde_json::from_slice(&canonical).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("injected".to_string(), Value::String("attacker".into()));
+        let tampered = serde_json::to_vec(&value).unwrap();
+
+        // Lenient typed parsing alone does not authenticate unknown members.
+        let lenient: DependencyGraphDocument = serde_json::from_slice(&tampered).unwrap();
+        assert!(lenient.verify_digest().is_ok());
+        // The strict entrypoint does.
+        assert_eq!(
+            DependencyGraphDocument::parse_verified_canonical(&tampered).unwrap_err(),
+            DependencyGraphError::NotCanonical
+        );
+    }
+
+    #[test]
+    fn strict_parse_rejects_null_whitespace_order_and_missing_digest() {
+        let finalized = sample_resolved_graph().finalize().unwrap();
+        let canonical = finalized.canonical_document_bytes().unwrap();
+
+        // Explicit null spelling of absence.
+        let mut value: Value = serde_json::from_slice(&canonical).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("parent_graph_digest".to_string(), Value::Null);
+        assert_eq!(
+            DependencyGraphDocument::parse_verified_canonical(
+                &serde_json::to_vec(&value).unwrap()
+            )
+            .unwrap_err(),
+            DependencyGraphError::NotCanonical
+        );
+
+        // Insignificant whitespace.
+        let value: Value = serde_json::from_slice(&canonical).unwrap();
+        let pretty = serde_json::to_vec_pretty(&value).unwrap();
+        assert_eq!(
+            DependencyGraphDocument::parse_verified_canonical(&pretty).unwrap_err(),
+            DependencyGraphError::NotCanonical
+        );
+
+        // Non-normative collection order.
+        let mut value: Value = serde_json::from_slice(&canonical).unwrap();
+        let nodes = value
+            .as_object_mut()
+            .unwrap()
+            .get_mut("nodes")
+            .unwrap()
+            .as_array_mut()
+            .unwrap();
+        nodes.reverse();
+        assert_eq!(
+            DependencyGraphDocument::parse_verified_canonical(
+                &serde_json::to_vec(&value).unwrap()
+            )
+            .unwrap_err(),
+            DependencyGraphError::NotCanonical
+        );
+
+        // Missing digest.
+        let mut undigested = sample_resolved_graph();
+        undigested.normalize_in_place();
+        let bytes = canonical_json_bytes(&serde_json::to_value(&undigested).unwrap()).unwrap();
+        assert_eq!(
+            DependencyGraphDocument::parse_verified_canonical(&bytes).unwrap_err(),
+            DependencyGraphError::MissingGraphDigest
+        );
+    }
+
+    #[test]
+    fn discovery_fixture_matches_the_rust_contract() {
+        let discovery: Value = serde_json::from_str(include_str!(
+            "../fixtures/dependency-graph-v1/discovery.json"
+        ))
+        .unwrap();
+
+        assert_eq!(
+            discovery["routes"]["declared"],
+            DEPENDENCY_GRAPH_DECLARED_ROUTE_TEMPLATE
+        );
+        assert_eq!(
+            discovery["routes"]["resolved"],
+            DEPENDENCY_GRAPH_RESOLUTION_ROUTE_TEMPLATE
+        );
+        assert_eq!(
+            discovery["headers"]["semantic_digest"],
+            DEPENDENCY_GRAPH_DIGEST_HEADER
+        );
+        assert_eq!(
+            discovery["supported_schemas"],
+            serde_json::json!([DEPENDENCY_GRAPH_SCHEMA_V1])
+        );
+
+        let formats = discovery["formats"].as_array().unwrap();
+        for format in [
+            DependencyGraphFormat::Json,
+            DependencyGraphFormat::Yaml,
+            DependencyGraphFormat::Toml,
+            DependencyGraphFormat::Dot,
+            DependencyGraphFormat::Mermaid,
+        ] {
+            let advertised = formats
+                .iter()
+                .find(|entry| entry["extension"] == format.extension())
+                .unwrap_or_else(|| panic!("discovery advertises {}", format.extension()));
+            assert_eq!(advertised["media_type"], format.media_type());
+            assert_eq!(
+                advertised["authoritative"],
+                Value::Bool(format.is_authoritative())
+            );
+        }
+
+        let limits = &discovery["limit_policy"]["default_limits"];
+        assert_eq!(
+            limits["max_nodes"],
+            Value::from(DEPENDENCY_GRAPH_DEFAULT_MAX_NODES)
+        );
+        assert_eq!(
+            limits["max_edges"],
+            Value::from(DEPENDENCY_GRAPH_DEFAULT_MAX_EDGES)
+        );
+        assert_eq!(
+            limits["max_projection_depth"],
+            Value::from(DEPENDENCY_GRAPH_DEFAULT_MAX_PROJECTION_DEPTH)
+        );
+        assert_eq!(
+            limits["max_encoded_bytes"],
+            Value::from(DEPENDENCY_GRAPH_DEFAULT_MAX_ENCODED_BYTES)
         );
     }
 
