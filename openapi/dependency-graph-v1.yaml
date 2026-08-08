@@ -179,6 +179,16 @@ components:
       description: >-
         Optional download-format override. If it conflicts with Accept, the
         server returns 406 rather than silently choosing one representation.
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      schema:
+        type: string
+      description: >-
+        Strong representation-specific validator from a previous response.
+        A match returns 304 with no body for the same representation only;
+        a JSON validator never matches a YAML or TOML request.
   schemas:
     DependencyGraphDocument:
       $ref: ../schemas/dependency-graph-v1.json
