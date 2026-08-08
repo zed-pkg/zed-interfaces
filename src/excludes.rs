@@ -79,45 +79,89 @@ pub const ALWAYS_INCLUDE: &[&str] = &["LICENSE*", "LICENCE*", "COPYING*", "NOTIC
 /// shipped too.
 const REGISTRY_DOC_PATTERNS: &[&str] = &["README", "CHANGELOG"];
 
-/// The effective exclusion list for a package: built-in defaults (minus the
-/// registry-facing doc patterns when `include_readme` is set), plus every
-/// explicit exclusion supplied by the caller. The CLI supplies both
-/// `[publish].exclude` and `.zedignore` rules here, so explicit exclusions are
-/// combined as a union regardless of which source owns them.
+#[derive(Debug, Default)]
+struct EvaluatedSource {
+    excludes: Vec<String>,
+    negated_families: BTreeSet<String>,
+}
+
+/// The effective exclusion list for one authored source.
 ///
-/// A leading `!` re-includes a matching built-in default. It never cancels an
-/// explicit exclusion: when one authored source excludes a path and another
-/// re-includes it, exclusion wins. This makes the result independent of whether
-/// the manifest or `.zedignore` was appended first and prevents a user-authored
-/// negation from disabling CLI safety exclusions such as dependency or
-/// transaction directories.
+/// This preserves the existing ordered-negation contract within that source:
+/// `!target` can remove the built-in `target/**` family or an earlier explicit
+/// `target/**`, and a later positive rule can add it again.
 pub fn effective_excludes(extra: &[String], include_readme: bool) -> Vec<String> {
-    let mut defaults: Vec<String> = Vec::new();
-    for pattern in DEFAULT_EXCLUDES {
-        if include_readme && REGISTRY_DOC_PATTERNS.iter().any(|d| pattern.starts_with(d)) {
-            continue;
-        }
-        defaults.push((*pattern).to_string());
-    }
+    effective_excludes_union(&[extra], include_readme)
+}
+
+/// The effective exclusion list for independent authored sources such as
+/// `[publish].exclude`, `.zedignore`, and CLI-owned safety rules.
+///
+/// Each source evaluates its own ordered `!` rules first. The resulting
+/// positive sets are then unioned, so a positive exclusion that survives in
+/// either source cannot be undone by a negation in another source. Negations
+/// from any source still re-include matching built-in defaults when no source
+/// explicitly excludes that family. This makes source order irrelevant while
+/// retaining useful source-local negation semantics.
+pub fn effective_excludes_union(
+    sources: &[&[String]],
+    include_readme: bool,
+) -> Vec<String> {
+    let evaluated = sources
+        .iter()
+        .map(|rules| evaluate_source(rules))
+        .collect::<Vec<_>>();
 
     let mut negated_defaults = BTreeSet::new();
-    let mut explicit = Vec::new();
-    for pattern in extra {
-        if let Some(negated) = pattern.strip_prefix('!') {
-            let normalized = normalize_pattern(negated, false);
-            if !normalized.is_empty() {
-                negated_defaults.insert(normalized);
-            }
-        } else {
-            explicit.push(pattern.clone());
-        }
+    for source in &evaluated {
+        negated_defaults.extend(source.negated_families.iter().cloned());
     }
 
-    defaults.retain(|existing| {
-        !negated_defaults.contains(&normalize_pattern(existing, true))
-    });
-    defaults.extend(explicit);
-    defaults
+    let mut out = DEFAULT_EXCLUDES
+        .iter()
+        .filter(|pattern| {
+            !(include_readme
+                && REGISTRY_DOC_PATTERNS
+                    .iter()
+                    .any(|doc| pattern.starts_with(doc)))
+        })
+        .filter(|pattern| {
+            !negated_defaults.contains(&normalize_pattern(pattern, true))
+        })
+        .map(|pattern| (*pattern).to_string())
+        .collect::<Vec<_>>();
+
+    for source in evaluated {
+        out.extend(source.excludes);
+    }
+    out
+}
+
+fn evaluate_source(rules: &[String]) -> EvaluatedSource {
+    let mut evaluated = EvaluatedSource::default();
+    for raw in rules {
+        let pattern = raw.trim();
+        if pattern.is_empty() {
+            continue;
+        }
+        if let Some(negated) = pattern.strip_prefix('!') {
+            let normalized = normalize_pattern(negated, false);
+            if normalized.is_empty() {
+                continue;
+            }
+            evaluated
+                .excludes
+                .retain(|existing| normalize_pattern(existing, true) != normalized);
+            evaluated.negated_families.insert(normalized);
+        } else {
+            let normalized = normalize_pattern(pattern, true);
+            if !normalized.is_empty() {
+                evaluated.negated_families.remove(&normalized);
+            }
+            evaluated.excludes.push(pattern.to_string());
+        }
+    }
+    evaluated
 }
 
 fn normalize_pattern(pattern: &str, strip_recursive_prefix: bool) -> String {
@@ -135,12 +179,16 @@ fn normalize_pattern(pattern: &str, strip_recursive_prefix: bool) -> String {
 mod tests {
     use super::*;
 
+    fn contains(excludes: &[String], pattern: &str) -> bool {
+        excludes.iter().any(|candidate| candidate == pattern)
+    }
+
     #[test]
     fn target_negation_removes_root_and_recursive_defaults() {
         for negation in ["!target", "!target/", "!target/**"] {
             let excludes = effective_excludes(&[negation.to_string()], false);
-            assert!(!excludes.iter().any(|pattern| pattern == "target/**"));
-            assert!(!excludes.iter().any(|pattern| pattern == "**/target/**"));
+            assert!(!contains(&excludes, "target/**"));
+            assert!(!contains(&excludes, "**/target/**"));
             assert!(!excludes.iter().any(|pattern| pattern.starts_with('!')));
         }
     }
@@ -148,33 +196,57 @@ mod tests {
     #[test]
     fn negation_only_removes_the_matching_default_family() {
         let excludes = effective_excludes(&["!target".to_string()], false);
-        assert!(excludes.iter().any(|pattern| pattern == "node_modules/**"));
-        assert!(excludes.iter().any(|pattern| pattern == "build/**"));
+        assert!(contains(&excludes, "node_modules/**"));
+        assert!(contains(&excludes, "build/**"));
     }
 
     #[test]
-    fn explicit_exclusion_wins_over_negation_in_either_order() {
-        for extra in [
-            vec!["private/**".to_string(), "!private".to_string()],
-            vec!["!private".to_string(), "private/**".to_string()],
-        ] {
-            let excludes = effective_excludes(&extra, false);
-            assert!(excludes.iter().any(|pattern| pattern == "private/**"));
-            assert!(!excludes.iter().any(|pattern| pattern.starts_with('!')));
-        }
+    fn later_negation_removes_an_earlier_rule_in_the_same_source() {
+        let excludes = effective_excludes(
+            &["private/**".to_string(), "!private".to_string()],
+            false,
+        );
+        assert!(!contains(&excludes, "private/**"));
     }
 
     #[test]
-    fn later_exclusion_can_narrow_a_reincluded_default() {
+    fn later_exclusion_can_reapply_after_negation() {
         let excludes = effective_excludes(
             &["!target".to_string(), "target/private/**".to_string()],
             false,
         );
-        assert!(
-            excludes
-                .iter()
-                .any(|pattern| pattern == "target/private/**")
-        );
-        assert!(!excludes.iter().any(|pattern| pattern == "target/**"));
+        assert!(contains(&excludes, "target/private/**"));
+        assert!(!contains(&excludes, "target/**"));
+    }
+
+    #[test]
+    fn cross_source_exclusion_wins_over_negation_regardless_of_source_order() {
+        let excludes = vec!["private/**".to_string()];
+        let reincludes = vec!["!private".to_string()];
+        for sources in [
+            [&excludes[..], &reincludes[..]],
+            [&reincludes[..], &excludes[..]],
+        ] {
+            let effective = effective_excludes_union(&sources, false);
+            assert!(contains(&effective, "private/**"));
+            assert!(!effective.iter().any(|pattern| pattern.starts_with('!')));
+        }
+    }
+
+    #[test]
+    fn union_retains_source_local_negation_and_other_source_rules() {
+        let manifest = vec!["generated/**".to_string(), "!generated".to_string()];
+        let ignore = vec!["private/**".to_string()];
+        let effective = effective_excludes_union(&[&manifest, &ignore], false);
+        assert!(!contains(&effective, "generated/**"));
+        assert!(contains(&effective, "private/**"));
+    }
+
+    #[test]
+    fn protected_source_cannot_be_negated_by_an_authored_source() {
+        let authored = vec!["!zed_modules".to_string()];
+        let protected = vec!["zed_modules/**".to_string()];
+        let effective = effective_excludes_union(&[&authored, &protected], false);
+        assert!(contains(&effective, "zed_modules/**"));
     }
 }
