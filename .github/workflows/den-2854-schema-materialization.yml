@@ -1,0 +1,44 @@
+name: DEN-2854 schema materialization
+
+on:
+  push:
+    branches:
+      - alexanderdmills/den-2854-registry-protocol-v1-rfc-registry-identity-sparse-index
+
+permissions:
+  contents: read
+
+concurrency:
+  group: den-2854-schema-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Format check
+        run: cargo fmt --all --check
+      - name: Registry protocol unit tests
+        run: cargo test --locked registry_protocol_v1
+      - name: Generate all interface schemas
+        run: cargo run --locked --example generate_schemas
+      - name: Package registry protocol schemas
+        run: |
+          tar -czf "$RUNNER_TEMP/registry-protocol-v1-schemas.tar.gz" \
+            schemas/registry-discovery-v1.json \
+            schemas/registry-index-record-v1.json \
+            schemas/registry-checkpoint-v1.json \
+            schemas/registry-archive-manifest-v1.json \
+            schemas/registry-publish-request-v1.json \
+            schemas/registry-protocol-error-v1.json
+      - name: Upload generated schemas
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: den-2854-registry-protocol-v1-schemas-${{ github.sha }}
+          path: ${{ runner.temp }}/registry-protocol-v1-schemas.tar.gz
+          retention-days: 1
+          if-no-files-found: error
