@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/den-2854-snapshot-reconcile.py"
       - ".github/den-2854-archive-manifest-endpoint.py"
+      - ".github/den-2854-canonical-trust-hardening.py"
       - ".github/workflows/den-2854-snapshot-reconciliation.yml"
       - "docs/registry-protocol-v1.md"
       - "src/registry_protocol_v1.rs"
@@ -39,6 +40,7 @@ jobs:
           set -euo pipefail
           python3 .github/den-2854-snapshot-reconcile.py
           python3 .github/den-2854-archive-manifest-endpoint.py
+          python3 .github/den-2854-canonical-trust-hardening.py
 
       - name: Format, test, lint, and regenerate schemas
         run: |
@@ -63,13 +65,19 @@ jobs:
             examples/generate_schemas.rs \
             docs/registry-protocol-v1.md \
             fixtures/registry-v1/discovery.json \
+            fixtures/registry-v1/index.ndjson \
             fixtures/registry-v1/index-snapshot.json \
+            fixtures/registry-v1/checkpoint.json \
+            fixtures/registry-v1/snapshot/index/acme/widget \
             schemas/registry-discovery-v1.json \
-            schemas/registry-index-snapshot-v1.json
+            schemas/registry-index-record-v1.json \
+            schemas/registry-index-snapshot-v1.json \
+            schemas/registry-checkpoint-v1.json
           git rm \
             .github/den-2854-snapshot-reconcile.py \
             .github/den-2854-archive-manifest-endpoint.py \
+            .github/den-2854-canonical-trust-hardening.py \
             .github/workflows/den-2854-snapshot-reconciliation.yml
           git diff --cached --check
-          git commit -m "DEN-2854 authenticate immutable sparse-index snapshots"
+          git commit -m "DEN-2854 authenticate canonical registry snapshots"
           git push origin "HEAD:${TARGET_BRANCH}"
