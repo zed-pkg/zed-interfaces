@@ -4,21 +4,21 @@ on:
   pull_request:
     paths:
       - docs/native-registry-contract.md
-      - src/rust/src/rust/src/rust/examples/generate_schemas.rs
+      - src/rust/examples/generate_schemas.rs
       - schemas/native-registry-adapter-record.json
       - src/rust/lib.rs
       - src/rust/native_registry.rs
-      - src/rust/src/rust/tests/native_registry_schema_contract.rs
+      - src/rust/tests/native_registry_schema_contract.rs
       - .github/workflows/native-registry.yml
   push:
     branches: [main]
     paths:
       - docs/native-registry-contract.md
-      - src/rust/src/rust/src/rust/examples/generate_schemas.rs
+      - src/rust/examples/generate_schemas.rs
       - schemas/native-registry-adapter-record.json
       - src/rust/lib.rs
       - src/rust/native_registry.rs
-      - src/rust/src/rust/tests/native_registry_schema_contract.rs
+      - src/rust/tests/native_registry_schema_contract.rs
       - .github/workflows/native-registry.yml
   workflow_dispatch:
 
@@ -73,15 +73,19 @@ jobs:
           cargo test --locked --test native_registry_schema_contract
           cargo clippy --locked --lib --test native_registry_schema_contract -- -D warnings
 
-      - name: Require deterministic generated schema
+      - name: Require deterministic generated schemas and fixtures
         run: |
           set -euo pipefail
           cargo run --locked --example generate_schemas
-          git diff --exit-code -- schemas
+          git diff --exit-code -- schemas fixtures
 
       - name: Require a clean checkout
         run: |
           set -euo pipefail
           git diff --exit-code
-          git status --porcelain=v1 --untracked-files=all | tee "$RUNNER_TEMP/native-registry-status.txt"
-          test ! -s "$RUNNER_TEMP/native-registry-status.txt"
+          git diff --cached --exit-code
+          untracked="$(git ls-files --others --exclude-standard)"
+          if [[ -n "$untracked" ]]; then
+            printf '%s\n' "$untracked" >&2
+            exit 1
+          fi
