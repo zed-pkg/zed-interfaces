@@ -146,6 +146,7 @@ fn main() {
     fs::create_dir_all(dir).expect("schemas dir");
 
     write_dependency_graph_schema(dir);
+    write_dependency_graph_fixtures();
     write::<zed_interfaces::Manifest>(dir, "manifest");
     write::<zed_interfaces::Lockfile>(dir, "lockfile");
     write::<zed_interfaces::EnvironmentPlan>(dir, "environment-plan-v1");
