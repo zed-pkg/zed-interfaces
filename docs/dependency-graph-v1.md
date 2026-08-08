@@ -120,7 +120,7 @@ Exceeding a graph limit returns `422` with code `graph_limit_exceeded`; an encod
 
 Public immutable resolution artifacts may be stored in R2/S3 and served through static or edge caches. Private resolution artifacts are authorization-gated, non-enumerable, and never publicly cacheable. A denied response must not expose private package names, node/edge counts, registry paths, object keys, signed URLs, or credential material.
 
-There is no partial-redaction mode in v1. Returning a graph with hidden nodes would change semantics and can leak topology. The caller either receives the authorized complete/projected graph or an indistinguishable denial.
+There is no partial-redaction mode in v1. Returning a graph with hidden nodes would change semantics and can leak topology. The caller either receives the authorized complete/projected graph or an indistinguishable denial. The denial status is `404 Not Found` for missing, nonexistent, and unauthorized-private alike; these routes define no `401` or `403`, and denied responses are never publicly cacheable.
 
 Historical backfill is allowed only when the original lock and immutable registry checkpoint provenance are available. Old manifests must not be resolved against today's index and presented as historical truth.
 
