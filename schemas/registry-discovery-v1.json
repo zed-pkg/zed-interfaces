@@ -1,9 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RegistryDiscoveryV1",
-  "description": "Signed/versioned registry discovery document.",
+  "description": "Root-signed, versioned registry discovery document.",
   "type": "object",
   "properties": {
+    "accepted_archive_formats": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistryArchiveFormatV1"
+      }
+    },
+    "accepted_digest_algorithms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "auth": {
       "type": "array",
       "items": {
@@ -19,8 +31,20 @@
     "endpoints": {
       "$ref": "#/$defs/RegistryEndpointsV1"
     },
+    "expires_at": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
     "limits": {
       "$ref": "#/$defs/RegistryLimitsV1"
+    },
+    "previous_discovery_sha256": {
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "protocol_versions": {
       "type": "array",
@@ -31,6 +55,12 @@
     "registry_id": {
       "type": "string"
     },
+    "root_signatures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistryRootSignatureV1"
+      }
+    },
     "schema": {
       "type": "string"
     },
@@ -39,20 +69,37 @@
       "items": {
         "$ref": "#/$defs/RegistrySigningKeyV1"
       }
+    },
+    "version": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
     }
   },
   "additionalProperties": false,
   "required": [
     "schema",
+    "version",
+    "generated_at",
+    "expires_at",
     "registry_id",
     "canonical_url",
     "protocol_versions",
     "endpoints",
     "capabilities",
     "signing_keys",
+    "accepted_digest_algorithms",
+    "accepted_archive_formats",
     "limits"
   ],
   "$defs": {
+    "RegistryArchiveFormatV1": {
+      "description": "Archive formats accepted by protocol v1.",
+      "type": "string",
+      "enum": [
+        "tar-zstd"
+      ]
+    },
     "RegistryAuthDescriptorV1": {
       "description": "Authentication descriptor. Identity assertions are exchanged for\nregistry-audience credentials; general identity-provider tokens are not\npackage credentials.",
       "type": "object",
@@ -126,6 +173,9 @@
       "description": "Stable endpoints advertised by a registry.",
       "type": "object",
       "properties": {
+        "archive_manifest_template": {
+          "type": "string"
+        },
         "checkpoint": {
           "type": "string"
         },
@@ -137,6 +187,9 @@
             "string",
             "null"
           ]
+        },
+        "snapshot_manifest_template": {
+          "type": "string"
         },
         "sparse_index_template": {
           "type": "string"
@@ -151,7 +204,9 @@
       "additionalProperties": false,
       "required": [
         "sparse_index_template",
+        "snapshot_manifest_template",
         "package_template",
+        "archive_manifest_template",
         "checkpoint"
       ]
     },
@@ -192,6 +247,27 @@
         "max_files",
         "max_path_bytes",
         "max_compression_ratio"
+      ]
+    },
+    "RegistryRootSignatureV1": {
+      "description": "Signature made by a locally enrolled recovery/root key.\n\nRoot public keys are deliberately not self-asserted by discovery. Their\nfingerprints and threshold policy are enrolled out of band. These\nsignatures delegate the online checkpoint-signing keys carried by the\ndiscovery payload.",
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "type": "string"
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key_id",
+        "algorithm",
+        "signature"
       ]
     },
     "RegistrySigningKeyStateV1": {

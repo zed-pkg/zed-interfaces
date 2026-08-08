@@ -6,11 +6,13 @@
     "zpkg.registry/v1"
   ],
   "endpoints": {
-    "sparse_index_template": "/index/{org}/{name}",
+    "sparse_index_template": "/snapshots/{snapshot}/index/{org}/{name}",
     "package_template": "/pkgs/{org}/{name}/{version}.tar.zst",
     "checkpoint": "/checkpoint.json",
     "publish": "/api/v1/packages/{org}/{name}/{version}",
-    "yank": "/api/v1/packages/{org}/{name}/{version}/yank"
+    "yank": "/api/v1/packages/{org}/{name}/{version}/yank",
+    "snapshot_manifest_template": "/snapshots/{snapshot}/manifest.json",
+    "archive_manifest_template": "/pkgs/{org}/{name}/{version}.manifest.json"
   },
   "capabilities": {
     "public_read": true,
@@ -49,5 +51,21 @@
     "max_files": 100000,
     "max_path_bytes": 1024,
     "max_compression_ratio": 100
-  }
+  },
+  "version": 1,
+  "generated_at": "2026-08-07T00:00:00Z",
+  "expires_at": "2026-08-08T00:00:00Z",
+  "accepted_digest_algorithms": [
+    "sha256"
+  ],
+  "accepted_archive_formats": [
+    "tar-zstd"
+  ],
+  "root_signatures": [
+    {
+      "key_id": "root-2026-01",
+      "algorithm": "ed25519",
+      "signature": "AbCdEfGhIjKlMnOpQrStUvWxYz_01234"
+    }
+  ]
 }

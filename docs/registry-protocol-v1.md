@@ -60,12 +60,13 @@ Repointing a local alias or mirror URL to another `registry_id` is a trust chang
 
 `GET /.well-known/zpkg-registry.json` returns `RegistryDiscoveryV1`, including:
 
-- exact discovery schema and supported protocol versions;
+- exact discovery schema, monotonically chained version, generation/expiry timestamps, and supported protocol versions;
 - immutable `registry_id` and canonical HTTPS URL;
 - relative endpoint templates;
 - additive read, publish, yank, private-package, static-export, and mirror capabilities;
 - supported authentication modes and OIDC issuer/audience metadata where applicable;
-- metadata-signing keys and rotation state; and
+- online metadata-signing keys and rotation state delegated by one or more recovery/root signatures;
+- accepted digest/compression formats; and
 - archive, expanded-size, file-count, path-length, and compression-ratio limits.
 
 The required static-read templates are conceptually:
@@ -75,13 +76,16 @@ The required static-read templates are conceptually:
   "sparse_index_template": "/snapshots/{snapshot}/index/{org}/{name}",
   "snapshot_manifest_template": "/snapshots/{snapshot}/manifest.json",
   "package_template": "/pkgs/{org}/{name}/{version}.tar.zst",
+  "archive_manifest_template": "/pkgs/{org}/{name}/{version}.manifest.json",
   "checkpoint": "/checkpoint.json"
 }
 ```
 
 `{snapshot}` is the lower-case SHA-256 value in `RegistryCheckpointV1.index_root_sha256`. Endpoint templates are relative paths, contain no credentials/query/fragment, cannot escape the registry origin, and must contain every required placeholder.
 
-The canonical URL excludes credentials, query strings, fragments, and a trailing slash. The client records the trust tuple only after an explicit user action or administrator-pinned policy.
+The canonical URL excludes credentials, query strings, fragments, and a trailing slash. Endpoint templates contain each required placeholder exactly once, contain no unknown placeholders or percent-encoded escapes, and remain same-origin relative paths. The client records the trust tuple only after an explicit user action or administrator-pinned policy.
+
+Discovery version 1 has no predecessor; every later version carries the SHA-256 of the complete prior signed canonical discovery bytes. Locally enrolled recovery/root keys verify `root_signatures` over canonical discovery payload bytes with the signature list omitted. This delegates the active online checkpoint keys without trusting keys merely because the same HTTPS origin asserted them. Root-key replacement remains an explicit out-of-band recovery ceremony in v1.
 
 ## Immutable sparse-index snapshots
 
@@ -132,6 +136,10 @@ A client resolving one package:
 
 An absent manifest entry is the authoritative package-not-found result for that snapshot. A static host may also return 404 for the absent object, but the signed manifest is the trust decision.
 
+## Canonical signing and digest bytes
+
+All signed or content-addressed v1 JSON uses one RFC-8785-compatible restricted profile: UTF-8, lexicographically sorted ASCII member names, normalized set-like arrays, integer numbers only, no insignificant whitespace, and absent optional members omitted rather than encoded as `null`. Golden vectors are byte-for-byte portable across Rust and non-Rust clients. Timestamps use exactly `YYYY-MM-DDTHH:MM:SSZ` with a valid UTC calendar second; this fixed form makes lexical ordering equivalent to chronological ordering.
+
 ## Signed freshness checkpoints
 
 `GET /checkpoint.json` returns `RegistryCheckpointV1`:
@@ -139,7 +147,7 @@ An absent manifest entry is the authoritative package-not-found result for that 
 - monotonically increasing sequence;
 - generation and expiry timestamps;
 - `index_root_sha256`, which selects and authenticates the immutable index snapshot;
-- previous signed-checkpoint digest for every sequence after 1;
+- no predecessor for sequence 1 and the previous signed-checkpoint digest for every later sequence;
 - signing-key ID; and
 - Ed25519 signature over canonical payload bytes excluding the signature field.
 
@@ -195,7 +203,7 @@ A global organization claim requires verifiable control, such as a GitHub organi
 
 ## Canonical archives
 
-Protocol v1 accepts deterministic `tar.zst` package archives. `RegistryArchiveManifestV1` lists entries in strict bytewise path order and binds the exact archive SHA-256.
+Protocol v1 accepts deterministic `tar.zst` package archives. The archive is fetched through `package_template`; its canonical sidecar `RegistryArchiveManifestV1` is fetched through `archive_manifest_template`, lists entries in strict bytewise path order, and binds the exact archive SHA-256. The client verifies the sidecar digest from the signed index record before trusting its contents, then verifies the archive digest and extracted entries.
 
 Allowed entry types:
 

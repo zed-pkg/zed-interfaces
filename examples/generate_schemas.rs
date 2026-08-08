@@ -49,6 +49,7 @@ fn main() {
     // Registry protocol v1 trust, static-read, archive, and publish contracts.
     write::<zed_interfaces::RegistryDiscoveryV1>(dir, "registry-discovery-v1");
     write::<zed_interfaces::RegistryIndexRecordV1>(dir, "registry-index-record-v1");
+    write::<zed_interfaces::RegistryIndexSnapshotV1>(dir, "registry-index-snapshot-v1");
     write::<zed_interfaces::RegistryCheckpointV1>(dir, "registry-checkpoint-v1");
     write::<zed_interfaces::RegistryArchiveManifestV1>(dir, "registry-archive-manifest-v1");
     write::<zed_interfaces::RegistryPublishRequestV1>(dir, "registry-publish-request-v1");

@@ -11,6 +11,7 @@
       "type": "string"
     },
     "index_root_sha256": {
+      "description": "SHA-256 of canonical `RegistryIndexSnapshotV1` bytes. The same\nlowercase digest is substituted into the `{snapshot}` endpoint token.",
       "type": "string"
     },
     "previous_checkpoint_sha256": {
