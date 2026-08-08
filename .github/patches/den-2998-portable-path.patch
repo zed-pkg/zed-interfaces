@@ -9,7 +9,7 @@ diff --git a/src/environment_lock.rs b/src/environment_lock.rs
  
  use schemars::JsonSchema;
  use serde::{Deserialize, Serialize};
-@@ -824,11 +823,14 @@ fn validate_relative_path(
+@@ -824,10 +823,14 @@ fn validate_relative_path(
              .first()
              .is_some_and(u8::is_ascii_alphabetic);
      let has_parent = value.split(['/', '\\']).any(|part| part == "..");
