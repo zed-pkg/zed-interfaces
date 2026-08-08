@@ -1,0 +1,58 @@
+name: DEN-2960 sync generated schemas
+
+on:
+  push:
+    branches:
+      - agent/den-2960-canonical-root-target-contract
+    paths:
+      - .github/workflows/den-2960-schema-sync.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-2960-schema-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact product branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: agent/den-2960-canonical-root-target-contract
+          fetch-depth: 2
+          persist-credentials: true
+          show-progress: false
+
+      - name: Verify expected semantic parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "5e85dab6759d6c6e70ae4ed734127739b3c05ab6"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/den-2960-schema-sync.yml"
+
+      - name: Regenerate public schemas
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --example generate_schemas
+          changed="$(git diff --name-only -- schemas/)"
+          expected=$'schemas/manifest.json\nschemas/publish-meta.json'
+          test "$changed" = "$expected"
+          git diff --check
+
+      - name: Commit exact schema delta and self-remove
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/den-2960-schema-sync.yml
+          git config user.name "DEN-2960 schema sync"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          expected=$'.github/workflows/den-2960-schema-sync.yml\nschemas/manifest.json\nschemas/publish-meta.json'
+          test "$(git diff --cached --name-only)" = "$expected"
+          git commit -m "chore(DEN-2960): sync target identity schemas"
+          git push origin HEAD:agent/den-2960-canonical-root-target-contract
