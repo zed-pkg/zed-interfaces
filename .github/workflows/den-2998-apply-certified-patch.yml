@@ -1,0 +1,76 @@
+name: DEN-2998 apply certified lexical path repair
+
+on:
+  push:
+    branches:
+      - agent/den-2998-portable-path-lexical
+    paths:
+      - .github/patches/den-2998-portable-path.patch
+      - .github/workflows/den-2998-apply-certified-patch.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-2998-apply-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          show-progress: false
+
+      - name: Apply the reviewed patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch=.github/patches/den-2998-portable-path.patch
+          git apply --check --whitespace=error-all "$patch"
+          git apply --whitespace=error-all "$patch"
+          git diff --check
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          components: rustfmt,clippy
+
+      - name: Verify source repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+          cargo test --locked --doc
+          cargo run --locked --example generate_schemas
+          git diff --check
+          git diff --exit-code -- schemas/
+
+      - name: Commit only the verified source result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/patches/den-2998-portable-path.patch
+          git rm .github/workflows/den-2998-apply-certified-patch.yml
+          git add src/environment_lock.rs
+
+          mapfile -t staged < <(git diff --cached --name-only)
+          expected=(
+            .github/patches/den-2998-portable-path.patch
+            .github/workflows/den-2998-apply-certified-patch.yml
+            src/environment_lock.rs
+          )
+          printf '%s\n' "${staged[@]}" | sort > /tmp/staged
+          printf '%s\n' "${expected[@]}" | sort > /tmp/expected
+          diff -u /tmp/expected /tmp/staged
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "fix(DEN-2998): validate portable paths lexically"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
