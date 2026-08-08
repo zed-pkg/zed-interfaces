@@ -659,6 +659,264 @@ fn write_canonical_json(value: &Value, bytes: &mut Vec<u8>) -> Result<(), Depend
     Ok(())
 }
 
+/// Versioned conformance vectors whose canonical JSON bytes are committed
+/// under `fixtures/dependency-graph-v1/golden/` and must never change within
+/// schema v1.
+///
+/// Covers the golden cases required by the v1 RFC: declared view, diamond
+/// sharing, duplicate package coordinates across two registries, dependency
+/// cycle, optional feature activation, target predicate, and an explicit
+/// projection carrying its parent graph's digest. Regenerate the files with
+/// `cargo run --locked --example generate_schemas`; SDKs and conformance
+/// suites consume the committed bytes, not this function.
+pub fn golden_fixture_documents() -> Vec<(&'static str, DependencyGraphDocument)> {
+    const PRIMARY: &str = "registry:zpkg-primary";
+    const MIRROR: &str = "registry:zpkg-mirror";
+
+    fn fixture_digest(byte: char) -> String {
+        format!("sha256:{}", byte.to_string().repeat(64))
+    }
+
+    fn identity(registry_id: &str, name: &str, version: &str) -> PackageVersionIdentity {
+        PackageVersionIdentity {
+            registry_id: registry_id.to_string(),
+            org: "acme".to_string(),
+            name: name.to_string(),
+            version: version.to_string(),
+        }
+    }
+
+    fn node(id: PackageVersionIdentity, digest_byte: char) -> ResolvedDependencyNode {
+        ResolvedDependencyNode {
+            id,
+            artifact_digest: Some(fixture_digest(digest_byte)),
+            features: Vec::new(),
+        }
+    }
+
+    fn runtime_edge(
+        from: &PackageVersionIdentity,
+        to: &PackageVersionIdentity,
+    ) -> ResolvedDependencyEdge {
+        ResolvedDependencyEdge {
+            from: from.clone(),
+            to: to.clone(),
+            kind: DependencyKind::Runtime,
+            requirement: Some(format!("^{}", to.version)),
+            target: None,
+            optional: false,
+            features: Vec::new(),
+        }
+    }
+
+    fn provenance(registry_ids: &[&str]) -> ResolutionProvenance {
+        ResolutionProvenance {
+            resolver_version: "zed-resolver/1.0.0".to_string(),
+            target: "x86_64-unknown-linux-gnu".to_string(),
+            enabled_features: Vec::new(),
+            registry_snapshots: registry_ids
+                .iter()
+                .map(|registry_id| RegistrySnapshot {
+                    registry_id: registry_id.to_string(),
+                    checkpoint_digest: fixture_digest('c'),
+                })
+                .collect(),
+            lock_digest: fixture_digest('d'),
+        }
+    }
+
+    fn resolved(
+        roots: Vec<PackageVersionIdentity>,
+        nodes: Vec<ResolvedDependencyNode>,
+        edges: Vec<ResolvedDependencyEdge>,
+        provenance: ResolutionProvenance,
+    ) -> DependencyGraphDocument {
+        DependencyGraphDocument {
+            schema: DEPENDENCY_GRAPH_SCHEMA_V1.to_string(),
+            graph: DependencyGraphData::Resolved {
+                completeness: DependencyGraphCompleteness::Complete,
+                roots,
+                nodes,
+                edges,
+                provenance,
+                parent_graph_digest: None,
+                projection: None,
+            },
+            graph_digest: None,
+        }
+    }
+
+    fn finalized(document: DependencyGraphDocument) -> DependencyGraphDocument {
+        document
+            .finalize()
+            .expect("golden fixture documents are structurally valid")
+    }
+
+    let declared = finalized(DependencyGraphDocument {
+        schema: DEPENDENCY_GRAPH_SCHEMA_V1.to_string(),
+        graph: DependencyGraphData::Declared {
+            package: identity(PRIMARY, "app", "1.0.0"),
+            dependencies: vec![
+                DeclaredDependency {
+                    registry_id: PRIMARY.to_string(),
+                    org: "acme".to_string(),
+                    name: "corelib".to_string(),
+                    requirement: "^2".to_string(),
+                    kind: DependencyKind::Runtime,
+                    optional: false,
+                    default_features: true,
+                    features: Vec::new(),
+                    target: None,
+                },
+                DeclaredDependency {
+                    registry_id: PRIMARY.to_string(),
+                    org: "acme".to_string(),
+                    name: "tlslib".to_string(),
+                    requirement: "^1.2".to_string(),
+                    kind: DependencyKind::Runtime,
+                    optional: true,
+                    default_features: false,
+                    features: vec!["tls".to_string()],
+                    target: Some("cfg(unix)".to_string()),
+                },
+            ],
+        },
+        graph_digest: None,
+    });
+
+    let app = identity(PRIMARY, "app", "1.0.0");
+    let liba = identity(PRIMARY, "liba", "1.0.0");
+    let libb = identity(PRIMARY, "libb", "1.0.0");
+    let shared = identity(PRIMARY, "shared", "2.0.0");
+
+    // One shared node with two incoming edges.
+    let diamond = finalized(resolved(
+        vec![app.clone()],
+        vec![
+            node(app.clone(), '1'),
+            node(liba.clone(), '2'),
+            node(libb.clone(), '3'),
+            node(shared.clone(), '4'),
+        ],
+        vec![
+            runtime_edge(&app, &liba),
+            runtime_edge(&app, &libb),
+            runtime_edge(&liba, &shared),
+            runtime_edge(&libb, &shared),
+        ],
+        provenance(&[PRIMARY]),
+    ));
+    let diamond_digest = diamond
+        .graph_digest
+        .clone()
+        .expect("finalized fixture carries a digest");
+
+    // The same package coordinates from two immutable registries stay two
+    // distinct, non-colliding nodes.
+    let util_primary = identity(PRIMARY, "util", "3.0.0");
+    let util_mirror = identity(MIRROR, "util", "3.0.0");
+    let duplicate_registries = finalized(resolved(
+        vec![app.clone()],
+        vec![
+            node(app.clone(), '1'),
+            node(util_primary.clone(), '5'),
+            node(util_mirror.clone(), '6'),
+        ],
+        vec![
+            runtime_edge(&app, &util_primary),
+            runtime_edge(&app, &util_mirror),
+        ],
+        provenance(&[PRIMARY, MIRROR]),
+    ));
+
+    // Dependency cycles are representable; canonical form is set-based, so
+    // normalization and digesting terminate without traversal.
+    let alpha = identity(PRIMARY, "alpha", "1.0.0");
+    let beta = identity(PRIMARY, "beta", "1.0.0");
+    let cycle = finalized(resolved(
+        vec![alpha.clone()],
+        vec![node(alpha.clone(), '7'), node(beta.clone(), '8')],
+        vec![runtime_edge(&alpha, &beta), runtime_edge(&beta, &alpha)],
+        provenance(&[PRIMARY]),
+    ));
+
+    // Optional dependency activated with an explicit feature.
+    let tlslib = identity(PRIMARY, "tlslib", "1.2.3");
+    let optional_feature = finalized(resolved(
+        vec![app.clone()],
+        vec![
+            node(app.clone(), '1'),
+            ResolvedDependencyNode {
+                id: tlslib.clone(),
+                artifact_digest: Some(fixture_digest('9')),
+                features: vec!["tls".to_string()],
+            },
+        ],
+        vec![ResolvedDependencyEdge {
+            from: app.clone(),
+            to: tlslib.clone(),
+            kind: DependencyKind::Runtime,
+            requirement: Some("^1.2".to_string()),
+            target: None,
+            optional: true,
+            features: vec!["tls".to_string()],
+        }],
+        provenance(&[PRIMARY]),
+    ));
+
+    // Platform-conditional edge kept with its target predicate.
+    let winlib = identity(PRIMARY, "winlib", "0.5.0");
+    let target_predicate = finalized(resolved(
+        vec![app.clone()],
+        vec![node(app.clone(), '1'), node(winlib.clone(), 'a')],
+        vec![ResolvedDependencyEdge {
+            from: app.clone(),
+            to: winlib.clone(),
+            kind: DependencyKind::Build,
+            requirement: Some("^0.5".to_string()),
+            target: Some("cfg(windows)".to_string()),
+            optional: false,
+            features: Vec::new(),
+        }],
+        provenance(&[PRIMARY]),
+    ));
+
+    // Depth-1 runtime projection of the diamond graph: carries the parent
+    // digest, the canonical projection spec, and its own new digest.
+    let projected = finalized(DependencyGraphDocument {
+        schema: DEPENDENCY_GRAPH_SCHEMA_V1.to_string(),
+        graph: DependencyGraphData::Resolved {
+            completeness: DependencyGraphCompleteness::Projected,
+            roots: vec![app.clone()],
+            nodes: vec![
+                node(app.clone(), '1'),
+                node(liba.clone(), '2'),
+                node(libb.clone(), '3'),
+            ],
+            edges: vec![runtime_edge(&app, &liba), runtime_edge(&app, &libb)],
+            provenance: provenance(&[PRIMARY]),
+            parent_graph_digest: Some(diamond_digest),
+            projection: Some(DependencyGraphProjection {
+                target: None,
+                features: Vec::new(),
+                kinds: vec![DependencyKind::Runtime],
+                max_depth: Some(1),
+            }),
+        },
+        graph_digest: None,
+    });
+
+    vec![
+        ("declared", declared),
+        ("diamond", diamond),
+        ("duplicate-registries", duplicate_registries),
+        ("cycle", cycle),
+        ("optional-feature", optional_feature),
+        ("target-predicate", target_predicate),
+        ("projected", projected),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
