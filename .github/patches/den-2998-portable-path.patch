@@ -25,7 +25,7 @@ diff --git a/src/environment_lock.rs b/src/environment_lock.rs
          || windows_drive
          || value.starts_with('~')
          || value.starts_with("$HOME")
-@@ -836,8 +838,6 @@ fn validate_relative_path(
+@@ -836,7 +838,5 @@ fn validate_relative_path(
          || value.starts_with("${HOME}")
          || value.starts_with("%USERPROFILE%")
 -        || value.starts_with("//")
