@@ -213,6 +213,44 @@ pub enum Requirement {
     Exact(String),
 }
 
+/// Detect a dotted requirement whose leading segment is numeric and whose
+/// remaining shape is semver-like. Numeric components are accepted directly;
+/// after an explicit wildcard (`x`, `X`, or `*`), alphabetic components are
+/// also considered range-shaped so typos such as `1.x.y` cannot silently
+/// degrade to opaque exact tags. Ordinary opaque tags such as `nginx`,
+/// `linux-build`, `matrix-2`, `1.nginx`, and `1.x86_64` remain exact.
+fn looks_like_dotted_numeric_requirement(input: &str) -> bool {
+    let mut segments = input.split('.');
+    let Some(first) = segments.next() else {
+        return false;
+    };
+    if first.is_empty() || !first.bytes().all(|byte| byte.is_ascii_digit()) {
+        return false;
+    }
+
+    let mut has_tail = false;
+    let mut saw_wildcard = false;
+    for segment in segments {
+        has_tail = true;
+        if segment.is_empty() {
+            return false;
+        }
+        if matches!(segment, "x" | "X" | "*") {
+            saw_wildcard = true;
+            continue;
+        }
+        if segment.bytes().all(|byte| byte.is_ascii_digit()) {
+            continue;
+        }
+        if saw_wildcard && segment.bytes().all(|byte| byte.is_ascii_alphabetic()) {
+            continue;
+        }
+        return false;
+    }
+
+    has_tail
+}
+
 impl Requirement {
     /// Interpret a manifest requirement string. A valid semver range becomes
     /// [`Requirement::Range`]; anything else is an exact (opaque) match.
@@ -244,13 +282,15 @@ impl Requirement {
     }
 
     /// Reject requirement strings that *look* like semver ranges but fail to
-    /// parse (e.g. `^1.x.y`, `>= banana`). Without this, a typo'd range would
-    /// silently degrade to an opaque exact-match tag and never resolve.
-    /// Strings with no range operators are legitimate opaque tags and pass.
+    /// parse (e.g. `^1.x.y`, `1.x.y`, `>= banana`). Without this, a typo'd
+    /// range would silently degrade to an opaque exact-match tag and never
+    /// resolve. Strings with no range operators or numeric dotted shape are
+    /// legitimate opaque tags and pass.
     pub fn validate(input: &str) -> Result<(), String> {
         let looks_like_range = input.starts_with(['^', '~', '>', '<', '='])
             || input.contains(['*', ','])
-            || input.split_whitespace().count() > 1;
+            || input.split_whitespace().count() > 1
+            || looks_like_dotted_numeric_requirement(input);
         if !looks_like_range {
             return Ok(());
         }
@@ -363,6 +403,32 @@ mod tests {
         assert!(matches!(req, Requirement::Exact(_)));
         assert_eq!(resolve(&req, &versions), Some("legacy-api"));
         assert_eq!(resolve(&Requirement::parse("nope"), &versions), None);
+    }
+
+    #[test]
+    fn requirement_validation_rejects_malformed_dotted_ranges_only() {
+        for input in ["1.x.y", "1.X.y", "1.*.y", "1.2.3.4"] {
+            assert!(
+                Requirement::validate(input).is_err(),
+                "{input} must be rejected as a malformed range"
+            );
+        }
+
+        for input in [
+            "1.x",
+            "1.2.*",
+            "1.2.3",
+            "nginx",
+            "linux-build",
+            "matrix-2",
+            "1.nginx",
+            "1.x86_64",
+        ] {
+            assert!(
+                Requirement::validate(input).is_ok(),
+                "{input} must remain a valid range or opaque tag"
+            );
+        }
     }
 
     #[test]
