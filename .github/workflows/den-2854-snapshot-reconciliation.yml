@@ -4,21 +4,34 @@ on:
   push:
     branches:
       - alexanderdmills/den-2854-registry-protocol-v1-rfc-registry-identity-sparse-index
+  pull_request:
+    paths:
+      - ".github/den-2854-snapshot-reconcile.py"
+      - ".github/den-2854-archive-manifest-endpoint.py"
+      - ".github/workflows/den-2854-snapshot-reconciliation.yml"
+      - "docs/registry-protocol-v1.md"
+      - "src/registry_protocol_v1.rs"
+      - "src/lib.rs"
+      - "examples/generate_schemas.rs"
+      - "fixtures/registry-v1/**"
+      - "schemas/registry-*-v1.json"
 
 permissions:
   contents: write
 
 concurrency:
-  group: den-2854-snapshot-${{ github.ref }}
+  group: den-2854-snapshot-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   reconcile:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: true
 
       - name: Apply exact reviewed source transformations
@@ -39,7 +52,7 @@ jobs:
 
       - name: Commit materialized protocol and delete one-use machinery
         env:
-          TARGET_BRANCH: ${{ github.ref_name }}
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
           git config user.name "zed-pkg protocol reconciler"
