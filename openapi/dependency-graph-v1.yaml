@@ -22,12 +22,20 @@ paths:
           const: declared
         description: This package-version route exposes declared requirements only.
       - $ref: '#/components/parameters/Format'
+      - $ref: '#/components/parameters/IfNoneMatch'
     get:
       operationId: getDeclaredDependencyGraph
       summary: Download immutable declared requirements
+      security:
+        - {}
+        - bearerAuth: []
       responses:
         '200':
           $ref: '#/components/responses/DependencyGraph'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '400':
+          $ref: '#/components/responses/UnsupportedView'
         '404':
           $ref: '#/components/responses/NotFound'
         '406':
@@ -37,13 +45,22 @@ paths:
     head:
       operationId: headDeclaredDependencyGraph
       summary: Inspect declared graph metadata without a response body
+      security:
+        - {}
+        - bearerAuth: []
       responses:
         '200':
           $ref: '#/components/responses/DependencyGraphHead'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '400':
+          $ref: '#/components/responses/UnsupportedView'
         '404':
           $ref: '#/components/responses/NotFound'
         '406':
           $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/RepresentationTooLarge'
   /v1/resolutions/{resolution_digest}/dependency-graph:
     parameters:
       - name: resolution_digest
