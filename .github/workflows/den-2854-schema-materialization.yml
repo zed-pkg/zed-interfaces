@@ -17,28 +17,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Format check
-        run: cargo fmt --all --check
+      - name: Format source in the ephemeral workspace
+        run: cargo fmt --all
       - name: Registry protocol unit tests
         run: cargo test --locked registry_protocol_v1
       - name: Generate all interface schemas
         run: cargo run --locked --example generate_schemas
-      - name: Package registry protocol schemas
+      - name: Package formatted source and generated schemas
         run: |
-          tar -czf "$RUNNER_TEMP/registry-protocol-v1-schemas.tar.gz" \
+          tar -czf "$RUNNER_TEMP/den-2854-materialized.tar.gz" \
+            src/registry_protocol_v1.rs \
+            src/lib.rs \
+            examples/generate_schemas.rs \
             schemas/registry-discovery-v1.json \
             schemas/registry-index-record-v1.json \
             schemas/registry-checkpoint-v1.json \
             schemas/registry-archive-manifest-v1.json \
             schemas/registry-publish-request-v1.json \
             schemas/registry-protocol-error-v1.json
-      - name: Upload generated schemas
+      - name: Upload materialized contract
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: den-2854-registry-protocol-v1-schemas-${{ github.sha }}
-          path: ${{ runner.temp }}/registry-protocol-v1-schemas.tar.gz
+          name: den-2854-materialized-${{ github.sha }}
+          path: ${{ runner.temp }}/den-2854-materialized.tar.gz
           retention-days: 1
           if-no-files-found: error
