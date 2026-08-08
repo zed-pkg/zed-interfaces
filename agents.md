@@ -44,3 +44,8 @@ The default command runs Nix/workflow preflight, rustfmt, Clippy with warnings d
 ## Validation
 
 The pinned `agents policy` workflow validates this hierarchy and the three tool pointers. Run `nix develop -c agent-check` before requesting review.
+
+
+## Polyglot generated-slice contract
+
+Rust in `src/rust` is hand-written. `schemas/` is generated from Rust, and `src/dart` plus `src/ts` are generated from the front-end-facing schema subset in `schemas/index.json`. Regenerate both hops with `cargo run --locked --example generate_schemas` and `npm run codegen`; never hand-edit generated slice files. Keep the whole-repository target canonical by omitting a target-level `name` for `dir = "."`.

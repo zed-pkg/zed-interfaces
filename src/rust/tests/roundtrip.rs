@@ -118,7 +118,11 @@ fn lockfile_roundtrip() {
 fn excludes_respect_include_readme() {
     let with_readme_stripped = effective_excludes(&[], false);
     assert!(with_readme_stripped.iter().any(|p| p == "README*"));
-    assert!(with_readme_stripped.iter().any(|p| p == "tests/**"));
+    assert!(
+        with_readme_stripped
+            .iter()
+            .any(|p| p == "src/rust/tests/**")
+    );
 
     let readme_kept = effective_excludes(&["extra/**".to_string()], true);
     assert!(!readme_kept.iter().any(|p| p == "README*"));

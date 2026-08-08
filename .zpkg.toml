@@ -4,8 +4,7 @@ name = "zed-interfaces"
 version = "0.1.0"
 description = "Core manifest, lockfile, registry, version, and package-model interfaces for zed-pkg"
 license = "MIT"
-keywords = ["package-manager", "interfaces", "manifest", "lockfile", "rust"]
-language = "rust"
+keywords = ["package-manager", "interfaces", "manifest", "lockfile", "polyglot"]
 
 [package.repository]
 vcs = "git"
@@ -14,26 +13,59 @@ url = "https://github.com/zed-pkg/zed-interfaces"
 [publish]
 include_readme = true
 tag_format = "v{version}"
-smoke_test = "cargo test --manifest-path \"$ZED_PKG_TEST_TARGET/Cargo.toml\" --locked"
+smoke_test = "test -f \"$ZED_PKG_TEST_TARGET/schemas/index.json\" && test -f \"$ZED_PKG_TEST_TARGET/src/rust/Cargo.toml\" && test -f \"$ZED_PKG_TEST_TARGET/src/dart/lib/zed_interfaces.dart\" && test -f \"$ZED_PKG_TEST_TARGET/src/ts/index.ts\""
 exclude = [
   ".env",
   ".env.*",
-  ".direnv/**",
+  ".git/**",
+  ".github/**",
   ".zed/**",
   ".zed-pack/**",
   "target/**",
   "**/target/**",
+  "**/node_modules/**",
+  "**/.dart_tool/**",
   "tmp/**",
   "**/*.log",
   ".DS_Store",
 ]
 
-[publish.native]
+# Canonical whole-repository slice. DEN-2960 intentionally omits a
+# target-level name here: dir="." publishes as root package.name.
+[targets.repository]
+dir = "."
+
+[targets.rust]
+dir = "src/rust"
+adapter = "rust"
+
+[targets.rust.native]
 registry = "crates-io"
 package = "zed-interfaces"
 
+[targets.dart]
+dir = "src/dart"
+adapter = "dart"
+
+[targets.dart.native]
+registry = "pub.dev"
+package = "zed_interfaces"
+tag_format = "dart/v{version}"
+
+[targets.typescript]
+dir = "src/ts"
+name = "zed-interfaces-typescript"
+adapter = "node"
+
+[targets.typescript.native]
+registry = "npm"
+package = "@zed-pkg/zed-interfaces"
+tag_format = "ts/v{version}"
+
 [install]
-adapter = "rust"
+dir = ".vendor/.zed"
 
 [scripts]
-test = "cargo test --all-targets --locked"
+test = "cargo test --all-targets --locked && npm test"
+codegen = "cargo run --locked --example generate_schemas && npm run codegen"
+codegen-check = "npm run codegen:check"

@@ -4,3 +4,10 @@
 # zed-pkg local state
 /zed_modules/
 /.zed/pack/
+
+# Polyglot language-slice tooling state.
+/.vendor/
+node_modules/
+src/dart/.dart_tool/
+src/dart/pubspec.lock
+src/dart/build/

@@ -3,7 +3,7 @@ use serde_json::Value;
 use zed_interfaces::NativeRegistryAdapterRecord;
 
 const NATIVE_REGISTRY_ADAPTER_SCHEMA: &str =
-    include_str!("../schemas/native-registry-adapter-record.json");
+    include_str!("../../../schemas/native-registry-adapter-record.json");
 
 #[test]
 fn checked_in_native_registry_schema_matches_the_public_contract() {

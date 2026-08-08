@@ -1,0 +1,16 @@
+{
+  "hit": {
+    "items": [
+      {
+        "description": "An HTTP kit",
+        "latest": "1.0.0",
+        "name": "http-kit",
+        "org": "acme",
+        "tags": [
+          "http"
+        ]
+      }
+    ],
+    "query": "http"
+  }
+}

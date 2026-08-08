@@ -2,7 +2,8 @@ use schemars::schema_for;
 use serde_json::Value;
 use zed_interfaces::NativeDependencyLock;
 
-const NATIVE_DEPENDENCY_LOCK_SCHEMA: &str = include_str!("../schemas/native-dependency-lock.json");
+const NATIVE_DEPENDENCY_LOCK_SCHEMA: &str =
+    include_str!("../../../schemas/native-dependency-lock.json");
 
 #[test]
 fn checked_in_native_dependency_schema_matches_the_public_contract() {

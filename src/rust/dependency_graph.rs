@@ -1089,21 +1089,27 @@ mod tests {
         for (name, document) in golden_fixture_documents() {
             let committed: &[u8] = match name {
                 "declared" => {
-                    include_bytes!("../fixtures/dependency-graph-v1/golden/declared.json")
+                    include_bytes!("../../fixtures/dependency-graph-v1/golden/declared.json")
                 }
-                "diamond" => include_bytes!("../fixtures/dependency-graph-v1/golden/diamond.json"),
+                "diamond" => {
+                    include_bytes!("../../fixtures/dependency-graph-v1/golden/diamond.json")
+                }
                 "duplicate-registries" => include_bytes!(
-                    "../fixtures/dependency-graph-v1/golden/duplicate-registries.json"
+                    "../../fixtures/dependency-graph-v1/golden/duplicate-registries.json"
                 ),
-                "cycle" => include_bytes!("../fixtures/dependency-graph-v1/golden/cycle.json"),
+                "cycle" => include_bytes!("../../fixtures/dependency-graph-v1/golden/cycle.json"),
                 "optional-feature" => {
-                    include_bytes!("../fixtures/dependency-graph-v1/golden/optional-feature.json")
+                    include_bytes!(
+                        "../../fixtures/dependency-graph-v1/golden/optional-feature.json"
+                    )
                 }
                 "target-predicate" => {
-                    include_bytes!("../fixtures/dependency-graph-v1/golden/target-predicate.json")
+                    include_bytes!(
+                        "../../fixtures/dependency-graph-v1/golden/target-predicate.json"
+                    )
                 }
                 "projected" => {
-                    include_bytes!("../fixtures/dependency-graph-v1/golden/projected.json")
+                    include_bytes!("../../fixtures/dependency-graph-v1/golden/projected.json")
                 }
                 other => panic!("golden fixture {other} has no committed file"),
             };
@@ -1229,7 +1235,7 @@ mod tests {
     #[test]
     fn discovery_fixture_matches_the_rust_contract() {
         let discovery: Value = serde_json::from_str(include_str!(
-            "../fixtures/dependency-graph-v1/discovery.json"
+            "../../fixtures/dependency-graph-v1/discovery.json"
         ))
         .unwrap();
 
