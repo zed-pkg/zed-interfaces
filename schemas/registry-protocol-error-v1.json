@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryProtocolErrorV1",
+  "description": "Machine-readable registry error.",
+  "type": "object",
+  "properties": {
+    "code": {
+      "$ref": "#/$defs/RegistryProtocolErrorCodeV1"
+    },
+    "message": {
+      "type": "string"
+    },
+    "registry_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "retry_after_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "schema": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "code",
+    "message"
+  ],
+  "$defs": {
+    "RegistryProtocolErrorCodeV1": {
+      "description": "Stable protocol-level error codes.",
+      "type": "string",
+      "enum": [
+        "invalid-request",
+        "unsupported-protocol",
+        "registry-identity-mismatch",
+        "unauthorized",
+        "forbidden",
+        "package-not-found",
+        "version-not-found",
+        "version-yanked",
+        "version-security-revoked",
+        "version-legal-tombstoned",
+        "immutable-version-conflict",
+        "checkpoint-precondition-failed",
+        "metadata-expired",
+        "metadata-rollback",
+        "archive-rejected",
+        "rate-limited",
+        "internal"
+      ]
+    }
+  }
+}

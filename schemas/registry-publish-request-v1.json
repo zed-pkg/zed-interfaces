@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryPublishRequestV1",
+  "description": "Idempotent publication request. Reusing a version succeeds only when both\nimmutable digests match the previously accepted bytes.",
+  "type": "object",
+  "properties": {
+    "archive": {
+      "$ref": "#/$defs/RegistryArchiveReferenceV1"
+    },
+    "checkpoint_precondition": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "name": {
+      "type": "string"
+    },
+    "org": {
+      "type": "string"
+    },
+    "registry_id": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "visibility": {
+      "$ref": "#/$defs/RegistryVisibilityV1"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "registry_id",
+    "org",
+    "name",
+    "version",
+    "archive",
+    "visibility"
+  ],
+  "$defs": {
+    "RegistryArchiveFormatV1": {
+      "description": "Archive formats accepted by protocol v1.",
+      "type": "string",
+      "enum": [
+        "tar-zstd"
+      ]
+    },
+    "RegistryArchiveReferenceV1": {
+      "description": "Immutable archive reference bound by signed metadata.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/RegistryArchiveFormatV1"
+        },
+        "manifest_sha256": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "sha256",
+        "manifest_sha256",
+        "size",
+        "format"
+      ]
+    },
+    "RegistryVisibilityV1": {
+      "description": "Visibility of an immutable publication.",
+      "type": "string",
+      "enum": [
+        "public",
+        "private"
+      ]
+    }
+  }
+}

@@ -61,11 +61,7 @@ impl RegistryEndpointsV1 {
             )?;
         }
         if let Some(yank) = &self.yank {
-            validate_endpoint_template(
-                "endpoints.yank",
-                yank,
-                &["{org}", "{name}", "{version}"],
-            )?;
+            validate_endpoint_template("endpoints.yank", yank, &["{org}", "{name}", "{version}"])?;
         }
         Ok(())
     }
@@ -260,7 +256,9 @@ impl RegistryDiscoveryV1 {
         }
         ensure_unique_by(
             "auth",
-            self.auth.iter().map(|descriptor| format!("{:?}", descriptor.mode)),
+            self.auth
+                .iter()
+                .map(|descriptor| format!("{:?}", descriptor.mode)),
         )?;
 
         if self.signing_keys.is_empty() {
@@ -291,7 +289,9 @@ impl RegistryDiscoveryV1 {
         let mut normalized = self.clone();
         normalized.protocol_versions.sort();
         normalized.auth.sort_by_key(|descriptor| descriptor.mode);
-        normalized.signing_keys.sort_by(|left, right| left.key_id.cmp(&right.key_id));
+        normalized
+            .signing_keys
+            .sort_by(|left, right| left.key_id.cmp(&right.key_id));
         serde_json::to_vec(&normalized).map_err(RegistryProtocolV1Error::Serialization)
     }
 }
@@ -321,10 +321,7 @@ pub struct RegistryArchiveReferenceV1 {
 impl RegistryArchiveReferenceV1 {
     fn validate(&self, field: &str) -> Result<(), RegistryProtocolV1Error> {
         validate_sha256(&format!("{field}.sha256"), &self.sha256)?;
-        validate_sha256(
-            &format!("{field}.manifest_sha256"),
-            &self.manifest_sha256,
-        )?;
+        validate_sha256(&format!("{field}.manifest_sha256"), &self.manifest_sha256)?;
         if self.size == 0 {
             return Err(RegistryProtocolV1Error::ZeroValue {
                 field: format!("{field}.size"),
@@ -817,12 +814,13 @@ fn validate_schema(
 
 fn validate_registry_id(value: &str) -> Result<(), RegistryProtocolV1Error> {
     const PREFIX: &str = "zpkg-registry:";
-    let suffix = value.strip_prefix(PREFIX).ok_or_else(|| {
-        RegistryProtocolV1Error::InvalidValue {
-            field: "registry_id".to_owned(),
-            value: value.to_owned(),
-        }
-    })?;
+    let suffix =
+        value
+            .strip_prefix(PREFIX)
+            .ok_or_else(|| RegistryProtocolV1Error::InvalidValue {
+                field: "registry_id".to_owned(),
+                value: value.to_owned(),
+            })?;
     if suffix.len() == 32
         && suffix
             .bytes()
@@ -892,10 +890,7 @@ fn validate_endpoint_template(
     Ok(())
 }
 
-fn validate_coordinate_component(
-    field: &str,
-    value: &str,
-) -> Result<(), RegistryProtocolV1Error> {
+fn validate_coordinate_component(field: &str, value: &str) -> Result<(), RegistryProtocolV1Error> {
     validate_lower_token(field, value)
 }
 
@@ -920,10 +915,11 @@ fn validate_lower_token(field: &str, value: &str) -> Result<(), RegistryProtocol
 }
 
 fn validate_version(field: &str, value: &str) -> Result<(), RegistryProtocolV1Error> {
-    let parsed = semver::Version::parse(value).map_err(|_| RegistryProtocolV1Error::InvalidValue {
-        field: field.to_owned(),
-        value: value.to_owned(),
-    })?;
+    let parsed =
+        semver::Version::parse(value).map_err(|_| RegistryProtocolV1Error::InvalidValue {
+            field: field.to_owned(),
+            value: value.to_owned(),
+        })?;
     if parsed.build.is_empty() {
         Ok(())
     } else {
@@ -1216,10 +1212,9 @@ mod tests {
 
     #[test]
     fn golden_fixtures_deserialize_and_validate() {
-        let discovery: RegistryDiscoveryV1 = serde_json::from_str(include_str!(
-            "../fixtures/registry-v1/discovery.json"
-        ))
-        .expect("discovery fixture parses");
+        let discovery: RegistryDiscoveryV1 =
+            serde_json::from_str(include_str!("../fixtures/registry-v1/discovery.json"))
+                .expect("discovery fixture parses");
         discovery.validate().expect("discovery fixture validates");
 
         for line in include_str!("../fixtures/registry-v1/index.ndjson").lines() {
@@ -1228,10 +1223,9 @@ mod tests {
             record.validate().expect("index fixture line validates");
         }
 
-        let checkpoint: RegistryCheckpointV1 = serde_json::from_str(include_str!(
-            "../fixtures/registry-v1/checkpoint.json"
-        ))
-        .expect("checkpoint fixture parses");
+        let checkpoint: RegistryCheckpointV1 =
+            serde_json::from_str(include_str!("../fixtures/registry-v1/checkpoint.json"))
+                .expect("checkpoint fixture parses");
         checkpoint.validate().expect("checkpoint fixture validates");
 
         let archive: RegistryArchiveManifestV1 = serde_json::from_str(include_str!(

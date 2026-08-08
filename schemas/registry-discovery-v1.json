@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryDiscoveryV1",
+  "description": "Signed/versioned registry discovery document.",
+  "type": "object",
+  "properties": {
+    "auth": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistryAuthDescriptorV1"
+      }
+    },
+    "canonical_url": {
+      "type": "string"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/RegistryCapabilitiesV1"
+    },
+    "endpoints": {
+      "$ref": "#/$defs/RegistryEndpointsV1"
+    },
+    "limits": {
+      "$ref": "#/$defs/RegistryLimitsV1"
+    },
+    "protocol_versions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "registry_id": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "signing_keys": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistrySigningKeyV1"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "registry_id",
+    "canonical_url",
+    "protocol_versions",
+    "endpoints",
+    "capabilities",
+    "signing_keys",
+    "limits"
+  ],
+  "$defs": {
+    "RegistryAuthDescriptorV1": {
+      "description": "Authentication descriptor. Identity assertions are exchanged for\nregistry-audience credentials; general identity-provider tokens are not\npackage credentials.",
+      "type": "object",
+      "properties": {
+        "audience": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issuer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "$ref": "#/$defs/RegistryAuthModeV1"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ]
+    },
+    "RegistryAuthModeV1": {
+      "description": "Authentication mechanisms advertised by a registry.",
+      "type": "string",
+      "enum": [
+        "anonymous-read",
+        "static-token",
+        "oidc-pkce",
+        "device-authorization",
+        "workload-identity"
+      ]
+    },
+    "RegistryCapabilitiesV1": {
+      "description": "Additive feature flags used for client feature detection.",
+      "type": "object",
+      "properties": {
+        "mirrors": {
+          "type": "boolean"
+        },
+        "private_packages": {
+          "type": "boolean"
+        },
+        "public_read": {
+          "type": "boolean"
+        },
+        "publish": {
+          "type": "boolean"
+        },
+        "static_export": {
+          "type": "boolean"
+        },
+        "yank": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "public_read",
+        "publish",
+        "yank",
+        "private_packages",
+        "static_export",
+        "mirrors"
+      ]
+    },
+    "RegistryEndpointsV1": {
+      "description": "Stable endpoints advertised by a registry.",
+      "type": "object",
+      "properties": {
+        "checkpoint": {
+          "type": "string"
+        },
+        "package_template": {
+          "type": "string"
+        },
+        "publish": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sparse_index_template": {
+          "type": "string"
+        },
+        "yank": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "sparse_index_template",
+        "package_template",
+        "checkpoint"
+      ]
+    },
+    "RegistryLimitsV1": {
+      "description": "Server-enforced package/archive limits.",
+      "type": "object",
+      "properties": {
+        "max_archive_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_compression_ratio": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_expanded_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_files": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_path_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "max_archive_bytes",
+        "max_expanded_bytes",
+        "max_files",
+        "max_path_bytes",
+        "max_compression_ratio"
+      ]
+    },
+    "RegistrySigningKeyStateV1": {
+      "description": "Registry metadata-signing key state.",
+      "type": "string",
+      "enum": [
+        "active",
+        "retired"
+      ]
+    },
+    "RegistrySigningKeyV1": {
+      "description": "Public metadata-signing key descriptor.",
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "type": "string"
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "public_key_multibase": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/RegistrySigningKeyStateV1"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key_id",
+        "algorithm",
+        "public_key_multibase",
+        "state"
+      ]
+    }
+  }
+}

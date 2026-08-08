@@ -77,15 +77,15 @@ pub use oci::{
 };
 pub use registry_protocol_v1::{
     REGISTRY_ARCHIVE_MANIFEST_SCHEMA_V1, REGISTRY_CHECKPOINT_SCHEMA_V1,
-    REGISTRY_DISCOVERY_SCHEMA_V1, REGISTRY_INDEX_RECORD_SCHEMA_V1, REGISTRY_PROTOCOL_ERROR_SCHEMA_V1,
-    REGISTRY_PROTOCOL_V1, REGISTRY_PUBLISH_REQUEST_SCHEMA_V1, RegistryArchiveEntryKindV1,
-    RegistryArchiveEntryV1, RegistryArchiveFormatV1, RegistryArchiveManifestV1,
-    RegistryArchiveReferenceV1, RegistryAuthDescriptorV1, RegistryAuthModeV1,
-    RegistryCapabilitiesV1, RegistryCheckpointV1, RegistryDependencyV1, RegistryDiscoveryV1,
-    RegistryEndpointsV1, RegistryIndexRecordV1, RegistryLifecycleStateV1, RegistryLimitsV1,
-    RegistryProtocolErrorCodeV1, RegistryProtocolErrorV1, RegistryProtocolV1Error,
-    RegistryPublishRequestV1, RegistrySigningKeyStateV1, RegistrySigningKeyV1,
-    RegistryVisibilityV1,
+    REGISTRY_DISCOVERY_SCHEMA_V1, REGISTRY_INDEX_RECORD_SCHEMA_V1,
+    REGISTRY_PROTOCOL_ERROR_SCHEMA_V1, REGISTRY_PROTOCOL_V1, REGISTRY_PUBLISH_REQUEST_SCHEMA_V1,
+    RegistryArchiveEntryKindV1, RegistryArchiveEntryV1, RegistryArchiveFormatV1,
+    RegistryArchiveManifestV1, RegistryArchiveReferenceV1, RegistryAuthDescriptorV1,
+    RegistryAuthModeV1, RegistryCapabilitiesV1, RegistryCheckpointV1, RegistryDependencyV1,
+    RegistryDiscoveryV1, RegistryEndpointsV1, RegistryIndexRecordV1, RegistryLifecycleStateV1,
+    RegistryLimitsV1, RegistryProtocolErrorCodeV1, RegistryProtocolErrorV1,
+    RegistryProtocolV1Error, RegistryPublishRequestV1, RegistrySigningKeyStateV1,
+    RegistrySigningKeyV1, RegistryVisibilityV1,
 };
 pub use vcs::Vcs;
 pub use version::{Requirement, VersionScheme};
