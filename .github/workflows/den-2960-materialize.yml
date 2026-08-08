@@ -17,24 +17,24 @@ concurrency:
 jobs:
   materialize:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Check out exact bootstrap branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: agent/den-2960-canonical-root-target-contract
-          fetch-depth: 2
+          fetch-depth: 3
           persist-credentials: true
           show-progress: false
 
-      - name: Verify bootstrap parent and scope
+      - name: Verify bootstrap ancestry and scope
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "d1bf8ef7c88a75292cbe8d697bfd269f30d62e2b"
-          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/den-2960-materialize.yml"
+          test "$(git merge-base HEAD d1bf8ef7c88a75292cbe8d697bfd269f30d62e2b)" = "d1bf8ef7c88a75292cbe8d697bfd269f30d62e2b"
+          test "$(git diff --name-only d1bf8ef7c88a75292cbe8d697bfd269f30d62e2b..HEAD)" = ".github/workflows/den-2960-materialize.yml"
 
-      - name: Apply narrow contract repair
+      - name: Apply narrow manifest contract repair
         shell: bash
         run: |
           set -euo pipefail
@@ -47,167 +47,190 @@ jobs:
                   raise SystemExit(f"{label}: expected one match, found {count}")
               return text.replace(old, new, 1)
 
-          manifest_path = Path("src/manifest.rs")
-          manifest = manifest_path.read_text()
+          path = Path("src/manifest.rs")
+          text = path.read_text()
 
-          manifest = replace_once(
-              manifest,
-              '''    /// Published package name for this target. Defaults to
-    /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to
-    /// break out of the suffix convention when an ecosystem expects a
-    /// different spelling.
-''',
-              '''    /// Published package name for this target. Non-root targets default to
-    /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may
-    /// override that convention here. A whole-repository target (`dir = "."`)
-    /// always publishes as the root `package.name`; omit `name` there or repeat
-    /// the canonical root name. A different root-target name is invalid.
-''',
-              "target-name docs",
+          old = (
+              "    /// Published package name for this target. Defaults to\n"
+              "    /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to\n"
+              "    /// break out of the suffix convention when an ecosystem expects a\n"
+              "    /// different spelling.\n"
           )
-
-          manifest = replace_once(
-              manifest,
-              '''            let published_name = target
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("{}-{name}", self.package.name));
-''',
-              '''            let published_name = if target.dir == "." {
-                if let Some(explicit) = target.name.as_deref()
-                    && explicit != self.package.name
-                {
-                    return Err(ManifestError::InvalidTarget(
-                        name.clone(),
-                        format!(
-                            "whole-repository target publishes as canonical package `{}`; omit `name` or set it to that value, not `{explicit}`",
-                            self.package.name
-                        ),
-                    ));
-                }
-                self.package.name.clone()
-            } else {
-                target
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| format!("{}-{name}", self.package.name))
-            };
-''',
-              "published-name computation",
+          new = (
+              "    /// Published package name for this target. Non-root targets default to\n"
+              "    /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may\n"
+              "    /// override that convention here. A whole-repository target (`dir = \\\".\\\"`)\n"
+              "    /// always publishes as the root `package.name`; omit `name` there or repeat\n"
+              "    /// the canonical root name. A different root-target name is invalid.\n"
           )
+          text = replace_once(text, old, new, "target-name docs")
 
-          manifest = replace_once(
-              manifest,
-              '''            if published_name == self.package.name {
-''',
-              '''            if target.dir != "." && published_name == self.package.name {
-''',
+          old = (
+              "            let published_name = target\n"
+              "                .name\n"
+              "                .clone()\n"
+              "                .unwrap_or_else(|| format!(\\\"{}-{name}\\\", self.package.name));\n"
+          )
+          new = (
+              "            let published_name = if target.dir == \\\".\\\" {\n"
+              "                if let Some(explicit) = target.name.as_deref()\n"
+              "                    && explicit != self.package.name\n"
+              "                {\n"
+              "                    return Err(ManifestError::InvalidTarget(\n"
+              "                        name.clone(),\n"
+              "                        format!(\n"
+              "                            \\\"whole-repository target publishes as canonical package `{}`; omit `name` or set it to that value, not `{explicit}`\\\",\n"
+              "                            self.package.name\n"
+              "                        ),\n"
+              "                    ));\n"
+              "                }\n"
+              "                self.package.name.clone()\n"
+              "            } else {\n"
+              "                target\n"
+              "                    .name\n"
+              "                    .clone()\n"
+              "                    .unwrap_or_else(|| format!(\\\"{}-{name}\\\", self.package.name))\n"
+              "            };\n"
+          )
+          text = replace_once(text, old, new, "published-name computation")
+
+          text = replace_once(
+              text,
+              "            if published_name == self.package.name {\n",
+              "            if target.dir != \\\".\\\" && published_name == self.package.name {\n",
               "non-root collision guard",
           )
 
-          manifest = replace_once(
-              manifest,
-              '''    /// The package name a target publishes under: its explicit `name`, else
-    /// the `<name>-<target>` convention (`fiducia-clients` + `java` →
-    /// `fiducia-clients-java`).
-    pub fn target_package_name(&self, target: &str) -> Option<String> {
-        self.targets.get(target).map(|t| {
-            t.name
-                .clone()
-                .unwrap_or_else(|| format!("{}-{}", self.package.name, target))
-        })
-    }
-''',
-              '''    /// The package name a target publishes under. A whole-repository target
-    /// (`dir = "."`) is the canonical root package and therefore uses
-    /// `package.name`; non-root targets use their explicit `name` or the
-    /// `<name>-<target>` convention (`fiducia-clients` + `java` →
-    /// `fiducia-clients-java`).
-    pub fn target_package_name(&self, target: &str) -> Option<String> {
-        self.targets.get(target).map(|section| {
-            if section.dir == "." {
-                self.package.name.clone()
-            } else {
-                section
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| format!("{}-{}", self.package.name, target))
-            }
-        })
-    }
-''',
-              "target_package_name",
+          old = (
+              "    /// The package name a target publishes under: its explicit `name`, else\n"
+              "    /// the `<name>-<target>` convention (`fiducia-clients` + `java` →\n"
+              "    /// `fiducia-clients-java`).\n"
+              "    pub fn target_package_name(&self, target: &str) -> Option<String> {\n"
+              "        self.targets.get(target).map(|t| {\n"
+              "            t.name\n"
+              "                .clone()\n"
+              "                .unwrap_or_else(|| format!(\\\"{}-{}\\\", self.package.name, target))\n"
+              "        })\n"
+              "    }\n"
           )
-
-          manifest = replace_once(
-              manifest,
-              '''                    package: section
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| format!("{}-{target}", self.package.name)),
-''',
-              '''                    package: self
-                        .target_package_name(target)
-                        .expect("target iterated from manifest exists"),
-''',
-              "nix target package identity",
+          new = (
+              "    /// The package name a target publishes under. A whole-repository target\n"
+              "    /// (`dir = \\\".\\\"`) is the canonical root package and therefore uses\n"
+              "    /// `package.name`; non-root targets use their explicit `name` or the\n"
+              "    /// `<name>-<target>` convention (`fiducia-clients` + `java` →\n"
+              "    /// `fiducia-clients-java`).\n"
+              "    pub fn target_package_name(&self, target: &str) -> Option<String> {\n"
+              "        self.targets.get(target).map(|section| {\n"
+              "            if section.dir == \\\".\\\" {\n"
+              "                self.package.name.clone()\n"
+              "            } else {\n"
+              "                section\n"
+              "                    .name\n"
+              "                    .clone()\n"
+              "                    .unwrap_or_else(|| format!(\\\"{}-{}\\\", self.package.name, target))\n"
+              "            }\n"
+              "        })\n"
+              "    }\n"
           )
+          text = replace_once(text, old, new, "target_package_name")
 
-          manifest_path.write_text(manifest)
+          old = (
+              "                    package: section\n"
+              "                        .name\n"
+              "                        .clone()\n"
+              "                        .unwrap_or_else(|| format!(\\\"{}-{target}\\\", self.package.name)),\n"
+          )
+          new = (
+              "                    package: self\n"
+              "                        .target_package_name(target)\n"
+              "                        .expect(\\\"target iterated from manifest exists\\\"),\n"
+          )
+          text = replace_once(text, old, new, "nix target package identity")
 
-          roundtrip_path = Path("tests/roundtrip.rs")
-          roundtrip = roundtrip_path.read_text()
-          marker = '''\n#[test]\nfn the_per_target_manifest_is_a_standalone_single_language_package() {\n'''
-          if roundtrip.count(marker) != 1:
-              raise SystemExit(f"test insertion marker: expected one match, found {roundtrip.count(marker)}")
-          tests = r'''
-
-#[test]
-fn whole_repository_target_uses_the_canonical_root_identity() {
-    let root = format!("{CLIENTS}\n[targets.repository]\ndir = \".\"\n");
-    let manifest = Manifest::parse(&root).unwrap();
-    assert_eq!(
-        manifest.target_package_name("repository").as_deref(),
-        Some("fiducia-clients")
-    );
-    assert!(manifest.target_package_names().contains(&(
-        "repository".to_string(),
-        "fiducia-clients".to_string()
-    )));
-
-    let packaged = manifest
-        .manifest_for_target("repository")
-        .expect("repository target exists");
-    assert_eq!(packaged.package.name, "fiducia-clients");
-    assert_eq!(packaged.full_name(), "fiducia/fiducia-clients");
-    assert!(!packaged.is_polyglot());
-
-    let explicit_canonical = format!(
-        "{CLIENTS}\n[targets.repository]\ndir = \".\"\nname = \"fiducia-clients\"\n"
-    );
-    let manifest = Manifest::parse(&explicit_canonical).unwrap();
-    assert_eq!(
-        manifest.target_package_name("repository").as_deref(),
-        Some("fiducia-clients")
-    );
-}
-
-#[test]
-fn whole_repository_target_rejects_a_conflicting_explicit_name() {
-    let conflicting = format!(
-        "{CLIENTS}\n[targets.repository]\ndir = \".\"\nname = \"fiducia-clients-repository\"\n"
-    );
-    let error = Manifest::parse(&conflicting)
-        .expect_err("a root target cannot advertise an identity the packer will not publish");
-    let message = error.to_string();
-    assert!(message.contains("whole-repository target"), "{message}");
-    assert!(message.contains("fiducia-clients"), "{message}");
-    assert!(message.contains("fiducia-clients-repository"), "{message}");
-}
-'''
-          roundtrip = roundtrip.replace(marker, tests + marker, 1)
-          roundtrip_path.write_text(roundtrip)
+          path.write_text(text)
           PY
+
+      - name: Add focused root-target contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > tests/root_target_identity.rs <<'EOF'
+          use zed_interfaces::manifest::{Manifest, ManifestError};
+
+          const BASE: &str = r#"
+          [package]
+          org = "fiducia"
+          name = "fiducia-clients"
+          version = "1.1.2"
+
+          [package.repository]
+          vcs = "git"
+          url = "https://github.com/fiducia-cloud/fiducia-clients"
+
+          [targets.nodejs]
+          dir = "clients/ts"
+          name = "fiducia-js-sdk"
+          adapter = "node"
+          "#;
+
+          fn with_repository(name: Option<&str>) -> String {
+              let mut manifest = format!("{BASE}\n[targets.repository]\ndir = \".\"\n");
+              if let Some(name) = name {
+                  manifest.push_str(&format!("name = \"{name}\"\n"));
+              }
+              manifest
+          }
+
+          #[test]
+          fn whole_repository_target_uses_canonical_root_identity() {
+              for source in [with_repository(None), with_repository(Some("fiducia-clients"))] {
+                  let manifest = Manifest::parse(&source).unwrap();
+                  assert_eq!(
+                      manifest.target_package_name("repository").as_deref(),
+                      Some("fiducia-clients")
+                  );
+                  assert!(manifest.target_package_names().contains(&(
+                      "repository".to_string(),
+                      "fiducia-clients".to_string()
+                  )));
+
+                  let packaged = manifest
+                      .manifest_for_target("repository")
+                      .expect("repository target exists");
+                  assert_eq!(packaged.package.name, "fiducia-clients");
+                  assert_eq!(packaged.full_name(), "fiducia/fiducia-clients");
+                  assert!(!packaged.is_polyglot());
+              }
+          }
+
+          #[test]
+          fn whole_repository_target_rejects_conflicting_explicit_name() {
+              let error = Manifest::parse(&with_repository(Some("fiducia-clients-repository")))
+                  .expect_err("root target cannot advertise an identity the packer will not publish");
+              match error {
+                  ManifestError::InvalidTarget(target, reason) => {
+                      assert_eq!(target, "repository");
+                      assert!(reason.contains("whole-repository target"), "{reason}");
+                      assert!(reason.contains("fiducia-clients"), "{reason}");
+                      assert!(reason.contains("fiducia-clients-repository"), "{reason}");
+                  }
+                  other => panic!("unexpected error: {other}"),
+              }
+          }
+
+          #[test]
+          fn non_root_explicit_target_name_remains_authoritative() {
+              let manifest = Manifest::parse(BASE).unwrap();
+              assert_eq!(
+                  manifest.target_package_name("nodejs").as_deref(),
+                  Some("fiducia-js-sdk")
+              );
+              let packaged = manifest
+                  .manifest_for_target("nodejs")
+                  .expect("nodejs target exists");
+              assert_eq!(packaged.package.name, "fiducia-js-sdk");
+          }
+          EOF
 
           rm .github/workflows/den-2960-materialize.yml
           cargo fmt --all
@@ -216,8 +239,8 @@ fn whole_repository_target_rejects_a_conflicting_explicit_name() {
         shell: bash
         run: |
           set -euo pipefail
+          cargo test --locked --test root_target_identity
           cargo test --locked --test roundtrip target
-          cargo test --locked --test roundtrip whole_repository_target
           cargo check --locked --lib
           git diff --check
 
@@ -227,8 +250,8 @@ fn whole_repository_target_rejects_a_conflicting_explicit_name() {
           set -euo pipefail
           git config user.name "DEN-2960 materializer"
           git config user.email "actions@users.noreply.github.com"
-          git add src/manifest.rs tests/roundtrip.rs .github/workflows/den-2960-materialize.yml
-          expected=$'.github/workflows/den-2960-materialize.yml\nsrc/manifest.rs\ntests/roundtrip.rs'
+          git add -A
+          expected=$'.github/workflows/den-2960-materialize.yml\nsrc/manifest.rs\ntests/root_target_identity.rs'
           test "$(git diff --cached --name-only)" = "$expected"
           git commit -m "fix(DEN-2960): align canonical root target identity"
           git push origin HEAD:agent/den-2960-canonical-root-target-contract
