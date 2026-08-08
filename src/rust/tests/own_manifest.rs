@@ -25,6 +25,25 @@ fn the_repository_manifest_is_valid() {
 }
 
 #[test]
+fn the_whole_repository_target_keeps_the_canonical_package_name() {
+    // DEN-2960 settled which side of this was wrong. The model used to reject a
+    // root target whose published name equalled `package.name`, while the CLI
+    // published exactly that — so a manifest could be valid and unpublishable at
+    // the same time (zed-cli#241). The model now requires the canonical name
+    // here, so the root slice must carry no divergent `name`.
+    let manifest = own_manifest();
+    let repository = manifest
+        .targets
+        .get("repository")
+        .expect("the whole-repository slice");
+    assert_eq!(repository.dir, ".");
+    assert!(
+        repository.name.is_none() || repository.name.as_deref() == Some("zed-interfaces"),
+        "the root target publishes as the canonical package name, not a suffixed one"
+    );
+}
+
+#[test]
 fn every_language_slice_is_its_own_target_with_an_isolated_root() {
     let manifest = own_manifest();
     for (target, dir, adapter) in [
