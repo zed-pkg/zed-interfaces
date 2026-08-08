@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::language::{Ecosystem, Language};
+use crate::native_host::{NativeHost, ReleaseChannel, UniversalHost};
 use crate::nix::NixExportSection;
 use crate::vcs::Vcs;
 use crate::version::{Requirement, VersionScheme};
@@ -354,13 +355,35 @@ pub struct NativeReleaseSection {
     /// for example `clients/go/v{version}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag_format: Option<String>,
-    /// Optional copies in package registries run by source forges. The native
-    /// registry remains the canonical ecosystem destination; these mirrors
-    /// use the same native package format and version.
+    /// Optional copies in package registries run by source forges or
+    /// enterprise binary repositories. The native registry remains the
+    /// canonical ecosystem destination; these mirrors use the same native
+    /// package format and version.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub forge: Vec<ForgeRegistry>,
+    /// Default release track for this route. Overridden per release by
+    /// `zed release --channel`; declared here when a target is *only* ever
+    /// published to a pre-release track — a client generated from an unstable
+    /// API surface, say.
+    ///
+    /// The version is not spelled here. How a channel becomes a version string
+    /// is the host's business and differs per ecosystem, so it is resolved by
+    /// [`crate::native_host::NativeHost::channel_route`] at plan time.
+    #[serde(default, skip_serializing_if = "ReleaseChannel::is_default")]
+    pub channel: ReleaseChannel,
 }
 
+/// The ecosystem registry a target is mirrored into.
+///
+/// One variant per registry zed can route to, including the three that store
+/// no artifact — Zig, plain VCS, and Go's proxy — because a release plan still
+/// has to name where those packages come from.
+///
+/// This enum is the *manifest token*. Everything else about a registry — its
+/// URLs, wire protocol, auth scheme, and how it spells a release candidate —
+/// lives on [`crate::native_host::NativeHost`], reached through
+/// [`NativeRegistry::host`]. Keeping the token separate from the host facts is
+/// what lets the manifest spelling stay frozen while endpoints move.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -372,6 +395,9 @@ pub enum NativeRegistry {
     PubDev,
     #[serde(rename = "pypi")]
     PyPi,
+    /// test.pypi.org, a full mirror used as a rehearsal track.
+    #[serde(rename = "test-pypi")]
+    TestPyPi,
     MavenCentral,
     #[serde(rename = "rubygems")]
     RubyGems,
@@ -379,8 +405,49 @@ pub enum NativeRegistry {
     NuGet,
     Packagist,
     GoModules,
+    #[serde(rename = "hex")]
+    Hex,
+    Hackage,
+    /// Curated Hackage snapshots. Resolve-only: nothing publishes here.
+    Stackage,
+    Clojars,
+    #[serde(rename = "luarocks")]
+    LuaRocks,
+    #[serde(rename = "cpan")]
+    Cpan,
+    #[serde(rename = "cran")]
+    Cran,
+    ConanCenter,
+    SwiftPackageIndex,
+    #[serde(rename = "cocoapods")]
+    CocoaPods,
+    JuliaGeneral,
+    #[serde(rename = "opam")]
+    Opam,
+    #[serde(rename = "dub")]
+    Dub,
+    #[serde(rename = "nimble")]
+    Nimble,
+    Shards,
+    Racket,
+    #[serde(rename = "powershell-gallery")]
+    PowerShellGallery,
+    /// Zig, which has no registry: dependencies are URLs pinned by hash.
+    #[serde(rename = "zig")]
+    Zig,
+    /// A plain Git or Mercurial remote on GitHub, GitLab, or Bitbucket —
+    /// first-class in zed, and a complete route on its own.
+    #[serde(rename = "vcs")]
+    Vcs,
 }
 
+/// A multi-format registry that re-serves a canonical registry's wire protocol
+/// at its own base URL: a source forge's package registry, or an enterprise
+/// binary repository that proxies public registries and hosts private ones.
+///
+/// These add no protocol of their own, which is why they are a separate axis
+/// from [`NativeRegistry`] — an org proxying npm through Artifactory needs a
+/// different URL and credential, not a different client.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -389,6 +456,11 @@ pub enum ForgeRegistry {
     GithubPackages,
     GitlabPackages,
     BitbucketPackages,
+    Artifactory,
+    Nexus,
+    AwsCodeartifact,
+    Cloudsmith,
+    AzureArtifacts,
 }
 
 impl ForgeRegistry {
@@ -397,35 +469,37 @@ impl ForgeRegistry {
             Self::GithubPackages => "github-packages",
             Self::GitlabPackages => "gitlab-packages",
             Self::BitbucketPackages => "bitbucket-packages",
+            Self::Artifactory => "artifactory",
+            Self::Nexus => "nexus",
+            Self::AwsCodeartifact => "aws-codeartifact",
+            Self::Cloudsmith => "cloudsmith",
+            Self::AzureArtifacts => "azure-artifacts",
         }
     }
 
-    /// Package-manager protocols currently documented by each forge. Failing
-    /// closed here prevents a manifest from promising e.g. Cargo support in
-    /// GitHub Packages when that registry has no Cargo endpoint.
-    pub fn supports(self, native: NativeRegistry) -> bool {
+    /// The mirror as [`crate::native_host::UniversalHost`] models it, which is
+    /// where the protocol compatibility matrix and URL rewriting live.
+    pub fn universal_host(self) -> UniversalHost {
         match self {
-            Self::GithubPackages => matches!(
-                native,
-                NativeRegistry::Npm
-                    | NativeRegistry::MavenCentral
-                    | NativeRegistry::RubyGems
-                    | NativeRegistry::NuGet
-            ),
-            Self::GitlabPackages => matches!(
-                native,
-                NativeRegistry::Npm
-                    | NativeRegistry::PyPi
-                    | NativeRegistry::MavenCentral
-                    | NativeRegistry::RubyGems
-                    | NativeRegistry::NuGet
-                    | NativeRegistry::Packagist
-                    | NativeRegistry::GoModules
-            ),
-            Self::BitbucketPackages => {
-                matches!(native, NativeRegistry::Npm | NativeRegistry::MavenCentral)
-            }
+            Self::GithubPackages => UniversalHost::GithubPackages,
+            Self::GitlabPackages => UniversalHost::GitlabPackages,
+            Self::BitbucketPackages => UniversalHost::BitbucketPackages,
+            Self::Artifactory => UniversalHost::Artifactory,
+            Self::Nexus => UniversalHost::Nexus,
+            Self::AwsCodeartifact => UniversalHost::AwsCodeArtifact,
+            Self::Cloudsmith => UniversalHost::Cloudsmith,
+            Self::AzureArtifacts => UniversalHost::AzureArtifacts,
         }
+    }
+
+    /// Whether this mirror serves the wire protocol the canonical registry
+    /// uses. Failing closed prevents a manifest from promising e.g. Cargo
+    /// support in GitHub Packages when that registry has no Cargo endpoint.
+    ///
+    /// Keyed on the *protocol*, not the registry, so a mirror that already
+    /// serves Maven automatically serves Clojars-shaped artifacts too.
+    pub fn supports(self, native: NativeRegistry) -> bool {
+        self.universal_host().supports(native.host().protocol())
     }
 }
 
@@ -442,11 +516,67 @@ impl NativeRegistry {
             Self::CratesIo => "crates-io",
             Self::PubDev => "pub.dev",
             Self::PyPi => "pypi",
+            Self::TestPyPi => "test-pypi",
             Self::MavenCentral => "maven-central",
             Self::RubyGems => "rubygems",
             Self::NuGet => "nuget",
             Self::Packagist => "packagist",
             Self::GoModules => "go-modules",
+            Self::Hex => "hex",
+            Self::Hackage => "hackage",
+            Self::Stackage => "stackage",
+            Self::Clojars => "clojars",
+            Self::LuaRocks => "luarocks",
+            Self::Cpan => "cpan",
+            Self::Cran => "cran",
+            Self::ConanCenter => "conan-center",
+            Self::SwiftPackageIndex => "swift-package-index",
+            Self::CocoaPods => "cocoapods",
+            Self::JuliaGeneral => "julia-general",
+            Self::Opam => "opam",
+            Self::Dub => "dub",
+            Self::Nimble => "nimble",
+            Self::Shards => "shards",
+            Self::Racket => "racket",
+            Self::PowerShellGallery => "powershell-gallery",
+            Self::Zig => "zig",
+            Self::Vcs => "vcs",
+        }
+    }
+
+    /// The host this route resolves to, which carries the endpoints, wire
+    /// protocol, auth scheme, and release-channel rules.
+    pub fn host(self) -> NativeHost {
+        match self {
+            Self::Npm => NativeHost::Npm,
+            Self::CratesIo => NativeHost::CratesIo,
+            Self::PubDev => NativeHost::PubDev,
+            Self::PyPi => NativeHost::PyPi,
+            Self::TestPyPi => NativeHost::TestPyPi,
+            Self::MavenCentral => NativeHost::MavenCentral,
+            Self::RubyGems => NativeHost::RubyGems,
+            Self::NuGet => NativeHost::NuGet,
+            Self::Packagist => NativeHost::Packagist,
+            Self::GoModules => NativeHost::GoProxy,
+            Self::Hex => NativeHost::Hex,
+            Self::Hackage => NativeHost::Hackage,
+            Self::Stackage => NativeHost::Stackage,
+            Self::Clojars => NativeHost::Clojars,
+            Self::LuaRocks => NativeHost::LuaRocks,
+            Self::Cpan => NativeHost::Cpan,
+            Self::Cran => NativeHost::Cran,
+            Self::ConanCenter => NativeHost::ConanCenter,
+            Self::SwiftPackageIndex => NativeHost::SwiftPackageIndex,
+            Self::CocoaPods => NativeHost::CocoaPods,
+            Self::JuliaGeneral => NativeHost::JuliaGeneral,
+            Self::Opam => NativeHost::Opam,
+            Self::Dub => NativeHost::Dub,
+            Self::Nimble => NativeHost::Nimble,
+            Self::Shards => NativeHost::Shards,
+            Self::Racket => NativeHost::Racket,
+            Self::PowerShellGallery => NativeHost::PowerShellGallery,
+            Self::Zig => NativeHost::Zig,
+            Self::Vcs => NativeHost::Vcs,
         }
     }
 
@@ -455,12 +585,46 @@ impl NativeRegistry {
             Self::Npm => is_valid_npm_package(package),
             Self::CratesIo => is_valid_crates_package(package),
             Self::PubDev => is_valid_pubdev_package(package),
-            Self::PyPi => is_valid_pypi_package(package),
+            Self::PyPi | Self::TestPyPi => is_valid_pypi_package(package),
             Self::MavenCentral => is_valid_maven_package(package),
             Self::RubyGems => is_valid_rubygems_package(package),
             Self::NuGet => is_valid_nuget_package(package),
             Self::Packagist => is_valid_packagist_package(package),
             Self::GoModules => is_valid_go_module(package),
+            // Clojars is Maven coordinates, but its own tooling writes them
+            // `group/artifact`, so accept either separator rather than making
+            // one of the two spellings a validation failure.
+            Self::Clojars => is_valid_maven_package(&package.replacen('/', ":", 1)),
+            // Hex, opam, Nimble, Shards, and Zig all require lowercase.
+            // Accepting an uppercase name here would produce a route that the
+            // host rejects at upload time, long after the plan was reviewed.
+            Self::Hex | Self::Opam | Self::Nimble | Self::Shards | Self::Zig => {
+                is_valid_lower_identity(package)
+            }
+            // LuaRocks rock names and Conan references are lowercase by rule.
+            Self::LuaRocks | Self::ConanCenter => is_valid_lower_identity(package),
+            // CocoaPods is not. `Alamofire` is the pod; `alamofire` 404s on
+            // Trunk. Lowercasing it produces a route that resolves to nothing.
+            Self::CocoaPods => is_valid_simple_identity(package),
+            Self::Hackage
+            | Self::Stackage
+            | Self::Cpan
+            | Self::Cran
+            | Self::JuliaGeneral
+            | Self::Racket
+            | Self::PowerShellGallery => is_valid_simple_identity(package),
+            // SE-0292 identifies a package as `scope.name`; DUB uses
+            // `package:subpackage`.
+            Self::SwiftPackageIndex => package.split_once('.').is_some_and(|(scope, name)| {
+                is_valid_simple_identity(scope) && is_valid_simple_identity(name)
+            }),
+            Self::Dub => match package.split_once(':') {
+                Some((root, sub)) => is_valid_lower_identity(root) && is_valid_lower_identity(sub),
+                None => is_valid_lower_identity(package),
+            },
+            // A VCS route names a repository, not a registry package, so it
+            // carries the same shape a Go module path does.
+            Self::Vcs => is_valid_go_module(package),
         };
         if valid {
             Ok(())
@@ -474,8 +638,13 @@ impl NativeRegistry {
 
     fn canonical_package(self, package: &str) -> String {
         match self {
-            Self::PyPi => normalize_pypi_package(package),
-            Self::NuGet => package.to_ascii_lowercase(),
+            Self::PyPi | Self::TestPyPi => normalize_pypi_package(package),
+            // These hosts compare names case-insensitively, so two routes that
+            // differ only in case are one destination and must collide.
+            Self::NuGet | Self::PowerShellGallery | Self::LuaRocks | Self::ConanCenter => {
+                package.to_ascii_lowercase()
+            }
+            Self::Clojars => package.replacen('/', ":", 1),
             _ => package.to_string(),
         }
     }
@@ -485,20 +654,10 @@ impl NativeRegistry {
     /// The two enums describe the same thing from opposite directions —
     /// `NativeRegistry` is where a slice is *mirrored to*, `Ecosystem` is what a
     /// consumer needs to *install* it — so a target declaring both must not
-    /// disagree. Mapping them here keeps that check in one place instead of
-    /// letting each caller re-derive it.
+    /// disagree. Delegating to the host keeps one table rather than two that
+    /// can drift.
     pub fn ecosystem(self) -> Ecosystem {
-        match self {
-            Self::Npm => Ecosystem::Npm,
-            Self::CratesIo => Ecosystem::Cargo,
-            Self::PubDev => Ecosystem::Pub,
-            Self::PyPi => Ecosystem::Pypi,
-            Self::MavenCentral => Ecosystem::Jvm,
-            Self::RubyGems => Ecosystem::Gem,
-            Self::NuGet => Ecosystem::Nuget,
-            Self::Packagist => Ecosystem::Composer,
-            Self::GoModules => Ecosystem::Gomod,
-        }
+        self.host().ecosystem()
     }
 }
 
@@ -638,6 +797,30 @@ fn is_valid_packagist_package(value: &str) -> bool {
         return false;
     };
     !package.contains('/') && is_valid_npm_component(vendor) && is_valid_npm_component(package)
+}
+
+/// The conservative identity shape shared by registries whose naming rules are
+/// supersets of "starts and ends alphanumeric, ASCII alphanumerics plus `.`,
+/// `_`, or `-` in between": Hackage, CPAN, CRAN, Julia, Racket, the PowerShell
+/// Gallery.
+///
+/// Deliberately narrower than several of them allow. A name this rejects can
+/// still be published by hand; a name it accepts is portable across all of
+/// them, which is what a *route* declaration needs — the point is to fail while
+/// a plan is being reviewed rather than at upload time.
+fn is_valid_simple_identity(value: &str) -> bool {
+    !value.is_empty()
+        && value.as_bytes()[0].is_ascii_alphanumeric()
+        && value.as_bytes()[value.len() - 1].is_ascii_alphanumeric()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+/// [`is_valid_simple_identity`] for the registries that additionally reject
+/// uppercase — Hex, opam, Nimble, Shards, Zig, LuaRocks, Conan, CocoaPods.
+fn is_valid_lower_identity(value: &str) -> bool {
+    !value.bytes().any(|byte| byte.is_ascii_uppercase()) && is_valid_simple_identity(value)
 }
 
 fn is_valid_go_module(value: &str) -> bool {

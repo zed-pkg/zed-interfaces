@@ -1,5 +1,8 @@
-//! Regenerates the JSON Schemas under `schemas/`, which the non-Rust
-//! client libraries in `zed-clients` use for codegen and validation.
+//! Regenerates the JSON Schemas under `schemas/`. They are the source of
+//! truth for every non-Rust consumer: `codegen/generate.mjs` turns the
+//! front-end-facing subset (see `schemas/index.json`) into `src/dart/` and
+//! `src/ts/`, and the client libraries in `zed-clients` codegen/validate
+//! against the same files.
 //!
 //! Run with: `cargo run --example generate_schemas`
 
@@ -139,7 +142,10 @@ fn reject_explicit_nulls(value: &mut Value) {
 }
 
 fn main() {
-    let dir = Path::new("schemas");
+    // Manifest-relative (this crate is `src/rust/`, the schemas are at the
+    // repository root) so the output is the same from any working directory.
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas");
+    let dir = dir.as_path();
     fs::create_dir_all(dir).expect("schemas dir");
 
     write_dependency_graph_schema(dir);
@@ -153,6 +159,10 @@ fn main() {
     write::<zed_interfaces::NixExportPlan>(dir, "nix-export-plan");
     write::<zed_interfaces::NixAdapterRecord>(dir, "nix-adapter-record");
     write::<zed_interfaces::NativeRegistryAdapterRecord>(dir, "native-registry-adapter-record");
+    // The resolved (host, channel, version, endpoint) destination a release
+    // publishes to. Emitted so non-Rust release tooling reads the same shape
+    // `zed release plan --json` prints.
+    write::<zed_interfaces::ChannelRoute>(dir, "channel-route");
     write::<zed_interfaces::NativeDependencyLock>(dir, "native-dependency-lock");
     write::<zed_interfaces::OciAdapterRecord>(dir, "oci-adapter-record");
     write::<zed_interfaces::registry::PackageMetadata>(dir, "package-metadata");

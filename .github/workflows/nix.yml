@@ -7,7 +7,7 @@ on:
       - Cargo.toml
       - Cargo.lock
       - src/**
-      - src/rust/src/rust/src/rust/examples/**
+      - src/rust/examples/**
       - schemas/**
       - flake.nix
       - flake.lock
@@ -20,7 +20,7 @@ on:
       - Cargo.toml
       - Cargo.lock
       - src/**
-      - src/rust/src/rust/src/rust/examples/**
+      - src/rust/examples/**
       - schemas/**
       - flake.nix
       - flake.lock

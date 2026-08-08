@@ -12,7 +12,7 @@ zed-interfaces/
   src/
     rust/                  the hand-written crate (Cargo.toml lives here)
       lib.rs, manifest.rs, lockfile.rs, …
-      tests/, src/rust/examples/
+      tests/, examples/
     dart/                  generated Dart package (pubspec.yaml, lib/*.dart)
     ts/                    generated TypeScript package (package.json, *.ts)
   Cargo.toml               virtual workspace, members = ["src/rust"]
