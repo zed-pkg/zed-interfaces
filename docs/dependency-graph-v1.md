@@ -124,6 +124,12 @@ There is no partial-redaction mode in v1. Returning a graph with hidden nodes wo
 
 Historical backfill is allowed only when the original lock and immutable registry checkpoint provenance are available. Old manifests must not be resolved against today's index and presented as historical truth.
 
+## Compatibility and schema evolution
+
+The `schema` member is the exact string `zpkg/dependency-graph/v1`; validators reject any other value, including unknown major or minor variants. v1 admits no additive members: every serialized member participates in the digest, so a document carrying members outside this contract is not a v1 document and byte-exact verifiers reject it. Any member addition, removal, or semantic change ships as a new schema string with its own golden fixtures.
+
+Non-verifying consumers may ignore unknown members when reading — the lenient Rust parser does — but no unknown member is authenticated by `graph_digest`, and nothing may be relayed as verified v1 content unless byte-exact verification passed.
+
 ## Validation gates
 
 The Rust contract provides:
@@ -133,6 +139,8 @@ The Rust contract provides:
 - complete/projected metadata invariants;
 - canonical lowercase `sha256:` validation;
 - deterministic normalization and semantic digest verification;
+- byte-exact canonical verification (`parse_verified_canonical`) rejecting unknown members, explicit `null`, duplicate members, non-normative order, and insignificant whitespace;
+- golden conformance vectors under `fixtures/dependency-graph-v1/golden/` — declared, diamond, duplicate-registries, cycle, optional-feature, target-predicate, and projected — with pinned canonical bytes and digests, regenerated only by `generate_schemas` and enforced byte-for-byte by unit tests on every platform;
 - round-trip, ordering, missing-edge, and projection-negative tests.
 
 The first certification runs in `zed-pkg-test/zed-interfaces`. Production promotion to `zed-pkg/zed-interfaces` should pin the certified test commit and retain the same schema bytes.
