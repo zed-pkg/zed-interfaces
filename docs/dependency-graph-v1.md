@@ -92,6 +92,8 @@ Resolution provenance is mandatory:
 
 The graph is emitted from the resolver state that produced the lock. The API must not independently re-resolve metadata and then label the result as the graph for an existing lock.
 
+Dependency cycles are representable and valid in a resolved graph. Normalization, validation, and digesting are set-based — node identity, edge endpoint reference, and normative order — rather than traversal-based, so they terminate deterministically on cyclic input. The committed `cycle` golden fixture pins this behavior.
+
 ## Projections and limits
 
 Target, feature, dependency-kind, and depth filtering produces a new explicit projection. A projected graph carries:
