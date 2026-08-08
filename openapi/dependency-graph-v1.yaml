@@ -245,7 +245,11 @@ components:
         type: string
   responses:
     DependencyGraph:
-      description: Complete graph or explicit projection. Limits never silently truncate it.
+      description: >-
+        Complete graph or explicit projection. Limits never silently truncate
+        it. The three authoritative examples below are the committed declared
+        golden fixture: all three decode to one typed document and one
+        graph_digest, while each representation carries its own strong ETag.
       headers:
         x-zpkg-graph-digest:
           $ref: '#/components/headers/GraphDigest'
@@ -253,20 +257,105 @@ components:
           $ref: '#/components/headers/ETag'
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
+        Content-Disposition:
+          $ref: '#/components/headers/ContentDisposition'
       content:
         application/vnd.zpkg.dependency-graph.v1+json:
           schema:
             $ref: '#/components/schemas/DependencyGraphDocument'
+          example:
+            dependencies:
+              - default_features: true
+                kind: runtime
+                name: corelib
+                optional: false
+                org: acme
+                registry_id: registry:zpkg-primary
+                requirement: ^2
+              - default_features: false
+                features: [tls]
+                kind: runtime
+                name: tlslib
+                optional: true
+                org: acme
+                registry_id: registry:zpkg-primary
+                requirement: ^1.2
+                target: cfg(unix)
+            graph_digest: sha256:a4da2935ea46d23ebdd2f667976e537e111f20ce63c482b4eeeaab0cbee1eee8
+            package:
+              name: app
+              org: acme
+              registry_id: registry:zpkg-primary
+              version: 1.0.0
+            schema: zpkg/dependency-graph/v1
+            view: declared
         application/vnd.zpkg.dependency-graph.v1+yaml:
           schema:
             $ref: '#/components/schemas/DependencyGraphDocument'
+          example: |
+            dependencies:
+            - default_features: true
+              kind: runtime
+              name: corelib
+              optional: false
+              org: acme
+              registry_id: registry:zpkg-primary
+              requirement: ^2
+            - default_features: false
+              features:
+              - tls
+              kind: runtime
+              name: tlslib
+              optional: true
+              org: acme
+              registry_id: registry:zpkg-primary
+              requirement: ^1.2
+              target: cfg(unix)
+            graph_digest: sha256:a4da2935ea46d23ebdd2f667976e537e111f20ce63c482b4eeeaab0cbee1eee8
+            package:
+              name: app
+              org: acme
+              registry_id: registry:zpkg-primary
+              version: 1.0.0
+            schema: zpkg/dependency-graph/v1
+            view: declared
         application/vnd.zpkg.dependency-graph.v1+toml:
           schema:
             $ref: '#/components/schemas/DependencyGraphDocument'
-        text/vnd.graphviz:
+          example: |
+            schema = "zpkg/dependency-graph/v1"
+            view = "declared"
+            graph_digest = "sha256:a4da2935ea46d23ebdd2f667976e537e111f20ce63c482b4eeeaab0cbee1eee8"
+
+            [package]
+            name = "app"
+            org = "acme"
+            registry_id = "registry:zpkg-primary"
+            version = "1.0.0"
+
+            [[dependencies]]
+            default_features = true
+            kind = "runtime"
+            name = "corelib"
+            optional = false
+            org = "acme"
+            registry_id = "registry:zpkg-primary"
+            requirement = "^2"
+
+            [[dependencies]]
+            default_features = false
+            features = ["tls"]
+            kind = "runtime"
+            name = "tlslib"
+            optional = true
+            org = "acme"
+            registry_id = "registry:zpkg-primary"
+            requirement = "^1.2"
+            target = "cfg(unix)"
+        'text/vnd.graphviz; charset=utf-8':
           schema:
             type: string
-        text/vnd.mermaid:
+        'text/vnd.mermaid; charset=utf-8':
           schema:
             type: string
     DependencyGraphHead:
@@ -278,6 +367,33 @@ components:
           $ref: '#/components/headers/ETag'
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
+        Content-Disposition:
+          $ref: '#/components/headers/ContentDisposition'
+    NotModified:
+      description: >-
+        Representation unchanged for the presented If-None-Match validator.
+        Metadata headers match the 200 response; there is no body. Only the
+        representation whose strong ETag matched can produce this status.
+      headers:
+        x-zpkg-graph-digest:
+          $ref: '#/components/headers/GraphDigest'
+        ETag:
+          $ref: '#/components/headers/ETag'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+    UnsupportedView:
+      description: >-
+        Missing or non-declared view selection on the package-version route.
+        That route never serves a resolved graph; exact graphs are addressed
+        only by resolution digest, so there is no package-version-addressed
+        universal resolution.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: unsupported_view
+            message: package-version dependency graphs are declared-view only
     NotFound:
       description: Missing or unauthorized private graph; responses are intentionally indistinguishable.
       headers:
