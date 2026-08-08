@@ -278,10 +278,11 @@ pub struct TargetSection {
     /// `python` or `clients/go`. Must be a safe relative path (no leading `/`,
     /// no `..`) so a target can never escape the package.
     pub dir: String,
-    /// Published package name for this target. Defaults to
-    /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to
-    /// break out of the suffix convention when an ecosystem expects a
-    /// different spelling.
+    /// Published package name for this target. Non-root targets default to
+    /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may
+    /// override that convention here. A whole-repository target (`dir = "."`)
+    /// always publishes as the root `package.name`; omit `name` there or repeat
+    /// the canonical root name. A different root-target name is invalid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// Ecosystem adapter consumers of THIS target should use (`node`, `java`,
@@ -1131,10 +1132,25 @@ impl Manifest {
                     ),
                 ));
             }
-            let published_name = target
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("{}-{name}", self.package.name));
+            let published_name = if target.dir == "." {
+                if let Some(explicit) = target.name.as_deref()
+                    && explicit != self.package.name
+                {
+                    return Err(ManifestError::InvalidTarget(
+                        name.clone(),
+                        format!(
+                            "whole-repository target publishes as canonical package `{}`; omit `name` or set it to that value, not `{explicit}`",
+                            self.package.name
+                        ),
+                    ));
+                }
+                self.package.name.clone()
+            } else {
+                target
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("{}-{name}", self.package.name))
+            };
             if !is_slug(&published_name) {
                 return Err(ManifestError::InvalidTarget(
                     name.clone(),
@@ -1143,7 +1159,7 @@ impl Manifest {
                     ),
                 ));
             }
-            if published_name == self.package.name {
+            if target.dir != "." && published_name == self.package.name {
                 return Err(ManifestError::InvalidTarget(
                     name.clone(),
                     format!(
@@ -1306,14 +1322,21 @@ impl Manifest {
         !self.targets.is_empty()
     }
 
-    /// The package name a target publishes under: its explicit `name`, else
-    /// the `<name>-<target>` convention (`fiducia-clients` + `java` →
+    /// The package name a target publishes under. A whole-repository target
+    /// (`dir = "."`) is the canonical root package and therefore uses
+    /// `package.name`; non-root targets use their explicit `name` or the
+    /// `<name>-<target>` convention (`fiducia-clients` + `java` →
     /// `fiducia-clients-java`).
     pub fn target_package_name(&self, target: &str) -> Option<String> {
-        self.targets.get(target).map(|t| {
-            t.name
-                .clone()
-                .unwrap_or_else(|| format!("{}-{}", self.package.name, target))
+        self.targets.get(target).map(|section| {
+            if section.dir == "." {
+                self.package.name.clone()
+            } else {
+                section
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("{}-{}", self.package.name, target))
+            }
         })
     }
 
@@ -1334,10 +1357,9 @@ impl Manifest {
                 routes.push(NixExportRoute {
                     target: target.clone(),
                     dir: section.dir.clone(),
-                    package: section
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| format!("{}-{target}", self.package.name)),
+                    package: self
+                        .target_package_name(target)
+                        .expect("target iterated from manifest exists"),
                     intent: intent.clone(),
                 });
             }

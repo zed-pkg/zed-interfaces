@@ -101,6 +101,11 @@
       "why": "Server-side index ingestion; never issued by a front end."
     },
     {
+      "file": "dependency-graph-v1.json",
+      "targets": [],
+      "why": "Resolution/graph contract consumed by zed-cli and the servers (DEN-2864); a front end renders resolved versions, not the graph that produced them."
+    },
+    {
       "file": "manifest.json",
       "targets": [],
       "why": "On-disk .zpkg.toml model — zed-cli and the servers only."

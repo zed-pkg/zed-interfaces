@@ -9,10 +9,10 @@ use crate::artifact::ArtifactFormat;
 use crate::manifest::Manifest;
 use crate::vcs::Vcs;
 
-/// Default public registry (production host: zpkg.tech). Override with
+/// Default public registry (production host: zpkg.net). Override with
 /// `--registry` / `ZED_PKG_REGISTRY`; self-hosted deployments point this at
 /// their own `zed-api-server`.
-pub const DEFAULT_REGISTRY_URL: &str = "https://registry.zpkg.tech";
+pub const DEFAULT_REGISTRY_URL: &str = "https://registry.zpkg.net";
 
 pub const API_V1: &str = "/v1";
 
