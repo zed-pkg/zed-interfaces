@@ -6,29 +6,36 @@ on:
       - alexanderdmills/den-2854-registry-protocol-v1-rfc-registry-identity-sparse-index
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: den-2854-schema-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  generate:
+  materialize:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          persist-credentials: false
-      - name: Format source in the ephemeral workspace
+          persist-credentials: true
+      - name: Format source
         run: cargo fmt --all
       - name: Registry protocol unit tests
         run: cargo test --locked registry_protocol_v1
       - name: Generate all interface schemas
         run: cargo run --locked --example generate_schemas
-      - name: Package formatted source and generated schemas
+      - name: Validate materialized diff
+        run: git diff --check
+      - name: Commit generated contract and remove one-use workflow
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
         run: |
-          tar -czf "$RUNNER_TEMP/den-2854-materialized.tar.gz" \
+          set -euo pipefail
+          git config user.name "zed-pkg schema materializer"
+          git config user.email "schema-materializer@users.noreply.github.com"
+          git add \
             src/registry_protocol_v1.rs \
             src/lib.rs \
             examples/generate_schemas.rs \
@@ -38,10 +45,7 @@ jobs:
             schemas/registry-archive-manifest-v1.json \
             schemas/registry-publish-request-v1.json \
             schemas/registry-protocol-error-v1.json
-      - name: Upload materialized contract
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: den-2854-materialized-${{ github.sha }}
-          path: ${{ runner.temp }}/den-2854-materialized.tar.gz
-          retention-days: 1
-          if-no-files-found: error
+          git rm .github/workflows/den-2854-schema-materialization.yml
+          git diff --cached --check
+          git commit -m "DEN-2854 materialize registry protocol v1 schemas"
+          git push origin "HEAD:${TARGET_BRANCH}"
