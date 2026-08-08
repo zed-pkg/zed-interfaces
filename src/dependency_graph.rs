@@ -368,6 +368,26 @@ impl DependencyGraphDocument {
         canonical_json_bytes(&serde_json::to_value(document)?)
     }
 
+    /// Strict verifier entrypoint for received canonical JSON artifacts.
+    ///
+    /// Byte-exact: the input must equal the canonical serialization of the
+    /// parsed document, so unknown members, explicit `null` spellings of
+    /// absence, duplicate members, non-normative collection order,
+    /// insignificant whitespace, and non-integer number formats are all
+    /// rejected instead of being silently normalized away. Lenient serde
+    /// deserialization alone does not authenticate such content: an injected
+    /// unknown member survives the typed model and still digest-verifies.
+    /// The document must carry `graph_digest` and it must verify.
+    pub fn parse_verified_canonical(bytes: &[u8]) -> Result<Self, DependencyGraphError> {
+        let document: Self = serde_json::from_slice(bytes)?;
+        document.verify_digest()?;
+        let canonical = document.canonical_document_bytes()?;
+        if bytes != canonical.as_slice() {
+            return Err(DependencyGraphError::NotCanonical);
+        }
+        Ok(document)
+    }
+
     fn validate_structure(&self) -> Result<(), DependencyGraphError> {
         if self.schema != DEPENDENCY_GRAPH_SCHEMA_V1 {
             return Err(DependencyGraphError::UnsupportedSchema(self.schema.clone()));
