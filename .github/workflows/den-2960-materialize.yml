@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: agent/den-2960-canonical-root-target-contract
-          fetch-depth: 3
+          fetch-depth: 4
           persist-credentials: true
           show-progress: false
 
@@ -42,6 +42,8 @@ jobs:
           from pathlib import Path
 
           def replace_once(text: str, old: str, new: str, label: str) -> str:
+              old = old.replace('\\"', '"')
+              new = new.replace('\\"', '"')
               count = text.count(old)
               if count != 1:
                   raise SystemExit(f"{label}: expected one match, found {count}")
