@@ -105,6 +105,17 @@ Target, feature, dependency-kind, and depth filtering produces a new explicit pr
 
 A complete graph carries neither parent nor projection metadata. Server safety limits return an explicit error; they never silently truncate a document while claiming completeness.
 
+Limits are advertised through discovery rather than hard-coded by clients. The v1 default advertised limits, exported as constants by the Rust contract and mirrored in the discovery document, are:
+
+| Limit | Default |
+|---|---|
+| `max_nodes` | 50,000 |
+| `max_edges` | 500,000 |
+| `max_projection_depth` | 1,000 |
+| `max_encoded_bytes` | 33,554,432 (32 MiB) |
+
+Exceeding a graph limit returns `422` with code `graph_limit_exceeded`; an encoded representation over the byte limit returns `413` with code `graph_representation_too_large`. A limit failure is never a silently truncated document, and request processing is bounded by server-side wall-clock budgets that fail the request rather than degrade the output.
+
 ## Privacy and cache behavior
 
 Public immutable resolution artifacts may be stored in R2/S3 and served through static or edge caches. Private resolution artifacts are authorization-gated, non-enumerable, and never publicly cacheable. A denied response must not expose private package names, node/edge counts, registry paths, object keys, signed URLs, or credential material.
