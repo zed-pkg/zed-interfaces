@@ -118,6 +118,7 @@
       "description": "Immutable registry metadata checkpoint consulted by the resolver.",
       "properties": {
         "checkpoint_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
           "type": "string"
         },
         "registry_id": {
@@ -140,6 +141,7 @@
           "type": "array"
         },
         "lock_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
           "type": "string"
         },
         "registry_snapshots": {
@@ -203,6 +205,7 @@
       "description": "A package selected by the resolver.",
       "properties": {
         "artifact_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
           "type": "string"
         },
         "features": {
@@ -264,6 +267,7 @@
           "type": "array"
         },
         "parent_graph_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
           "type": "string"
         },
         "projection": {
@@ -296,9 +300,11 @@
   ],
   "properties": {
     "graph_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
       "type": "string"
     },
     "schema": {
+      "const": "zpkg/dependency-graph/v1",
       "default": "zpkg/dependency-graph/v1",
       "type": "string"
     }

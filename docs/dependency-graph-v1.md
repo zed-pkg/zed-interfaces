@@ -40,9 +40,28 @@ Every document carries:
 }
 ```
 
-The semantic `graph_digest` is SHA-256 over canonical JSON of the normalized typed document with `graph_digest` omitted. Object keys are lexicographically ordered, set-like arrays use their normative order, exact duplicates are removed, optional absent members are omitted, and floating-point numbers are forbidden by the v1 model.
+The semantic `graph_digest` is SHA-256 over canonical JSON of the normalized typed document with `graph_digest` omitted. The canonical form is an RFC 8785 (JCS)-compatible subset: object member names are ASCII by construction and sorted bytewise ascending, insignificant whitespace is forbidden, strings use standard JSON escaping with lowercase hex `\u00xx` escapes for control characters and raw UTF-8 elsewhere, and only integer numbers are representable, so the JCS floating-point serialization rules are never exercised. The model contains no volatile timestamp members and none may join the digest preimage in v1.
+
+### Digest participation and normative order
+
+Every serialized member participates in the digest except `graph_digest` itself. Absent optional members are omitted entirely; explicit `null` is not a second spelling of absence and is not canonical. Struct-field comparisons below are field-by-field in the listed order, and string comparisons are bytewise over UTF-8 content; version strings therefore order bytewise, not by semver — normative order is an ordering convention only and carries no compatibility meaning.
+
+| Collection | Sort key | Exact duplicates |
+|---|---|---|
+| `dependencies` (declared view) | `(registry_id, org, name, requirement, kind, optional, default_features, features, target)` | removed |
+| `roots` | `(registry_id, org, name, version)` | removed |
+| `nodes` | `(id, artifact_digest, features)` | **not removed** — any duplicate node `id`, exact or conflicting, is a validation error |
+| `edges` | `(from, to, kind, requirement, target, optional, features)` | removed |
+| every `features` list | bytewise string order | removed |
+| `provenance.enabled_features` | bytewise string order | removed |
+| `provenance.registry_snapshots` | `(registry_id, checkpoint_digest)` | removed — one registry with two differing checkpoints is a validation error |
+| `projection.kinds` | kind order `runtime < build < development < peer < tooling` | removed |
 
 The `x-zpkg-graph-digest` response header carries that semantic identity across JSON, YAML, and TOML. A strong HTTP `ETag` hashes the actual encoded response bytes and is therefore representation-specific. A JSON ETag must not be reused for YAML or TOML.
+
+### Verification requirements
+
+Lenient typed parsing does not authenticate a document: an injected unknown member survives deserialization and the digest still verifies, and an explicit `null` is silently read as absence. Consumers verifying a received canonical JSON artifact must use byte-exact verification — parse, verify `graph_digest`, re-serialize to canonical bytes, and require equality with the received bytes (`DependencyGraphDocument::parse_verified_canonical` in the Rust contract). Byte-exact verification rejects unknown members, explicit `null`, duplicate members, non-normative collection order, insignificant whitespace, and non-integer number formats. YAML and TOML representations verify by decoding to the typed model and re-deriving the canonical JSON digest; their transport integrity is the representation-specific `ETag`.
 
 ## Declared view
 
