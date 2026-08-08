@@ -1,0 +1,53 @@
+{
+  "schema": "zpkg.registry-discovery/v1",
+  "registry_id": "zpkg-registry:0123456789abcdef0123456789abcdef",
+  "canonical_url": "https://registry.example.test",
+  "protocol_versions": [
+    "zpkg.registry/v1"
+  ],
+  "endpoints": {
+    "sparse_index_template": "/index/{org}/{name}",
+    "package_template": "/pkgs/{org}/{name}/{version}.tar.zst",
+    "checkpoint": "/checkpoint.json",
+    "publish": "/api/v1/packages/{org}/{name}/{version}",
+    "yank": "/api/v1/packages/{org}/{name}/{version}/yank"
+  },
+  "capabilities": {
+    "public_read": true,
+    "publish": true,
+    "yank": true,
+    "private_packages": true,
+    "static_export": true,
+    "mirrors": true
+  },
+  "auth": [
+    {
+      "mode": "anonymous-read"
+    },
+    {
+      "mode": "oidc-pkce",
+      "issuer": "https://auth.example.test",
+      "audience": "registry.example.test"
+    },
+    {
+      "mode": "workload-identity",
+      "issuer": "https://token.actions.githubusercontent.com",
+      "audience": "registry.example.test"
+    }
+  ],
+  "signing_keys": [
+    {
+      "key_id": "metadata-2026-01",
+      "algorithm": "ed25519",
+      "public_key_multibase": "z6MkrJVnaZkeFzdQ",
+      "state": "active"
+    }
+  ],
+  "limits": {
+    "max_archive_bytes": 104857600,
+    "max_expanded_bytes": 524288000,
+    "max_files": 100000,
+    "max_path_bytes": 1024,
+    "max_compression_ratio": 100
+  }
+}
