@@ -102,6 +102,7 @@ paths:
           format: uint32
           minimum: 0
         description: Explicit maximum traversal depth for a projected graph.
+      - $ref: '#/components/parameters/IfNoneMatch'
     get:
       operationId: getResolvedDependencyGraph
       summary: Download an exact resolution graph or explicit projection
@@ -111,6 +112,8 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/DependencyGraph'
+        '304':
+          $ref: '#/components/responses/NotModified'
         '404':
           $ref: '#/components/responses/NotFound'
         '406':
@@ -128,10 +131,16 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/DependencyGraphHead'
+        '304':
+          $ref: '#/components/responses/NotModified'
         '404':
           $ref: '#/components/responses/NotFound'
         '406':
           $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/RepresentationTooLarge'
+        '422':
+          $ref: '#/components/responses/GraphLimitExceeded'
 components:
   securitySchemes:
     bearerAuth:
