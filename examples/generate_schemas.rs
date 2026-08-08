@@ -46,6 +46,17 @@ fn main() {
     write::<zed_interfaces::registry::AuditIntegrityResponse>(dir, "audit-integrity-response");
     write::<zed_interfaces::registry::ApiError>(dir, "api-error");
 
+    // Registry protocol v1 trust, static-read, archive, and publish contracts.
+    write::<zed_interfaces::RegistryDiscoveryV1>(dir, "registry-discovery-v1");
+    write::<zed_interfaces::RegistryIndexRecordV1>(dir, "registry-index-record-v1");
+    write::<zed_interfaces::RegistryCheckpointV1>(dir, "registry-checkpoint-v1");
+    write::<zed_interfaces::RegistryArchiveManifestV1>(
+        dir,
+        "registry-archive-manifest-v1",
+    );
+    write::<zed_interfaces::RegistryPublishRequestV1>(dir, "registry-publish-request-v1");
+    write::<zed_interfaces::RegistryProtocolErrorV1>(dir, "registry-protocol-error-v1");
+
     // Sync contract types shared with zed-sync + zed-clients.
     write::<zed_interfaces::sync::SyncChangeEvent>(dir, "sync-change-event");
     write::<zed_interfaces::sync::SyncWriteMode>(dir, "sync-write-mode");
