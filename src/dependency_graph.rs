@@ -1088,18 +1088,20 @@ mod tests {
     fn golden_fixture_bytes_and_digests_are_pinned() {
         for (name, document) in golden_fixture_documents() {
             let committed: &[u8] = match name {
-                "declared" => include_bytes!("../fixtures/dependency-graph-v1/golden/declared.json"),
+                "declared" => {
+                    include_bytes!("../fixtures/dependency-graph-v1/golden/declared.json")
+                }
                 "diamond" => include_bytes!("../fixtures/dependency-graph-v1/golden/diamond.json"),
                 "duplicate-registries" => include_bytes!(
                     "../fixtures/dependency-graph-v1/golden/duplicate-registries.json"
                 ),
                 "cycle" => include_bytes!("../fixtures/dependency-graph-v1/golden/cycle.json"),
-                "optional-feature" => include_bytes!(
-                    "../fixtures/dependency-graph-v1/golden/optional-feature.json"
-                ),
-                "target-predicate" => include_bytes!(
-                    "../fixtures/dependency-graph-v1/golden/target-predicate.json"
-                ),
+                "optional-feature" => {
+                    include_bytes!("../fixtures/dependency-graph-v1/golden/optional-feature.json")
+                }
+                "target-predicate" => {
+                    include_bytes!("../fixtures/dependency-graph-v1/golden/target-predicate.json")
+                }
                 "projected" => {
                     include_bytes!("../fixtures/dependency-graph-v1/golden/projected.json")
                 }
@@ -1126,12 +1128,12 @@ mod tests {
         let DependencyGraphData::Resolved { nodes, edges, .. } = &diamond.graph else {
             panic!("diamond fixture is resolved");
         };
-        let shared: Vec<_> = nodes.iter().filter(|node| node.id.name == "shared").collect();
-        assert_eq!(shared.len(), 1);
-        let incoming = edges
+        let shared: Vec<_> = nodes
             .iter()
-            .filter(|edge| edge.to == shared[0].id)
-            .count();
+            .filter(|node| node.id.name == "shared")
+            .collect();
+        assert_eq!(shared.len(), 1);
+        let incoming = edges.iter().filter(|edge| edge.to == shared[0].id).count();
         assert_eq!(incoming, 2);
     }
 
@@ -1185,10 +1187,8 @@ mod tests {
             .unwrap()
             .insert("parent_graph_digest".to_string(), Value::Null);
         assert_eq!(
-            DependencyGraphDocument::parse_verified_canonical(
-                &serde_json::to_vec(&value).unwrap()
-            )
-            .unwrap_err(),
+            DependencyGraphDocument::parse_verified_canonical(&serde_json::to_vec(&value).unwrap())
+                .unwrap_err(),
             DependencyGraphError::NotCanonical
         );
 
@@ -1211,10 +1211,8 @@ mod tests {
             .unwrap();
         nodes.reverse();
         assert_eq!(
-            DependencyGraphDocument::parse_verified_canonical(
-                &serde_json::to_vec(&value).unwrap()
-            )
-            .unwrap_err(),
+            DependencyGraphDocument::parse_verified_canonical(&serde_json::to_vec(&value).unwrap())
+                .unwrap_err(),
             DependencyGraphError::NotCanonical
         );
 

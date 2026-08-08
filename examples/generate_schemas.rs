@@ -65,13 +65,10 @@ fn pin_dependency_graph_identity(value: &mut Value) {
                     if name == "schema" {
                         property.insert(
                             "const".to_owned(),
-                            Value::String(
-                                zed_interfaces::DEPENDENCY_GRAPH_SCHEMA_V1.to_owned(),
-                            ),
+                            Value::String(zed_interfaces::DEPENDENCY_GRAPH_SCHEMA_V1.to_owned()),
                         );
                     } else if DIGEST_MEMBERS.contains(&name.as_str()) {
-                        property
-                            .insert("pattern".to_owned(), Value::String(DIGEST_PATTERN.into()));
+                        property.insert("pattern".to_owned(), Value::String(DIGEST_PATTERN.into()));
                     }
                 }
             }
