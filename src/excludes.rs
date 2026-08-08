@@ -5,6 +5,8 @@
 //! release documentation are stripped by default; packages can opt into their
 //! README and changelog together, while license files are always kept.
 
+use std::collections::BTreeSet;
+
 /// Glob patterns excluded from every published artifact by default.
 /// Matching is case-insensitive in the CLI.
 pub const DEFAULT_EXCLUDES: &[&str] = &[
@@ -78,36 +80,44 @@ pub const ALWAYS_INCLUDE: &[&str] = &["LICENSE*", "LICENCE*", "COPYING*", "NOTIC
 const REGISTRY_DOC_PATTERNS: &[&str] = &["README", "CHANGELOG"];
 
 /// The effective exclusion list for a package: built-in defaults (minus the
-/// registry-facing doc patterns when `include_readme` is set), plus the
-/// manifest's own `publish.exclude` globs. `.zedignore` lines are appended by
-/// the CLI on top of this.
+/// registry-facing doc patterns when `include_readme` is set), plus every
+/// explicit exclusion supplied by the caller. The CLI supplies both
+/// `[publish].exclude` and `.zedignore` rules here, so explicit exclusions are
+/// combined as a union regardless of which source owns them.
 ///
-/// A leading `!` negates a built-in or earlier extra exclusion with the same
-/// normalized path. This supports the common root-directory override contract,
-/// for example `!target`, `!target/`, or `!target/**` to publish a checked-in
-/// Rust target directory. The negation itself is removed before the CLI builds
-/// its positive-only glob set.
+/// A leading `!` re-includes a matching built-in default. It never cancels an
+/// explicit exclusion: when one authored source excludes a path and another
+/// re-includes it, exclusion wins. This makes the result independent of whether
+/// the manifest or `.zedignore` was appended first and prevents a user-authored
+/// negation from disabling CLI safety exclusions such as dependency or
+/// transaction directories.
 pub fn effective_excludes(extra: &[String], include_readme: bool) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+    let mut defaults: Vec<String> = Vec::new();
     for pattern in DEFAULT_EXCLUDES {
         if include_readme && REGISTRY_DOC_PATTERNS.iter().any(|d| pattern.starts_with(d)) {
             continue;
         }
-        out.push((*pattern).to_string());
+        defaults.push((*pattern).to_string());
     }
 
+    let mut negated_defaults = BTreeSet::new();
+    let mut explicit = Vec::new();
     for pattern in extra {
         if let Some(negated) = pattern.strip_prefix('!') {
             let normalized = normalize_pattern(negated, false);
-            if normalized.is_empty() {
-                continue;
+            if !normalized.is_empty() {
+                negated_defaults.insert(normalized);
             }
-            out.retain(|existing| normalize_pattern(existing, true) != normalized);
         } else {
-            out.push(pattern.clone());
+            explicit.push(pattern.clone());
         }
     }
-    out
+
+    defaults.retain(|existing| {
+        !negated_defaults.contains(&normalize_pattern(existing, true))
+    });
+    defaults.extend(explicit);
+    defaults
 }
 
 fn normalize_pattern(pattern: &str, strip_recursive_prefix: bool) -> String {
@@ -143,7 +153,19 @@ mod tests {
     }
 
     #[test]
-    fn later_exclusion_can_reapply_after_negation() {
+    fn explicit_exclusion_wins_over_negation_in_either_order() {
+        for extra in [
+            vec!["private/**".to_string(), "!private".to_string()],
+            vec!["!private".to_string(), "private/**".to_string()],
+        ] {
+            let excludes = effective_excludes(&extra, false);
+            assert!(excludes.iter().any(|pattern| pattern == "private/**"));
+            assert!(!excludes.iter().any(|pattern| pattern.starts_with('!')));
+        }
+    }
+
+    #[test]
+    fn later_exclusion_can_narrow_a_reincluded_default() {
         let excludes = effective_excludes(
             &["!target".to_string(), "target/private/**".to_string()],
             false,
