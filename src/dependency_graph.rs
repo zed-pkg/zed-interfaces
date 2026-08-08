@@ -1085,6 +1085,212 @@ mod tests {
     }
 
     #[test]
+    fn golden_fixture_bytes_and_digests_are_pinned() {
+        for (name, document) in golden_fixture_documents() {
+            let committed: &[u8] = match name {
+                "declared" => include_bytes!("../fixtures/dependency-graph-v1/golden/declared.json"),
+                "diamond" => include_bytes!("../fixtures/dependency-graph-v1/golden/diamond.json"),
+                "duplicate-registries" => include_bytes!(
+                    "../fixtures/dependency-graph-v1/golden/duplicate-registries.json"
+                ),
+                "cycle" => include_bytes!("../fixtures/dependency-graph-v1/golden/cycle.json"),
+                "optional-feature" => include_bytes!(
+                    "../fixtures/dependency-graph-v1/golden/optional-feature.json"
+                ),
+                "target-predicate" => include_bytes!(
+                    "../fixtures/dependency-graph-v1/golden/target-predicate.json"
+                ),
+                "projected" => {
+                    include_bytes!("../fixtures/dependency-graph-v1/golden/projected.json")
+                }
+                other => panic!("golden fixture {other} has no committed file"),
+            };
+            let canonical = document.canonical_document_bytes().unwrap();
+            assert_eq!(
+                committed, canonical,
+                "committed golden fixture {name} drifted; regenerate via generate_schemas"
+            );
+            let reparsed = DependencyGraphDocument::parse_verified_canonical(committed)
+                .unwrap_or_else(|error| panic!("golden fixture {name} must verify: {error}"));
+            assert_eq!(reparsed.graph_digest, document.graph_digest);
+        }
+    }
+
+    #[test]
+    fn golden_diamond_shares_one_node_with_two_incoming_edges() {
+        let fixtures = golden_fixture_documents();
+        let (_, diamond) = fixtures
+            .iter()
+            .find(|(name, _)| *name == "diamond")
+            .unwrap();
+        let DependencyGraphData::Resolved { nodes, edges, .. } = &diamond.graph else {
+            panic!("diamond fixture is resolved");
+        };
+        let shared: Vec<_> = nodes.iter().filter(|node| node.id.name == "shared").collect();
+        assert_eq!(shared.len(), 1);
+        let incoming = edges
+            .iter()
+            .filter(|edge| edge.to == shared[0].id)
+            .count();
+        assert_eq!(incoming, 2);
+    }
+
+    #[test]
+    fn golden_duplicate_registry_coordinates_do_not_collide() {
+        let fixtures = golden_fixture_documents();
+        let (_, document) = fixtures
+            .iter()
+            .find(|(name, _)| *name == "duplicate-registries")
+            .unwrap();
+        let DependencyGraphData::Resolved { nodes, .. } = &document.graph else {
+            panic!("duplicate-registries fixture is resolved");
+        };
+        let utils: Vec<_> = nodes.iter().filter(|node| node.id.name == "util").collect();
+        assert_eq!(utils.len(), 2);
+        assert_ne!(utils[0].id.registry_id, utils[1].id.registry_id);
+    }
+
+    #[test]
+    fn strict_parse_rejects_unknown_member_injection() {
+        let finalized = sample_resolved_graph().finalize().unwrap();
+        let canonical = finalized.canonical_document_bytes().unwrap();
+        assert!(DependencyGraphDocument::parse_verified_canonical(&canonical).is_ok());
+
+        let mut value: Value = serde_json::from_slice(&canonical).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("injected".to_string(), Value::String("attacker".into()));
+        let tampered = serde_json::to_vec(&value).unwrap();
+
+        // Lenient typed parsing alone does not authenticate unknown members.
+        let lenient: DependencyGraphDocument = serde_json::from_slice(&tampered).unwrap();
+        assert!(lenient.verify_digest().is_ok());
+        // The strict entrypoint does.
+        assert_eq!(
+            DependencyGraphDocument::parse_verified_canonical(&tampered).unwrap_err(),
+            DependencyGraphError::NotCanonical
+        );
+    }
+
+    #[test]
+    fn strict_parse_rejects_null_whitespace_order_and_missing_digest() {
+        let finalized = sample_resolved_graph().finalize().unwrap();
+        let canonical = finalized.canonical_document_bytes().unwrap();
+
+        // Explicit null spelling of absence.
+        let mut value: Value = serde_json::from_slice(&canonical).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("parent_graph_digest".to_string(), Value::Null);
+        assert_eq!(
+            DependencyGraphDocument::parse_verified_canonical(
+                &serde_json::to_vec(&value).unwrap()
+            )
+            .unwrap_err(),
+            DependencyGraphError::NotCanonical
+        );
+
+        // Insignificant whitespace.
+        let value: Value = serde_json::from_slice(&canonical).unwrap();
+        let pretty = serde_json::to_vec_pretty(&value).unwrap();
+        assert_eq!(
+            DependencyGraphDocument::parse_verified_canonical(&pretty).unwrap_err(),
+            DependencyGraphError::NotCanonical
+        );
+
+        // Non-normative collection order.
+        let mut value: Value = serde_json::from_slice(&canonical).unwrap();
+        let nodes = value
+            .as_object_mut()
+            .unwrap()
+            .get_mut("nodes")
+            .unwrap()
+            .as_array_mut()
+            .unwrap();
+        nodes.reverse();
+        assert_eq!(
+            DependencyGraphDocument::parse_verified_canonical(
+                &serde_json::to_vec(&value).unwrap()
+            )
+            .unwrap_err(),
+            DependencyGraphError::NotCanonical
+        );
+
+        // Missing digest.
+        let mut undigested = sample_resolved_graph();
+        undigested.normalize_in_place();
+        let bytes = canonical_json_bytes(&serde_json::to_value(&undigested).unwrap()).unwrap();
+        assert_eq!(
+            DependencyGraphDocument::parse_verified_canonical(&bytes).unwrap_err(),
+            DependencyGraphError::MissingGraphDigest
+        );
+    }
+
+    #[test]
+    fn discovery_fixture_matches_the_rust_contract() {
+        let discovery: Value = serde_json::from_str(include_str!(
+            "../fixtures/dependency-graph-v1/discovery.json"
+        ))
+        .unwrap();
+
+        assert_eq!(
+            discovery["routes"]["declared"],
+            DEPENDENCY_GRAPH_DECLARED_ROUTE_TEMPLATE
+        );
+        assert_eq!(
+            discovery["routes"]["resolved"],
+            DEPENDENCY_GRAPH_RESOLUTION_ROUTE_TEMPLATE
+        );
+        assert_eq!(
+            discovery["headers"]["semantic_digest"],
+            DEPENDENCY_GRAPH_DIGEST_HEADER
+        );
+        assert_eq!(
+            discovery["supported_schemas"],
+            serde_json::json!([DEPENDENCY_GRAPH_SCHEMA_V1])
+        );
+
+        let formats = discovery["formats"].as_array().unwrap();
+        for format in [
+            DependencyGraphFormat::Json,
+            DependencyGraphFormat::Yaml,
+            DependencyGraphFormat::Toml,
+            DependencyGraphFormat::Dot,
+            DependencyGraphFormat::Mermaid,
+        ] {
+            let advertised = formats
+                .iter()
+                .find(|entry| entry["extension"] == format.extension())
+                .unwrap_or_else(|| panic!("discovery advertises {}", format.extension()));
+            assert_eq!(advertised["media_type"], format.media_type());
+            assert_eq!(
+                advertised["authoritative"],
+                Value::Bool(format.is_authoritative())
+            );
+        }
+
+        let limits = &discovery["limit_policy"]["default_limits"];
+        assert_eq!(
+            limits["max_nodes"],
+            Value::from(DEPENDENCY_GRAPH_DEFAULT_MAX_NODES)
+        );
+        assert_eq!(
+            limits["max_edges"],
+            Value::from(DEPENDENCY_GRAPH_DEFAULT_MAX_EDGES)
+        );
+        assert_eq!(
+            limits["max_projection_depth"],
+            Value::from(DEPENDENCY_GRAPH_DEFAULT_MAX_PROJECTION_DEPTH)
+        );
+        assert_eq!(
+            limits["max_encoded_bytes"],
+            Value::from(DEPENDENCY_GRAPH_DEFAULT_MAX_ENCODED_BYTES)
+        );
+    }
+
+    #[test]
     fn format_and_route_contract_is_stable() {
         assert_eq!(DependencyGraphFormat::Json.extension(), "json");
         assert_eq!(
