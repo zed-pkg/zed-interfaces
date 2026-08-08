@@ -1,0 +1,339 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DependencyGraphDocument",
+  "description": "Top-level dependency graph document.\n\n`graph_digest` is `sha256:` plus lowercase hex over canonical JSON of the\nnormalized document with the `graph_digest` member omitted. A strong HTTP\nETag remains representation-specific and is therefore not this value.",
+  "type": "object",
+  "properties": {
+    "graph_digest": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "schema": {
+      "type": "string",
+      "default": "zpkg/dependency-graph/v1"
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeclaredDependency"
+          }
+        },
+        "package": {
+          "$ref": "#/$defs/PackageVersionIdentity"
+        },
+        "view": {
+          "type": "string",
+          "const": "declared"
+        }
+      },
+      "required": [
+        "view",
+        "package"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "completeness": {
+          "$ref": "#/$defs/DependencyGraphCompleteness"
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResolvedDependencyEdge"
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResolvedDependencyNode"
+          }
+        },
+        "parent_graph_digest": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "projection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DependencyGraphProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provenance": {
+          "$ref": "#/$defs/ResolutionProvenance"
+        },
+        "roots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageVersionIdentity"
+          }
+        },
+        "view": {
+          "type": "string",
+          "const": "resolved"
+        }
+      },
+      "required": [
+        "view",
+        "completeness",
+        "roots",
+        "nodes",
+        "edges",
+        "provenance"
+      ]
+    }
+  ],
+  "$defs": {
+    "DeclaredDependency": {
+      "description": "One unresolved requirement from an immutable package manifest.",
+      "type": "object",
+      "properties": {
+        "default_features": {
+          "type": "boolean",
+          "default": true
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/DependencyKind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "optional": {
+          "type": "boolean",
+          "default": false
+        },
+        "org": {
+          "type": "string"
+        },
+        "registry_id": {
+          "type": "string"
+        },
+        "requirement": {
+          "type": "string"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "registry_id",
+        "org",
+        "name",
+        "requirement",
+        "kind"
+      ]
+    },
+    "DependencyGraphCompleteness": {
+      "description": "Whether a resolved graph is the whole resolution or an explicit filtered\nprojection with its own semantic digest.",
+      "type": "string",
+      "enum": [
+        "complete",
+        "projected"
+      ]
+    },
+    "DependencyGraphProjection": {
+      "description": "Canonical description of an explicit graph projection.",
+      "type": "object",
+      "properties": {
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DependencyKind"
+          }
+        },
+        "max_depth": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "DependencyKind": {
+      "description": "Dependency edge classification independent of any one language ecosystem.",
+      "type": "string",
+      "enum": [
+        "runtime",
+        "build",
+        "development",
+        "peer",
+        "tooling"
+      ]
+    },
+    "PackageVersionIdentity": {
+      "description": "Exact package identity. Registry identity is intrinsic, so remapping a\nlocal registry alias cannot reinterpret a graph node.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "registry_id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "registry_id",
+        "org",
+        "name",
+        "version"
+      ]
+    },
+    "RegistrySnapshot": {
+      "description": "Immutable registry metadata checkpoint consulted by the resolver.",
+      "type": "object",
+      "properties": {
+        "checkpoint_digest": {
+          "type": "string"
+        },
+        "registry_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "registry_id",
+        "checkpoint_digest"
+      ]
+    },
+    "ResolutionProvenance": {
+      "description": "Inputs that make an exact resolution reproducible.",
+      "type": "object",
+      "properties": {
+        "enabled_features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lock_digest": {
+          "type": "string"
+        },
+        "registry_snapshots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RegistrySnapshot"
+          }
+        },
+        "resolver_version": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "resolver_version",
+        "target",
+        "registry_snapshots",
+        "lock_digest"
+      ]
+    },
+    "ResolvedDependencyEdge": {
+      "description": "A selected edge between exact package versions.",
+      "type": "object",
+      "properties": {
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "from": {
+          "$ref": "#/$defs/PackageVersionIdentity"
+        },
+        "kind": {
+          "$ref": "#/$defs/DependencyKind"
+        },
+        "optional": {
+          "type": "boolean",
+          "default": false
+        },
+        "requirement": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "$ref": "#/$defs/PackageVersionIdentity"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "kind"
+      ]
+    },
+    "ResolvedDependencyNode": {
+      "description": "A package selected by the resolver.",
+      "type": "object",
+      "properties": {
+        "artifact_digest": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "$ref": "#/$defs/PackageVersionIdentity"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    }
+  }
+}

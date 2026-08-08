@@ -20,6 +20,7 @@ fn main() {
     let dir = Path::new("schemas");
     fs::create_dir_all(dir).expect("schemas dir");
 
+    write::<zed_interfaces::DependencyGraphDocument>(dir, "dependency-graph-v1");
     write::<zed_interfaces::Manifest>(dir, "manifest");
     write::<zed_interfaces::Lockfile>(dir, "lockfile");
     write::<zed_interfaces::EnvironmentPlan>(dir, "environment-plan-v1");
