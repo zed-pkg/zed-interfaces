@@ -1,0 +1,116 @@
+name: materialize DEN-2864 dependency graph contract
+
+on:
+  push:
+    branches:
+      - alexanderdmills/den-2864-dependency-graph-contract-v1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-den-2864-dependency-graph
+  cancel-in-progress: true
+
+jobs:
+  promote:
+    if: ${{ !contains(github.event.head_commit.message, '[materialized-contract]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CERTIFIED_REPOSITORY: zed-pkg-test/zed-interfaces
+      CERTIFIED_SHA: 1965f82de87a8a9dcd16b7eaac515cbc351b88ff
+    steps:
+      - name: Check out production promotion branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: alexanderdmills/den-2864-dependency-graph-contract-v1
+          persist-credentials: true
+          show-progress: false
+
+      - name: Fetch exact certified source and patch flat production layout
+        shell: python
+        run: |
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          repository = "zed-pkg-test/zed-interfaces"
+          commit = "1965f82de87a8a9dcd16b7eaac515cbc351b88ff"
+          base = f"https://raw.githubusercontent.com/{repository}/{commit}"
+
+          def download(relative: str) -> bytes:
+              request = Request(
+                  f"{base}/{relative}",
+                  headers={"User-Agent": "zed-interfaces-den-2864-promoter/1"},
+              )
+              with urlopen(request, timeout=30) as response:
+                  if response.status != 200:
+                      raise SystemExit(f"download failed for {relative}: HTTP {response.status}")
+                  payload = response.read()
+              if not payload:
+                  raise SystemExit(f"certified file is empty: {relative}")
+              return payload
+
+          dependency_graph = download("src/rust/dependency_graph.rs")
+          certified_lib = download("src/rust/lib.rs").decode("utf-8")
+          protocol_doc = download("docs/dependency-graph-v1.md")
+          certified_schema = download("schemas/dependency-graph-v1.json")
+
+          Path("src/dependency_graph.rs").write_bytes(dependency_graph)
+          Path("docs/dependency-graph-v1.md").write_bytes(protocol_doc)
+          Path("/tmp/certified-dependency-graph-v1.json").write_bytes(certified_schema)
+
+          lib_path = Path("src/lib.rs")
+          lib = lib_path.read_text(encoding="utf-8")
+          module_anchor = "pub mod artifact;\n"
+          if lib.count(module_anchor) != 1 or "pub mod dependency_graph;" in lib:
+              raise SystemExit("unexpected production module surface")
+          lib = lib.replace(module_anchor, module_anchor + "pub mod dependency_graph;\n", 1)
+
+          export_start = certified_lib.index("pub use dependency_graph::{")
+          export_end = certified_lib.index("};", export_start) + len("};")
+          export_block = certified_lib[export_start:export_end] + "\n"
+          export_anchor = "pub use artifact::ArtifactFormat;\n"
+          if lib.count(export_anchor) != 1 or "DEPENDENCY_GRAPH_SCHEMA_V1" in lib:
+              raise SystemExit("unexpected production re-export surface")
+          lib = lib.replace(export_anchor, export_anchor + export_block, 1)
+          lib_path.write_text(lib, encoding="utf-8")
+
+          generator_path = Path("examples/generate_schemas.rs")
+          generator = generator_path.read_text(encoding="utf-8")
+          generator_anchor = '    write::<zed_interfaces::Manifest>(dir, "manifest");\n'
+          generator_line = (
+              '    write::<zed_interfaces::DependencyGraphDocument>'
+              '(dir, "dependency-graph-v1");\n'
+          )
+          if generator.count(generator_anchor) != 1 or generator_line in generator:
+              raise SystemExit("unexpected production schema generator surface")
+          generator_path.write_text(
+              generator.replace(generator_anchor, generator_line + generator_anchor, 1),
+              encoding="utf-8",
+          )
+
+      - name: Format, test, lint, generate, and prove schema identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo test --locked dependency_graph
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo run --locked --example generate_schemas
+          cmp /tmp/certified-dependency-graph-v1.json schemas/dependency-graph-v1.json
+          cargo test --locked dependency_graph
+          git diff --check
+
+      - name: Commit durable production delta and remove promoter
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/materialize-den-2864-dependency-graph.yml
+          git config user.name "zed-interfaces contract promoter"
+          git config user.email "zed-interfaces-contract-promoter@users.noreply.github.com"
+          git add src/dependency_graph.rs src/lib.rs examples/generate_schemas.rs \
+            docs/dependency-graph-v1.md schemas/dependency-graph-v1.json \
+            .github/workflows/materialize-den-2864-dependency-graph.yml
+          git commit -m "add certified dependency graph v1 contract [materialized-contract]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
