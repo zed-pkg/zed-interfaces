@@ -9,6 +9,7 @@ on:
       - ".github/den-2854-snapshot-reconcile.py"
       - ".github/den-2854-archive-manifest-endpoint.py"
       - ".github/den-2854-canonical-trust-hardening.py"
+      - ".github/den-2854-root-signature-export.py"
       - ".github/workflows/den-2854-snapshot-reconciliation.yml"
       - "docs/registry-protocol-v1.md"
       - "src/registry_protocol_v1.rs"
@@ -41,6 +42,7 @@ jobs:
           python3 .github/den-2854-snapshot-reconcile.py
           python3 .github/den-2854-archive-manifest-endpoint.py
           python3 .github/den-2854-canonical-trust-hardening.py
+          python3 .github/den-2854-root-signature-export.py
 
       - name: Format, test, lint, and regenerate schemas
         run: |
@@ -77,6 +79,7 @@ jobs:
             .github/den-2854-snapshot-reconcile.py \
             .github/den-2854-archive-manifest-endpoint.py \
             .github/den-2854-canonical-trust-hardening.py \
+            .github/den-2854-root-signature-export.py \
             .github/workflows/den-2854-snapshot-reconciliation.yml
           git diff --cached --check
           git commit -m "DEN-2854 authenticate canonical registry snapshots"
