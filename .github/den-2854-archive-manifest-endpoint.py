@@ -59,15 +59,32 @@ def main() -> None:
 
     replace_once(
         source,
-        '        discovery.endpoints.snapshot_manifest_template = "/manifest.json".to_owned();\n'
-        "        assert!(discovery.validate().is_err());\n"
-        "    }\n",
-        '        discovery.endpoints.snapshot_manifest_template = "/manifest.json".to_owned();\n'
-        "        assert!(discovery.validate().is_err());\n\n"
-        "        let mut discovery = discovery();\n"
-        '        discovery.endpoints.archive_manifest_template = "/manifest.json".to_owned();\n'
-        "        assert!(discovery.validate().is_err());\n"
-        "    }\n",
+        r'''    #[test]
+    fn static_read_templates_require_the_immutable_snapshot_token() {
+        let mut discovery = discovery();
+        discovery.endpoints.sparse_index_template = "/index/{org}/{name}".to_owned();
+        assert!(discovery.validate().is_err());
+
+        let mut discovery = discovery();
+        discovery.endpoints.snapshot_manifest_template = "/manifest.json".to_owned();
+        assert!(discovery.validate().is_err());
+    }
+''',
+        r'''    #[test]
+    fn static_read_templates_require_the_immutable_snapshot_token() {
+        let mut sparse_discovery = discovery();
+        sparse_discovery.endpoints.sparse_index_template = "/index/{org}/{name}".to_owned();
+        assert!(sparse_discovery.validate().is_err());
+
+        let mut snapshot_discovery = discovery();
+        snapshot_discovery.endpoints.snapshot_manifest_template = "/manifest.json".to_owned();
+        assert!(snapshot_discovery.validate().is_err());
+
+        let mut archive_discovery = discovery();
+        archive_discovery.endpoints.archive_manifest_template = "/manifest.json".to_owned();
+        assert!(archive_discovery.validate().is_err());
+    }
+''',
     )
 
     discovery_path = Path("fixtures/registry-v1/discovery.json")
