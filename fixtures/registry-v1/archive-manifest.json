@@ -1,0 +1,31 @@
+{
+  "schema": "zpkg.registry-archive-manifest/v1",
+  "registry_id": "zpkg-registry:0123456789abcdef0123456789abcdef",
+  "org": "acme",
+  "name": "widget",
+  "version": "1.2.3",
+  "archive_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expanded_size": 8,
+  "entries": [
+    {
+      "path": "README.md",
+      "kind": "file",
+      "mode": 420,
+      "size": 3,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "path": "src",
+      "kind": "directory",
+      "mode": 493,
+      "size": 0
+    },
+    {
+      "path": "src/lib.rs",
+      "kind": "file",
+      "mode": 420,
+      "size": 5,
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ]
+}
