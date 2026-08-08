@@ -27,7 +27,9 @@ DOT and Mermaid are convenience renderings only. They are not digest inputs and 
 
 JSON is the stored semantic authority. YAML must use a JSON-compatible safe subset with no custom tags, aliases, anchors, or merge keys. TOML must use normalized arrays of nodes and edges and omit absent optional members rather than inventing sentinel values.
 
-When both `Accept` and `format=` are present and disagree, the server returns `406 Not Acceptable`. Download filenames are server-generated from validated package coordinates or the resolution digest; caller-supplied path separators are never reflected.
+When both `Accept` and `format=` are present and disagree, the server returns `406 Not Acceptable`. Download filenames are server-generated from validated package coordinates or the resolution digest and delivered in a `Content-Disposition` attachment header with a fixed character set; caller-supplied path separators, control characters, quotes, and non-ASCII bytes are never reflected.
+
+Both routes support conditional requests per representation: `GET` or `HEAD` with `If-None-Match` matching the representation's strong `ETag` returns `304 Not Modified` carrying the same `ETag`, `x-zpkg-graph-digest`, and `Cache-Control` metadata with no body. Because strong ETags are representation-specific, a JSON validator never produces a `304` for a YAML or TOML request.
 
 ## Canonicalization and identity
 
