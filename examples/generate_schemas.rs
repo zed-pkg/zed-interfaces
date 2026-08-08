@@ -7,6 +7,7 @@ use std::fs;
 use std::path::Path;
 
 use schemars::{JsonSchema, schema_for};
+use serde_json::Value;
 
 fn write<T: JsonSchema>(dir: &Path, name: &str) {
     let schema = schema_for!(T);
@@ -16,10 +17,69 @@ fn write<T: JsonSchema>(dir: &Path, name: &str) {
     println!("wrote {}", path.display());
 }
 
+/// The dependency-graph wire contract omits absent optional members. Explicit
+/// JSON `null` is not a second spelling for absence, because accepting it would
+/// make canonical JSON, YAML, and TOML projections disagree. Schemars models a
+/// Rust `Option<T>` as `T | null`, so normalize this one schema to the actual
+/// v1 serialization contract while leaving the field itself non-required.
+fn write_dependency_graph_schema(dir: &Path) {
+    let schema = schema_for!(zed_interfaces::DependencyGraphDocument);
+    let mut value = serde_json::to_value(schema).expect("schema serializes");
+    reject_explicit_nulls(&mut value);
+    let json = serde_json::to_string_pretty(&value).expect("schema serializes");
+    let path = dir.join("dependency-graph-v1.json");
+    fs::write(&path, json + "\n").expect("schema file writes");
+    println!("wrote {}", path.display());
+}
+
+fn reject_explicit_nulls(value: &mut Value) {
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                reject_explicit_nulls(value);
+            }
+        }
+        Value::Object(object) => {
+            for value in object.values_mut() {
+                reject_explicit_nulls(value);
+            }
+
+            let type_replacement = match object.get_mut("type") {
+                Some(Value::Array(types)) => {
+                    types.retain(|value| value.as_str() != Some("null"));
+                    (types.len() == 1).then(|| types[0].clone())
+                }
+                _ => None,
+            };
+            if let Some(replacement) = type_replacement {
+                object.insert("type".to_owned(), replacement);
+            }
+
+            let any_of_replacement = match object.get_mut("anyOf") {
+                Some(Value::Array(branches)) => {
+                    branches.retain(|branch| {
+                        branch.get("type").and_then(Value::as_str) != Some("null")
+                    });
+                    (branches.len() == 1).then(|| branches.remove(0))
+                }
+                _ => None,
+            };
+            if let Some(Value::Object(branch)) = any_of_replacement {
+                object.remove("anyOf");
+                for (key, value) in branch {
+                    object.entry(key).or_insert(value);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 fn main() {
     let dir = Path::new("schemas");
     fs::create_dir_all(dir).expect("schemas dir");
 
+    write_dependency_graph_schema(dir);
     write::<zed_interfaces::Manifest>(dir, "manifest");
     write::<zed_interfaces::Lockfile>(dir, "lockfile");
     write::<zed_interfaces::EnvironmentPlan>(dir, "environment-plan-v1");

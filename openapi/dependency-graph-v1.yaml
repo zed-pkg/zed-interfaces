@@ -1,0 +1,265 @@
+openapi: 3.1.0
+info:
+  title: zpkg dependency graph API
+  version: 1.0.0
+  description: >-
+    Download immutable declared requirements or one exact, content-addressed
+    resolution graph. JSON, YAML, and TOML are lossless projections of the
+    same typed document; DOT and Mermaid are convenience renderings.
+servers:
+  - url: https://registry.zpkg.net
+paths:
+  /v1/packages/{org}/{name}/versions/{version}/dependency-graph:
+    parameters:
+      - $ref: '#/components/parameters/Org'
+      - $ref: '#/components/parameters/Name'
+      - $ref: '#/components/parameters/Version'
+      - name: view
+        in: query
+        required: true
+        schema:
+          type: string
+          const: declared
+        description: This package-version route exposes declared requirements only.
+      - $ref: '#/components/parameters/Format'
+    get:
+      operationId: getDeclaredDependencyGraph
+      summary: Download immutable declared requirements
+      responses:
+        '200':
+          $ref: '#/components/responses/DependencyGraph'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/RepresentationTooLarge'
+    head:
+      operationId: headDeclaredDependencyGraph
+      summary: Inspect declared graph metadata without a response body
+      responses:
+        '200':
+          $ref: '#/components/responses/DependencyGraphHead'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+  /v1/resolutions/{resolution_digest}/dependency-graph:
+    parameters:
+      - name: resolution_digest
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Sha256Digest'
+        description: Digest identifying the exact resolver input/output record.
+      - $ref: '#/components/parameters/Format'
+      - name: target
+        in: query
+        schema:
+          type: string
+          minLength: 1
+        description: Explicit projection target. Produces a new projected graph digest.
+      - name: feature
+        in: query
+        schema:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        style: form
+        explode: true
+        description: Repeatable feature projection filter.
+      - name: kind
+        in: query
+        schema:
+          type: array
+          items:
+            $ref: '#/components/schemas/DependencyKind'
+        style: form
+        explode: true
+        description: Repeatable dependency-kind projection filter.
+      - name: max_depth
+        in: query
+        schema:
+          type: integer
+          format: uint32
+          minimum: 0
+        description: Explicit maximum traversal depth for a projected graph.
+    get:
+      operationId: getResolvedDependencyGraph
+      summary: Download an exact resolution graph or explicit projection
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/DependencyGraph'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/RepresentationTooLarge'
+        '422':
+          $ref: '#/components/responses/GraphLimitExceeded'
+    head:
+      operationId: headResolvedDependencyGraph
+      summary: Inspect resolved graph metadata without a response body
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/DependencyGraphHead'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Org:
+      name: org
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    Name:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    Version:
+      name: version
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    Format:
+      name: format
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [json, yaml, toml, dot, mermaid]
+      description: >-
+        Optional download-format override. If it conflicts with Accept, the
+        server returns 406 rather than silently choosing one representation.
+  schemas:
+    DependencyGraphDocument:
+      $ref: ../schemas/dependency-graph-v1.json
+    DependencyKind:
+      type: string
+      enum: [runtime, build, development, peer, tooling]
+    Sha256Digest:
+      type: string
+      pattern: '^sha256:[0-9a-f]{64}$'
+    ApiError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+  headers:
+    GraphDigest:
+      description: Semantic graph identity shared by JSON, YAML, and TOML.
+      required: true
+      schema:
+        $ref: '#/components/schemas/Sha256Digest'
+    ETag:
+      description: Strong representation-specific validator over encoded bytes.
+      required: true
+      schema:
+        type: string
+    CacheControl:
+      description: >-
+        Public immutable artifacts may be cached; private and indistinguishable
+        denied responses use private, no-store.
+      required: true
+      schema:
+        type: string
+  responses:
+    DependencyGraph:
+      description: Complete graph or explicit projection. Limits never silently truncate it.
+      headers:
+        x-zpkg-graph-digest:
+          $ref: '#/components/headers/GraphDigest'
+        ETag:
+          $ref: '#/components/headers/ETag'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/vnd.zpkg.dependency-graph.v1+json:
+          schema:
+            $ref: '#/components/schemas/DependencyGraphDocument'
+        application/vnd.zpkg.dependency-graph.v1+yaml:
+          schema:
+            $ref: '#/components/schemas/DependencyGraphDocument'
+        application/vnd.zpkg.dependency-graph.v1+toml:
+          schema:
+            $ref: '#/components/schemas/DependencyGraphDocument'
+        text/vnd.graphviz:
+          schema:
+            type: string
+        text/vnd.mermaid:
+          schema:
+            type: string
+    DependencyGraphHead:
+      description: Same status and metadata headers as GET, with no response body.
+      headers:
+        x-zpkg-graph-digest:
+          $ref: '#/components/headers/GraphDigest'
+        ETag:
+          $ref: '#/components/headers/ETag'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+    NotFound:
+      description: Missing or unauthorized private graph; responses are intentionally indistinguishable.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: not_found
+            message: dependency graph not found
+    NotAcceptable:
+      description: Accept and format selection conflict or unsupported representation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: format_conflict
+            message: requested graph representations conflict
+    RepresentationTooLarge:
+      description: Encoded representation would exceed the advertised byte limit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: graph_representation_too_large
+            message: dependency graph representation exceeds the server limit
+    GraphLimitExceeded:
+      description: Resolution graph exceeds a node, edge, depth, or build-time policy limit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: graph_limit_exceeded
+            message: dependency graph exceeds the server limit
