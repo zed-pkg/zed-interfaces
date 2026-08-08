@@ -263,7 +263,10 @@ pub struct DependencyGraphDocument {
 
 impl DependencyGraphDocument {
     /// Sorts every set-like collection into its normative order and removes
-    /// exact duplicates. This operation is idempotent.
+    /// exact duplicates from roots, edges, and feature lists. Resolved nodes
+    /// are only sorted: a duplicate node id, exact or conflicting, is a
+    /// validation error rather than a normalization. This operation is
+    /// idempotent.
     pub fn normalize_in_place(&mut self) {
         match &mut self.graph {
             DependencyGraphData::Declared { dependencies, .. } => {
