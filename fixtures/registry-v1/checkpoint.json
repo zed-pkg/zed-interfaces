@@ -1,0 +1,10 @@
+{
+  "schema": "zpkg.registry-checkpoint/v1",
+  "registry_id": "zpkg-registry:0123456789abcdef0123456789abcdef",
+  "sequence": 1,
+  "generated_at": "2026-08-07T00:00:00Z",
+  "expires_at": "2026-08-08T00:00:00Z",
+  "index_root_sha256": "c1a5ac237661d756d4b2e8c8723e3117acbe3465e91961f08b286876293e134a",
+  "signing_key_id": "metadata-2026-01",
+  "signature": "AbCdEfGhIjKlMnOpQrStUvWxYz_01234"
+}

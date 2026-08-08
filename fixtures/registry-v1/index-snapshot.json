@@ -1,0 +1,12 @@
+{
+  "schema": "zpkg.registry-index-snapshot/v1",
+  "registry_id": "zpkg-registry:0123456789abcdef0123456789abcdef",
+  "sequence": 1,
+  "entries": [
+    {
+      "path": "index/acme/widget",
+      "sha256": "08ddd99dfa72dd62606fc330f2d9e703a84d151db164f4c33a0c484aba0cd52d",
+      "size": 1064
+    }
+  ]
+}

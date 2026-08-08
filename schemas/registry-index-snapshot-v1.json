@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryIndexSnapshotV1",
+  "description": "Canonical manifest for every per-package index in one immutable snapshot.",
+  "type": "object",
+  "properties": {
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistryIndexSnapshotEntryV1"
+      }
+    },
+    "registry_id": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "registry_id",
+    "sequence",
+    "entries"
+  ],
+  "$defs": {
+    "RegistryIndexSnapshotEntryV1": {
+      "description": "One immutable sparse-index object authenticated by a snapshot manifest.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "size"
+      ]
+    }
+  }
+}
