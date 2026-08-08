@@ -585,7 +585,7 @@
           "$ref": "#/$defs/InstallHooksSection"
         },
         "name": {
-          "description": "Published package name for this target. Defaults to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to\nbreak out of the suffix convention when an ecosystem expects a\ndifferent spelling.",
+          "description": "Published package name for this target. Non-root targets default to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may\noverride that convention here. A whole-repository target (`dir = \".\"`)\nalways publishes as the root `package.name`; omit `name` there or repeat\nthe canonical root name. A different root-target name is invalid.",
           "type": [
             "string",
             "null"
