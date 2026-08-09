@@ -400,6 +400,12 @@ pub enum PrereleaseSyntax {
     /// The version never changes; the channel lives in the package reference
     /// instead (Conan's `name/version@user/channel`).
     ReferenceChannel,
+    /// The version never changes either, but the channel is expressed purely
+    /// by *where* the artifact goes. Hackage candidates are the case: the
+    /// Package Versioning Policy has no pre-release segment at all, so
+    /// `1.0.0-rc.1` is not a legal Hackage version — a candidate is the same
+    /// version uploaded to `/packages/candidates/`.
+    EndpointOnly,
     /// The host has no prerelease concept. Requesting one is an error rather
     /// than a silently-stable publish.
     Unsupported,
@@ -415,6 +421,7 @@ impl PrereleaseSyntax {
             MavenQualifier => "maven-qualifier",
             CpanTrial => "cpan-trial",
             ReferenceChannel => "reference-channel",
+            EndpointOnly => "endpoint-only",
             Unsupported => "unsupported",
         }
     }
@@ -435,7 +442,7 @@ impl PrereleaseSyntax {
         }
         match self {
             Unsupported => Err(NativeHostError::ChannelUnsupported { channel }),
-            ReferenceChannel => Ok(base.to_string()),
+            ReferenceChannel | EndpointOnly => Ok(base.to_string()),
             Semver => match channel {
                 ReleaseChannel::Snapshot => Ok(format!("{base}-SNAPSHOT")),
                 _ => {
@@ -474,9 +481,14 @@ impl PrereleaseSyntax {
                     Ok(format!("{base}-{}{iteration}", id.to_ascii_uppercase()))
                 }
             },
-            // A TRIAL release is marked by the underscore itself, so the
-            // channel identifier would be redundant noise in the version.
-            CpanTrial => Ok(format!("{base}_{iteration:02}")),
+            // CPAN has exactly one pre-release notion: a TRIAL release, marked
+            // by the underscore. There is no way to say "beta" as distinct
+            // from "rc", so accepting those channels would render two
+            // different tracks as the same version.
+            CpanTrial => match channel {
+                ReleaseChannel::Rc => Ok(format!("{base}_{iteration:02}")),
+                _ => Err(NativeHostError::ChannelUnsupported { channel }),
+            },
         }
     }
 }
@@ -716,11 +728,17 @@ impl NativeHost {
             Packagist => Ecosystem::Composer,
             NuGet => Ecosystem::Nuget,
             GoProxy => Ecosystem::Gomod,
-            ConanCenter | Dub => Ecosystem::Cmake,
+            ConanCenter => Ecosystem::Cmake,
+            // D builds with dub, not CMake; sharing the token let `cpp` route
+            // to `dub` and vice versa.
+            Dub => Ecosystem::Universal,
             SwiftPackageIndex | CocoaPods => Ecosystem::Swiftpm,
             PubDev => Ecosystem::Pub,
             Hex => Ecosystem::Hex,
-            Cpan | Cran => Ecosystem::Cran,
+            Cran => Ecosystem::Cran,
+            // Perl has no ecosystem token, and folding it into `cran` made the
+            // install guard accept `language = "r"` with `registry = "cpan"`.
+            Cpan => Ecosystem::Universal,
             Hackage | Stackage => Ecosystem::Hackage,
             LuaRocks => Ecosystem::Luarocks,
             JuliaGeneral => Ecosystem::Julia,
@@ -887,7 +905,10 @@ impl NativeHost {
         use PrereleaseSyntax as S;
         match self {
             Npm | CratesIo | NuGet | PubDev | Hex | SwiftPackageIndex | CocoaPods | GoProxy
-            | Packagist | Dub | Nimble | Shards | Zig | Vcs | Hackage | JuliaGeneral => S::Semver,
+            | Packagist | Dub | Nimble | Shards | Zig | Vcs | JuliaGeneral => S::Semver,
+            // PVP has no pre-release segment; a candidate is the same version
+            // at a different endpoint.
+            Hackage => S::EndpointOnly,
             PyPi | TestPyPi => S::Pep440,
             RubyGems => S::RubyGemsDotted,
             MavenCentral | Clojars => S::MavenQualifier,
@@ -956,6 +977,18 @@ impl NativeHost {
         }
     }
 
+    /// Whether this host only re-serves another registry's contents.
+    ///
+    /// Distinct from "has no upload endpoint", which several hosts share for
+    /// unrelated reasons: ConanCenter takes recipes by pull request and the
+    /// Swift Package Index reads git tags, so both are legitimate publish
+    /// destinations reached by a path that is not an HTTP upload. Stackage is
+    /// the one that publishes *nothing* — it curates Hackage — so a release
+    /// route to it can never mean anything.
+    pub fn is_mirror_of_another_registry(self) -> bool {
+        matches!(self, NativeHost::Stackage)
+    }
+
     /// Whether this host lets one version coordinate be published more than
     /// once with different content.
     ///
@@ -970,10 +1003,12 @@ impl NativeHost {
     /// and then refuse forever is worse than refusing it up front, because the
     /// failure lands after the release is already half-run.
     pub fn allows_republish(self) -> bool {
-        matches!(
-            self,
-            NativeHost::MavenCentral | NativeHost::Clojars | NativeHost::Packagist
-        )
+        // Packagist genuinely serves mutable `dev-*` versions, but they are
+        // derived from a **branch name**, not from a version — nothing in a
+        // release set names one. Rendering `1.0.0-SNAPSHOT` for it, as this
+        // did, invents a coordinate Composer does not resolve. Until a branch
+        // is part of the route, Packagist has no snapshot zed can address.
+        matches!(self, NativeHost::MavenCentral | NativeHost::Clojars)
     }
 
     /// Whether a consumer must explicitly opt in before a resolver will select
@@ -1548,17 +1583,82 @@ mod tests {
             assert!(host.channel_route("1.0.0", ReleaseChannel::Rc, 1).is_ok());
         }
 
-        // The three that genuinely serve a mutable coordinate.
-        for host in [
-            NativeHost::MavenCentral,
-            NativeHost::Clojars,
-            NativeHost::Packagist,
-        ] {
+        // Packagist looks like a fourth, and is not: its mutable versions are
+        // `dev-<branch>`, derived from a branch name that no version can
+        // supply. Rendering `1.0.0-SNAPSHOT` for it invented a coordinate
+        // Composer does not resolve.
+        assert!(!NativeHost::Packagist.allows_republish());
+        assert!(matches!(
+            NativeHost::Packagist.channel_route("1.0.0", ReleaseChannel::Snapshot, 1),
+            Err(NativeHostError::HostChannelUnsupported { .. })
+        ));
+
+        // The two that genuinely serve a mutable coordinate.
+        for host in [NativeHost::MavenCentral, NativeHost::Clojars] {
             let route = host
                 .channel_route("1.0.0", ReleaseChannel::Snapshot, 1)
                 .unwrap();
             assert!(route.mutable, "{host} snapshot must be marked mutable");
         }
+    }
+
+    #[test]
+    fn a_hackage_candidate_keeps_its_version_and_only_moves_endpoint() {
+        // The Package Versioning Policy has no pre-release segment, so
+        // `1.0.0-rc.1` is not a legal Hackage version. A candidate is the
+        // same version uploaded to a different resource.
+        let candidate = NativeHost::Hackage
+            .channel_route("1.0.0", ReleaseChannel::Rc, 1)
+            .unwrap();
+        assert_eq!(candidate.version, "1.0.0", "PVP has no pre-release segment");
+        assert_eq!(
+            candidate.endpoints.publish.as_deref(),
+            Some("https://hackage.haskell.org/packages/candidates")
+        );
+        assert!(candidate.requires_opt_in);
+        assert_eq!(
+            NativeHost::Hackage.prerelease_syntax(),
+            PrereleaseSyntax::EndpointOnly
+        );
+    }
+
+    #[test]
+    fn cpan_expresses_only_a_trial_release() {
+        // TRIAL is CPAN's single pre-release notion. Accepting `beta` too
+        // would render two different tracks as the identical version.
+        assert_eq!(
+            NativeHost::Cpan
+                .channel_route("1.0.0", ReleaseChannel::Rc, 1)
+                .unwrap()
+                .version,
+            "1.0.0_01"
+        );
+        for channel in [
+            ReleaseChannel::Beta,
+            ReleaseChannel::Alpha,
+            ReleaseChannel::Nightly,
+        ] {
+            assert!(
+                NativeHost::Cpan.channel_route("1.0.0", channel, 1).is_err(),
+                "cpan must not render {channel} as a TRIAL"
+            );
+        }
+    }
+
+    #[test]
+    fn unrelated_registries_do_not_share_an_ecosystem_token() {
+        // Sharing one collapses the install guard: `language = "r"` with
+        // `registry = "cpan"` was accepted, as was `cpp` with `dub`.
+        assert_ne!(
+            NativeHost::Cpan.ecosystem(),
+            NativeHost::Cran.ecosystem(),
+            "Perl is not R"
+        );
+        assert_ne!(
+            NativeHost::Dub.ecosystem(),
+            NativeHost::ConanCenter.ecosystem(),
+            "D does not build with CMake"
+        );
     }
 
     #[test]
