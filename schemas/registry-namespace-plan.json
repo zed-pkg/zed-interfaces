@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryNamespacePlan",
+  "description": "Deterministic pre-mutation claim plan. It says what must be done; it never\nsays an external namespace was successfully created or reserved.",
+  "type": "object",
+  "properties": {
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistryNamespaceEntry"
+      }
+    },
+    "request": {
+      "$ref": "#/$defs/RegistryNamespaceRequest"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "request",
+    "entries"
+  ],
+  "$defs": {
+    "RegistryNamespaceAction": {
+      "description": "Provider-neutral step in an ordered namespace claim plan.",
+      "type": "string",
+      "enum": [
+        "check-availability",
+        "create-organization",
+        "register-namespace",
+        "verify-domain",
+        "create-publisher",
+        "publish-first-package",
+        "add-owner-team",
+        "create-group",
+        "create-workspace",
+        "record-ownership-evidence"
+      ]
+    },
+    "RegistryNamespaceAutomation": {
+      "description": "How far an ordinary client can take the claim without pretending that a\nmanual or first-publication boundary is an API operation.",
+      "oneOf": [
+        {
+          "description": "A human must use the provider's web or administration interface.",
+          "type": "string",
+          "const": "manual-web-flow"
+        },
+        {
+          "description": "Proof is established separately, after which an adapter may use an API.",
+          "type": "string",
+          "const": "proof-then-api"
+        },
+        {
+          "description": "The identity is established only by publishing the first real package.",
+          "type": "string",
+          "const": "first-publication"
+        },
+        {
+          "description": "The provider has no organization-level namespace to reserve.",
+          "type": "string",
+          "const": "not-reservable"
+        }
+      ]
+    },
+    "RegistryNamespaceDisposition": {
+      "description": "Actionability of one provider entry before any external mutation occurs.",
+      "oneOf": [
+        {
+          "description": "All planner inputs exist; the ordered claim steps may now be attempted.",
+          "type": "string",
+          "const": "actionable"
+        },
+        {
+          "description": "One or more required identity proofs or inputs are absent.",
+          "type": "string",
+          "const": "missing-prerequisite"
+        },
+        {
+          "description": "The provider requires a human-owned web or administration flow.",
+          "type": "string",
+          "const": "manual-action-required"
+        },
+        {
+          "description": "No organization-level reservation exists for this provider.",
+          "type": "string",
+          "const": "not-reservable"
+        }
+      ]
+    },
+    "RegistryNamespaceEntry": {
+      "description": "One provider-specific identity and its pre-mutation claim procedure.",
+      "type": "object",
+      "properties": {
+        "automation": {
+          "$ref": "#/$defs/RegistryNamespaceAutomation"
+        },
+        "coordinate": {
+          "description": "Exact provider coordinate when one exists, such as `@acme`,\n`com.example`, `example.com`, or `acme`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "disposition": {
+          "$ref": "#/$defs/RegistryNamespaceDisposition"
+        },
+        "model": {
+          "$ref": "#/$defs/RegistryNamespaceModel"
+        },
+        "package_prefix": {
+          "description": "Advisory prefix for global package-name registries. A prefix is not a\nreserved namespace and must never be represented as one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proofs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RegistryNamespaceProof"
+          }
+        },
+        "provider": {
+          "$ref": "#/$defs/RegistryNamespaceProvider"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RegistryNamespaceStep"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "automation",
+        "disposition",
+        "steps"
+      ]
+    },
+    "RegistryNamespaceModel": {
+      "description": "Identity primitive exposed by one provider.",
+      "oneOf": [
+        {
+          "description": "A literal account-owned package scope, such as `@acme` on npm.",
+          "type": "string",
+          "const": "literal-organization-scope"
+        },
+        {
+          "description": "A verified package-prefix namespace, usually a reverse-DNS groupId.",
+          "type": "string",
+          "const": "verified-group-id-prefix"
+        },
+        {
+          "description": "Globally unique package names with no reservable organization scope.",
+          "type": "string",
+          "const": "global-package-names"
+        },
+        {
+          "description": "A publisher identity proven through control of a domain.",
+          "type": "string",
+          "const": "verified-publisher-domain"
+        },
+        {
+          "description": "A source-forge organization login.",
+          "type": "string",
+          "const": "forge-organization"
+        },
+        {
+          "description": "A source-forge top-level group path.",
+          "type": "string",
+          "const": "forge-group"
+        },
+        {
+          "description": "A source-forge workspace identifier.",
+          "type": "string",
+          "const": "forge-workspace"
+        }
+      ]
+    },
+    "RegistryNamespaceProof": {
+      "description": "Evidence or authority a provider requires before ownership can be asserted.",
+      "type": "string",
+      "enum": [
+        "registry-account-control",
+        "domain-control",
+        "git-hub-account-control",
+        "forge-administrator",
+        "existing-package-ownership"
+      ]
+    },
+    "RegistryNamespaceProvider": {
+      "description": "Registry or source-forge namespace whose identity is being coordinated.",
+      "type": "string",
+      "enum": [
+        "npm",
+        "maven-central",
+        "crates-io",
+        "pub-dev",
+        "git-hub",
+        "git-lab-com",
+        "bitbucket-cloud"
+      ]
+    },
+    "RegistryNamespaceRequest": {
+      "description": "User-controlled inputs from which a deterministic plan is derived.",
+      "type": "object",
+      "properties": {
+        "brand": {
+          "description": "Portable lowercase brand slug shared by providers that support it.",
+          "type": "string"
+        },
+        "domain": {
+          "description": "Canonical lowercase registrable domain without scheme, port, path, or\ntrailing dot. Required for domain-derived Maven and pub.dev identities.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "github_owner": {
+          "description": "Explicit GitHub owner used for `io.github.<owner>` fallback namespaces\nand ownership proof. It is never inferred from credentials.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "providers": {
+          "description": "Providers requested by the caller. A plan must contain exactly one entry\nfor each provider and no unrequested entry.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RegistryNamespaceProvider"
+          }
+        }
+      },
+      "required": [
+        "brand",
+        "providers"
+      ]
+    },
+    "RegistryNamespaceStep": {
+      "description": "One ordered claim step. `manual` describes the provider boundary, not a\nsuggestion that the action has happened.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/RegistryNamespaceAction"
+        },
+        "manual": {
+          "type": "boolean"
+        },
+        "prerequisite": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "summary",
+        "manual"
+      ]
+    }
+  }
+}

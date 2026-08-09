@@ -22,8 +22,7 @@ use thiserror::Error;
 /// Versioned wire identity for one deterministic cross-registry claim plan.
 pub const REGISTRY_NAMESPACE_PLAN_SCHEMA_V1: &str = "zed.registry-namespace-plan/v1";
 /// Versioned wire identity for one observed provider claim result.
-pub const REGISTRY_NAMESPACE_RECEIPT_SCHEMA_V1: &str =
-    "zed.registry-namespace-claim-receipt/v1";
+pub const REGISTRY_NAMESPACE_RECEIPT_SCHEMA_V1: &str = "zed.registry-namespace-claim-receipt/v1";
 
 /// Registry or source-forge namespace whose identity is being coordinated.
 #[derive(
@@ -177,11 +176,7 @@ impl RegistryNamespaceStep {
     fn validate(&self, field: &str) -> Result<(), RegistryNamespaceError> {
         validate_text(&format!("{field}.summary"), &self.summary, 512)?;
         if let Some(prerequisite) = &self.prerequisite {
-            validate_text(
-                &format!("{field}.prerequisite"),
-                prerequisite,
-                256,
-            )?;
+            validate_text(&format!("{field}.prerequisite"), prerequisite, 256)?;
         }
         Ok(())
     }
@@ -329,11 +324,7 @@ impl RegistryNamespaceEntry {
             step.validate(&format!("{field}.steps[{step_index}]"))?;
         }
         for (warning_index, warning) in self.warnings.iter().enumerate() {
-            validate_text(
-                &format!("{field}.warnings[{warning_index}]"),
-                warning,
-                1024,
-            )?;
+            validate_text(&format!("{field}.warnings[{warning_index}]"), warning, 1024)?;
         }
         Ok(())
     }
@@ -457,11 +448,7 @@ impl RegistryNamespaceEvidence {
     fn validate(&self, index: usize) -> Result<(), RegistryNamespaceError> {
         validate_text(&format!("evidence[{index}].subject"), &self.subject, 256)?;
         if let Some(reference) = &self.reference {
-            validate_text(
-                &format!("evidence[{index}].reference"),
-                reference,
-                2048,
-            )?;
+            validate_text(&format!("evidence[{index}].reference"), reference, 2048)?;
         }
         if let Some(sha256) = &self.sha256 {
             validate_sha256(&format!("evidence[{index}].sha256"), sha256)?;
@@ -629,9 +616,9 @@ fn validate_domain(field: &str, value: &str) -> Result<(), RegistryNamespaceErro
                 && label.len() <= 63
                 && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
                 && bytes.last().is_some_and(u8::is_ascii_alphanumeric)
-                && bytes.iter().all(|byte| {
-                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-'
-                })
+                && bytes
+                    .iter()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
         });
     if valid {
         Ok(())
@@ -676,9 +663,9 @@ fn validate_text(field: &str, value: &str, max: usize) -> Result<(), RegistryNam
     let valid = !value.is_empty()
         && value.len() <= max
         && value.trim() == value
-        && !value.chars().any(|character| {
-            character.is_control() && !matches!(character, '\n' | '\r' | '\t')
-        });
+        && !value
+            .chars()
+            .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'));
     if valid {
         Ok(())
     } else {
@@ -856,34 +843,34 @@ mod tests {
 
     #[test]
     fn provider_model_and_requested_set_fail_closed() {
-        let mut plan = plan();
-        plan.entries[0].model = RegistryNamespaceModel::ForgeWorkspace;
+        let mut model_plan = plan();
+        model_plan.entries[0].model = RegistryNamespaceModel::LiteralOrganizationScope;
         assert!(matches!(
-            plan.validate(),
+            model_plan.validate(),
             Err(RegistryNamespaceError::ProviderModelMismatch { .. })
         ));
 
-        let mut plan = plan();
-        plan.request.providers.pop();
+        let mut requested_plan = plan();
+        requested_plan.request.providers.pop();
         assert!(matches!(
-            plan.validate(),
+            requested_plan.validate(),
             Err(RegistryNamespaceError::UnrequestedProvider { .. })
         ));
     }
 
     #[test]
     fn portable_identity_rejects_confusables_and_noncanonical_domains() {
-        let mut request = request();
-        request.brand = "acmе-cloud".to_owned(); // Cyrillic `е`.
+        let mut brand_request = request();
+        brand_request.brand = "acmе-cloud".to_owned(); // Cyrillic `е`.
         assert!(matches!(
-            request.validate(),
+            brand_request.validate(),
             Err(RegistryNamespaceError::InvalidPortableSlug { .. })
         ));
 
-        let mut request = request();
-        request.domain = Some("HTTPS://Acme.Example/".to_owned());
+        let mut domain_request = request();
+        domain_request.domain = Some("HTTPS://Acme.Example/".to_owned());
         assert!(matches!(
-            request.validate(),
+            domain_request.validate(),
             Err(RegistryNamespaceError::InvalidDomain { .. })
         ));
     }

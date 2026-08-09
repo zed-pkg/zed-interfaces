@@ -159,6 +159,8 @@ fn main() {
     write::<zed_interfaces::NixExportPlan>(dir, "nix-export-plan");
     write::<zed_interfaces::NixAdapterRecord>(dir, "nix-adapter-record");
     write::<zed_interfaces::NativeRegistryAdapterRecord>(dir, "native-registry-adapter-record");
+    write::<zed_interfaces::RegistryNamespacePlan>(dir, "registry-namespace-plan");
+    write::<zed_interfaces::RegistryNamespaceClaimReceipt>(dir, "registry-namespace-claim-receipt");
     // The resolved (host, channel, version, endpoint) destination a release
     // publishes to. Emitted so non-Rust release tooling reads the same shape
     // `zed release plan --json` prints.
