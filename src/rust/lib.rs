@@ -15,6 +15,7 @@ pub mod excludes;
 pub mod language;
 pub mod lockfile;
 pub mod manifest;
+pub mod namespace_claim;
 pub mod native_dependency;
 pub mod native_host;
 pub mod native_registry;
@@ -60,6 +61,14 @@ pub use lockfile::{LockedPackage, Lockfile, LockfileError};
 pub use manifest::{
     InstallHooksSection, Manifest, ManifestError, NATIVE_PACKAGE_MANAGERS, NativeDependencies,
     NixExportRoute,
+};
+pub use namespace_claim::{
+    REGISTRY_NAMESPACE_PLAN_SCHEMA_V1, REGISTRY_NAMESPACE_RECEIPT_SCHEMA_V1,
+    RegistryNamespaceAction, RegistryNamespaceAutomation, RegistryNamespaceClaimOutcome,
+    RegistryNamespaceClaimReceipt, RegistryNamespaceDisposition, RegistryNamespaceEntry,
+    RegistryNamespaceError, RegistryNamespaceEvidence, RegistryNamespaceModel,
+    RegistryNamespacePlan, RegistryNamespaceProof, RegistryNamespaceProvider,
+    RegistryNamespaceRequest, RegistryNamespaceStep,
 };
 pub use native_dependency::{
     NATIVE_DEPENDENCY_LOCK_SCHEMA_V1, NativeDependencyError, NativeDependencyLock,
