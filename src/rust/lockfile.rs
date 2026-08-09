@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::artifact::ArtifactFormat;
+use crate::manifest::is_slug;
 use crate::native_dependency::NativeDependencyLock;
 use crate::native_registry::NativeRegistry;
 use crate::nix::NixAdapterRecord;
@@ -22,6 +23,9 @@ const ARTIFACT_REVISION_PREFIX: &str = "artifact-sha256:";
 /// reinterpret a native range or repeat an environment translation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Lockfile {
+    /// On-disk lockfile contract version. Version 1 is the only format this
+    /// crate currently reads or writes.
+    #[schemars(range(min = 1, max = 1))]
     pub version: u32,
     #[serde(default, rename = "package", skip_serializing_if = "Vec::is_empty")]
     pub packages: Vec<LockedPackage>,
@@ -43,9 +47,9 @@ pub struct Lockfile {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct LockedPackage {
-    #[schemars(length(min = 1))]
+    #[schemars(length(min = 1), regex(pattern = r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"))]
     pub org: String,
-    #[schemars(length(min = 1))]
+    #[schemars(length(min = 1), regex(pattern = r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"))]
     pub name: String,
     #[schemars(length(min = 1))]
     pub version: String,
@@ -83,7 +87,7 @@ pub struct LockedPackage {
 pub enum LockfileError {
     #[error("lockfile toml error: {0}")]
     Toml(String),
-    #[error("unsupported lockfile version {0} (this build supports {1})")]
+    #[error("unsupported lockfile version {0} (this build supports exactly version {1})")]
     UnsupportedVersion(u32, u32),
     #[error("invalid locked package metadata for `{package}`: {reason}")]
     InvalidPackageMetadata { package: String, reason: String },
@@ -116,12 +120,7 @@ impl Lockfile {
     pub fn parse(input: &str) -> Result<Self, LockfileError> {
         let lockfile: Lockfile =
             toml::from_str(input).map_err(|error| LockfileError::Toml(error.to_string()))?;
-        if lockfile.version > Self::CURRENT_VERSION {
-            return Err(LockfileError::UnsupportedVersion(
-                lockfile.version,
-                Self::CURRENT_VERSION,
-            ));
-        }
+        lockfile.validate_version()?;
         lockfile.validate_packages()?;
         lockfile.validate_native_dependencies()?;
         lockfile.validate_nix_adapters()?;
@@ -130,6 +129,7 @@ impl Lockfile {
 
     pub fn to_toml_string(&self) -> Result<String, LockfileError> {
         let mut normalized = self.clone();
+        normalized.validate_version()?;
         normalized.normalize_missing_package_revisions()?;
         normalized.validate_packages()?;
         normalized.validate_native_dependencies()?;
@@ -203,6 +203,16 @@ impl Lockfile {
         Ok(())
     }
 
+    fn validate_version(&self) -> Result<(), LockfileError> {
+        if self.version != Self::CURRENT_VERSION {
+            return Err(LockfileError::UnsupportedVersion(
+                self.version,
+                Self::CURRENT_VERSION,
+            ));
+        }
+        Ok(())
+    }
+
     fn normalize_missing_package_revisions(&mut self) -> Result<(), LockfileError> {
         for package in &mut self.packages {
             if package.vcs_commit.is_some() {
@@ -233,11 +243,17 @@ impl Lockfile {
             if !seen.insert((package.org.clone(), package.name.clone())) {
                 return Err(LockfileError::DuplicatePackage(label));
             }
-            if package.org.trim().is_empty() {
-                return invalid_package(&label, "org must not be empty");
+            if !is_slug(&package.org) {
+                return invalid_package(
+                    &label,
+                    "org must be a lowercase slug using letters, digits, and interior hyphens",
+                );
             }
-            if package.name.trim().is_empty() {
-                return invalid_package(&label, "name must not be empty");
+            if !is_slug(&package.name) {
+                return invalid_package(
+                    &label,
+                    "name must be a lowercase slug using letters, digits, and interior hyphens",
+                );
             }
             if package.version.trim().is_empty() {
                 return invalid_package(&label, "version must not be empty");
@@ -466,6 +482,70 @@ source = "file:///tmp/registry"
     }
 
     #[test]
+    fn only_the_current_lockfile_version_is_accepted() {
+        assert_eq!(
+            Lockfile::parse(VALID_LOCK).unwrap().version,
+            Lockfile::CURRENT_VERSION
+        );
+
+        for unsupported in [0, Lockfile::CURRENT_VERSION + 1] {
+            let input = VALID_LOCK.replacen("version = 1", &format!("version = {unsupported}"), 1);
+            assert!(matches!(
+                Lockfile::parse(&input),
+                Err(LockfileError::UnsupportedVersion(version, current))
+                    if version == unsupported && current == Lockfile::CURRENT_VERSION
+            ));
+
+            let lock = Lockfile {
+                version: unsupported,
+                ..Lockfile::default()
+            };
+            assert!(matches!(
+                lock.to_toml_string(),
+                Err(LockfileError::UnsupportedVersion(version, current))
+                    if version == unsupported && current == Lockfile::CURRENT_VERSION
+            ));
+        }
+    }
+
+    #[test]
+    fn locked_package_identity_uses_the_manifest_slug_contract() {
+        for (field, original, invalid) in [
+            ("org", "zed-pkg", "ZedPkg"),
+            ("org", "zed-pkg", "-zed-pkg"),
+            ("org", "zed-pkg", "zed-pkg-"),
+            ("org", "zed-pkg", "zed pkg"),
+            ("org", "zed-pkg", "zed/pkg"),
+            ("org", "zed-pkg", ""),
+            ("name", "fixture", "Fixture"),
+            ("name", "fixture", "-fixture"),
+            ("name", "fixture", "fixture-"),
+            ("name", "fixture", "fix ture"),
+            ("name", "fixture", "fix/ture"),
+            ("name", "fixture", ""),
+        ] {
+            let input = VALID_LOCK.replacen(
+                &format!("{field} = \"{original}\""),
+                &format!("{field} = \"{invalid}\""),
+                1,
+            );
+            let error = Lockfile::parse(&input).unwrap_err().to_string();
+            assert!(
+                error.contains(&format!("{field} must be a lowercase slug")),
+                "unexpected error for {field}={invalid:?}: {error}",
+            );
+        }
+    }
+
+    #[test]
+    fn additive_top_level_extensions_remain_forward_compatible() {
+        let extended = format!(
+            "{VALID_LOCK}\n[[git-submodule]]\nname = \"fixture\"\ncommit = \"fedcba9876543210fedcba9876543210fedcba98\"\n"
+        );
+        assert_eq!(Lockfile::parse(&extended).unwrap().packages.len(), 1);
+    }
+
+    #[test]
     fn missing_artifact_format_is_not_inferred() {
         let input = VALID_LOCK.replace("format = \"tar.gz\"\n", "");
         let error = Lockfile::parse(&input).unwrap_err().to_string();
@@ -587,6 +667,8 @@ source = "file:///tmp/registry"
     fn public_schema_requires_complete_package_provenance() {
         let schema = schemars::schema_for!(Lockfile);
         let value = serde_json::to_value(schema).unwrap();
+        assert_eq!(value["properties"]["version"]["minimum"], 1);
+        assert_eq!(value["properties"]["version"]["maximum"], 1);
         let package = &value["$defs"]["LockedPackage"];
         let required = package["required"].as_array().unwrap();
         let names = required
@@ -601,5 +683,11 @@ source = "file:///tmp/registry"
         assert_eq!(package["properties"]["sha256"]["minLength"], 64);
         assert_eq!(package["properties"]["sha256"]["maxLength"], 64);
         assert_eq!(package["properties"]["size"]["minimum"], 1);
+        for identity in ["org", "name"] {
+            assert_eq!(
+                package["properties"][identity]["pattern"],
+                r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+            );
+        }
     }
 }

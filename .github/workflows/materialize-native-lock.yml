@@ -70,12 +70,12 @@ jobs:
         run: |
           set +e
           evidence="$RUNNER_TEMP/native-lock-materialized"
-          mkdir -p "$evidence/src" "$evidence/schemas" "$evidence/docs" "$evidence/tests"
-          cp src/lockfile.rs "$evidence/src/" 2>/dev/null
+          mkdir -p "$evidence/src/rust" "$evidence/schemas" "$evidence/docs" "$evidence/tests"
+          cp src/rust/lockfile.rs "$evidence/src/rust/" 2>/dev/null
           cp schemas/lockfile.json "$evidence/schemas/" 2>/dev/null
           cp docs/native-dependency-lockfile.md "$evidence/docs/" 2>/dev/null
-          cp tests/native_dependency_lockfile_contract.rs "$evidence/tests/" 2>/dev/null
-          cp tests/native_dependency_lockfile_schema_contract.rs "$evidence/tests/" 2>/dev/null
+          cp src/rust/tests/native_dependency_lockfile_contract.rs "$evidence/tests/" 2>/dev/null
+          cp src/rust/tests/native_dependency_lockfile_schema_contract.rs "$evidence/tests/" 2>/dev/null
           cp "$RUNNER_TEMP/lockfile.sha256" "$evidence/" 2>/dev/null
           git diff --binary > "$evidence/semantic-merge.patch" 2>&1
           git status --porcelain=v1 --untracked-files=all \

@@ -1,4 +1,40 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lockfile",
+  "description": "The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.\n\nSerialized as TOML with one `[[package]]` table per locked Zed package,\noptional `[[native-dependency]]` tables for exact npm/Cargo resolutions,\nand optional `[[nix-adapter]]` tables for completed Nix translations.\nEvery entry pins exact immutable identity so frozen restore never needs to\nreinterpret a native range or repeat an environment translation.",
+  "type": "object",
+  "properties": {
+    "native-dependency": {
+      "description": "Exact source-aware npm/Cargo resolutions. This additive field keeps\nexisting lockfile version 1 documents readable while newer writers can\npreserve native requirement translation and immutable artifact identity.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NativeDependencyLock"
+      }
+    },
+    "nix-adapter": {
+      "description": "Optional immutable provenance for completed Nix interoperability\ntranslations. This additive field keeps lockfile version 1 readable by\ncurrent consumers while allowing newer writers to preserve evidence.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NixAdapterRecord"
+      }
+    },
+    "package": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LockedPackage"
+      }
+    },
+    "version": {
+      "description": "On-disk lockfile contract version. Version 1 is the only format this\ncrate currently reads or writes.",
+      "type": "integer",
+      "format": "uint32",
+      "maximum": 1,
+      "minimum": 1
+    }
+  },
+  "required": [
+    "version"
+  ],
   "$defs": {
     "ArtifactFormat": {
       "description": "On-the-wire formats for published package artifacts.",
@@ -12,41 +48,52 @@
       "type": "object",
       "properties": {
         "format": {
-          "$ref": "#/$defs/ArtifactFormat",
-          "default": "tar.gz"
+          "description": "Explicit archive format. A missing value must never be inferred during\na frozen install because the format is part of immutable artifact identity.",
+          "$ref": "#/$defs/ArtifactFormat"
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         },
         "org": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         },
         "sha256": {
-          "description": "Hex sha256 of the artifact archive; also its store address.",
-          "type": "string"
+          "description": "Canonical lowercase hex sha256 of the artifact archive; also its store address.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
         },
         "size": {
-          "description": "Artifact size in bytes.",
+          "description": "Artifact size in bytes. Zero-byte package artifacts are invalid.",
           "type": "integer",
           "format": "uint64",
-          "minimum": 0
+          "minimum": 1
         },
         "source": {
           "description": "Base URL of the registry the artifact was resolved from.",
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "vcs_commit": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "description": "Exact immutable source revision associated with the published artifact.\nThe optional Rust representation preserves API compatibility for\nbuilders. Parsing and JSON Schema validation require an explicit value;\nthe canonical writer upgrades a legacy in-memory `None` to the exact\ncontent-addressed `artifact-sha256:<digest>` revision before emission.",
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 7,
+          "pattern": "^[A-Za-z0-9._+:/-]+$"
         },
         "vcs_tag": {
           "description": "VCS tag the version was published from, e.g. `v1.2.0`.",
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "version": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
@@ -55,7 +102,9 @@
         "version",
         "sha256",
         "size",
+        "format",
         "vcs_tag",
+        "vcs_commit",
         "source"
       ]
     },
@@ -515,39 +564,5 @@
         "vcs_commit"
       ]
     }
-  },
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "The `.zpkg.lock` file written next to `.zpkg.toml` after resolution.\n\nSerialized as TOML with one `[[package]]` table per locked Zed package,\noptional `[[native-dependency]]` tables for exact npm/Cargo resolutions,\nand optional `[[nix-adapter]]` tables for completed Nix translations.\nEvery entry pins exact immutable identity so frozen restore never needs to\nreinterpret a native range or repeat an environment translation.",
-  "properties": {
-    "native-dependency": {
-      "description": "Exact source-aware npm/Cargo resolutions. This additive field keeps\nexisting lockfile version 1 documents readable while newer writers can\npreserve native requirement translation and immutable artifact identity.",
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/NativeDependencyLock"
-      }
-    },
-    "nix-adapter": {
-      "description": "Optional immutable provenance for completed Nix interoperability\ntranslations. This additive field keeps lockfile version 1 readable by\ncurrent consumers while allowing newer writers to preserve evidence.",
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/NixAdapterRecord"
-      }
-    },
-    "package": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/LockedPackage"
-      }
-    },
-    "version": {
-      "type": "integer",
-      "format": "uint32",
-      "minimum": 0
-    }
-  },
-  "required": [
-    "version"
-  ],
-  "title": "Lockfile",
-  "type": "object"
+  }
 }

@@ -1,4 +1,103 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Manifest",
+  "description": "The `.zpkg.toml` manifest at the root of every package repository.\nTOML only — never YAML or JSON.\n\n```toml\n[package]\norg = \"acme\"\nname = \"http-kit\"\nversion = \"1.2.0\"\ndescription = \"Tiny HTTP helpers\"\nlicense = \"MIT\"\n\n[package.repository]\nvcs = \"git\"\nurl = \"https://github.com/acme/http-kit\"\n\n[dependencies]\n\"acme/logkit\" = \"^0.3\"\n\n[publish]\nexclude = [\"benches/**\"]\nsmoke_test = \"sh scripts/smoke.sh\"\n```",
+  "type": "object",
+  "properties": {
+    "bin": {
+      "description": "Executables this package exposes, keyed by command name, valued by a\npath relative to the package root. On install they are hoisted into\n`zed_modules/.bin/` and runnable via `zed run <name>` (zed-docs\nissue #7).",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "build": {
+      "description": "This package's own post-extract build step (compiled extensions,\ncodegen), run when the package ships source that needs compiling.\nBuilds run in an isolated staging copy — never inside the immutable\nsource store — and results are cached per (sha256, target, command).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BuildSection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "build-dependencies": {
+      "description": "Tools needed only while running this package's `[build]` command\n(compilers, codegen). They are made available in the build sandbox and\nnever linked into a consumer's `zed_modules/`. See [`BuildSection`]\nand zed-docs issue #5. Canonical TOML key is Cargo-style\n`[build-dependencies]`; the snake_case spelling is accepted on read.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "dependencies": {
+      "description": "Dependencies keyed by `org/name`, valued by a semver requirement.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "hooks": {
+      "description": "Package-local lifecycle hooks. They run in a writable staging copy,\nnever in the immutable source store and never in the consumer project.\n`pre-install` runs before `[build]`; `post-install` runs after it and\nbefore the finalized artifact is promoted to the platform cache.",
+      "$ref": "#/$defs/InstallHooksSection"
+    },
+    "install": {
+      "description": "Where zed materializes the (few, hand-picked) dependencies it sources —\nzed complements npm/maven/etc. rather than replacing them, so this dir\nsits alongside the native one and the ecosystem adapter wires it into\nthe toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`\ndefaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or\n`.deps/.zed`.",
+      "$ref": "#/$defs/InstallSection"
+    },
+    "native-dependencies": {
+      "description": "Host-native packages required before this package's install hooks or\nbuild step can run. Keys are supported package-manager names (`apt`,\n`apk`, `brew`, `nix`, ...); values are package specs passed as argv,\nnever interpolated into a shell command. Installing these prerequisites\nis an explicitly consented zed operation, separate from build-hook\nconsent.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "overrides": {
+      "description": "Consumer-side patches for dependencies (e.g. fixing a dependency's\nbroken or missing `[build]` step without waiting on upstream).",
+      "$ref": "#/$defs/OverridesSection"
+    },
+    "package": {
+      "$ref": "#/$defs/PackageSection"
+    },
+    "publish": {
+      "$ref": "#/$defs/PublishSection",
+      "default": {
+        "exclude": [],
+        "include_readme": false,
+        "smoke_test": null,
+        "tag_format": "v{version}"
+      }
+    },
+    "scripts": {
+      "$ref": "#/$defs/ScriptsSection",
+      "default": {
+        "test": null
+      }
+    },
+    "targets": {
+      "description": "Language subtrees for a **polyglot package** — one repo shipping the\nsame library for several ecosystems (e.g. `node/`, `python/`, `go/`).\nKeyed by ecosystem name; the value says which subdirectory is that\necosystem's package root. On install the consumer resolves one target\nand only that subtree is materialized, so a Python project gets the\nPython source at its import root rather than a tree it has to reach\ninto. Absent (the common case) = single-language package, whole tree.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/TargetSection"
+      }
+    },
+    "workspace": {
+      "description": "Monorepo workspace declaration (zed-docs issue #7); only meaningful in\na workspace root manifest. When present, `zed install` at this root\nresolves every member against one store and writes one `.zpkg.lock`;\nmember→member dependencies link by path instead of going through the\nregistry.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorkspaceSection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "package"
+  ],
   "$defs": {
     "BuildSection": {
       "description": "A post-extract build step. Because compiled output is OS/arch-specific,\nzed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the\nsource and caches the result in a build cache keyed by\n`(source sha256, target triple, command)` — separate from the universal,\nplatform-independent source store (zed-docs issue #5).",
@@ -360,11 +459,15 @@
         },
         "name": {
           "description": "Package name, unique within the org. Lowercase slug.",
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         },
         "org": {
           "description": "Namespace the package is published under. Lowercase slug.",
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         },
         "repository": {
           "$ref": "#/$defs/RepositorySection"
@@ -497,6 +600,7 @@
     },
     "TargetSection": {
       "description": "One ecosystem's slice of a polyglot package — and, on publish, its own\nindependently installable package.\n\nA repo like `fiducia-clients` carrying `clients/ts`, `clients/java`, and\n`clients/go` declares one target each. `zed publish` then emits **one\nartifact per target**, named `<name>-<target>` by default:\n\n```text\nfiducia/fiducia-clients-nodejs@1.1.2   <- clients/ts only\nfiducia/fiducia-clients-java@1.1.2     <- clients/java only\nfiducia/fiducia-clients-golang@1.1.2   <- clients/go only\n```\n\nOne source of truth and one version in the repo; N packages on the wire.\nA Java consumer downloads only Java bytes — the decisive advantage over\nshipping one fat artifact and slicing it at install time.",
+      "type": "object",
       "properties": {
         "adapter": {
           "description": "Ecosystem adapter consumers of THIS target should use (`node`, `java`,\n`none`). Recorded in the published per-target manifest so a consumer\ngets the right wiring without configuring it.",
@@ -559,8 +663,7 @@
       },
       "required": [
         "dir"
-      ],
-      "type": "object"
+      ]
     },
     "Vcs": {
       "description": "Version-control systems a package's source repository can live on.\n\nzed-pkg is VCS-agnostic by design: what gets installed is always a\nregistry artifact, and the VCS is where provenance (tags) is anchored.\nAuthors must create a matching tag on their declared backing repo\n(GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo, Gitea, Azure\nDevOps, CodeCommit, Radicle, or self-hosted) before publishing.\n\n`jj` and Sapling are git-compatible and push to git remotes, so their\nprovenance is verified through git tags.",
@@ -607,104 +710,5 @@
         }
       }
     }
-  },
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "The `.zpkg.toml` manifest at the root of every package repository.\nTOML only — never YAML or JSON.\n\n```toml\n[package]\norg = \"acme\"\nname = \"http-kit\"\nversion = \"1.2.0\"\ndescription = \"Tiny HTTP helpers\"\nlicense = \"MIT\"\n\n[package.repository]\nvcs = \"git\"\nurl = \"https://github.com/acme/http-kit\"\n\n[dependencies]\n\"acme/logkit\" = \"^0.3\"\n\n[publish]\nexclude = [\"benches/**\"]\nsmoke_test = \"sh scripts/smoke.sh\"\n```",
-  "properties": {
-    "bin": {
-      "description": "Executables this package exposes, keyed by command name, valued by a\npath relative to the package root. On install they are hoisted into\n`zed_modules/.bin/` and runnable via `zed run <name>` (zed-docs\nissue #7).",
-      "type": "object",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "build": {
-      "description": "This package's own post-extract build step (compiled extensions,\ncodegen), run when the package ships source that needs compiling.\nBuilds run in an isolated staging copy — never inside the immutable\nsource store — and results are cached per (sha256, target, command).",
-      "anyOf": [
-        {
-          "$ref": "#/$defs/BuildSection"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "build-dependencies": {
-      "description": "Tools needed only while running this package's `[build]` command\n(compilers, codegen). They are made available in the build sandbox and\nnever linked into a consumer's `zed_modules/`. See [`BuildSection`]\nand zed-docs issue #5. Canonical TOML key is Cargo-style\n`[build-dependencies]`; the snake_case spelling is accepted on read.",
-      "type": "object",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "dependencies": {
-      "description": "Dependencies keyed by `org/name`, valued by a semver requirement.",
-      "type": "object",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "hooks": {
-      "description": "Package-local lifecycle hooks. They run in a writable staging copy,\nnever in the immutable source store and never in the consumer project.\n`pre-install` runs before `[build]`; `post-install` runs after it and\nbefore the finalized artifact is promoted to the platform cache.",
-      "$ref": "#/$defs/InstallHooksSection"
-    },
-    "install": {
-      "description": "Where zed materializes the (few, hand-picked) dependencies it sources —\nzed complements npm/maven/etc. rather than replacing them, so this dir\nsits alongside the native one and the ecosystem adapter wires it into\nthe toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`\ndefaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or\n`.deps/.zed`.",
-      "$ref": "#/$defs/InstallSection"
-    },
-    "native-dependencies": {
-      "description": "Host-native packages required before this package's install hooks or\nbuild step can run. Keys are supported package-manager names (`apt`,\n`apk`, `brew`, `nix`, ...); values are package specs passed as argv,\nnever interpolated into a shell command. Installing these prerequisites\nis an explicitly consented zed operation, separate from build-hook\nconsent.",
-      "type": "object",
-      "additionalProperties": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      }
-    },
-    "overrides": {
-      "description": "Consumer-side patches for dependencies (e.g. fixing a dependency's\nbroken or missing `[build]` step without waiting on upstream).",
-      "$ref": "#/$defs/OverridesSection"
-    },
-    "package": {
-      "$ref": "#/$defs/PackageSection"
-    },
-    "publish": {
-      "$ref": "#/$defs/PublishSection",
-      "default": {
-        "exclude": [],
-        "include_readme": false,
-        "smoke_test": null,
-        "tag_format": "v{version}"
-      }
-    },
-    "scripts": {
-      "$ref": "#/$defs/ScriptsSection",
-      "default": {
-        "test": null
-      }
-    },
-    "targets": {
-      "description": "Language subtrees for a **polyglot package** — one repo shipping the\nsame library for several ecosystems (e.g. `node/`, `python/`, `go/`).\nKeyed by ecosystem name; the value says which subdirectory is that\necosystem's package root. On install the consumer resolves one target\nand only that subtree is materialized, so a Python project gets the\nPython source at its import root rather than a tree it has to reach\ninto. Absent (the common case) = single-language package, whole tree.",
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/TargetSection"
-      }
-    },
-    "workspace": {
-      "description": "Monorepo workspace declaration (zed-docs issue #7); only meaningful in\na workspace root manifest. When present, `zed install` at this root\nresolves every member against one store and writes one `.zpkg.lock`;\nmember→member dependencies link by path instead of going through the\nregistry.",
-      "anyOf": [
-        {
-          "$ref": "#/$defs/WorkspaceSection"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    }
-  },
-  "required": [
-    "package"
-  ],
-  "title": "Manifest",
-  "type": "object"
+  }
 }
