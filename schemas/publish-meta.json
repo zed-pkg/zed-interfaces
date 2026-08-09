@@ -1,4 +1,42 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PublishMeta",
+  "description": "JSON half of the multipart publish request; the artifact bytes travel in\nthe [`PUBLISH_ARTIFACT_FIELD`] part.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "$ref": "#/$defs/ArtifactFormat",
+      "default": "tar.gz"
+    },
+    "manifest": {
+      "$ref": "#/$defs/Manifest"
+    },
+    "sha256": {
+      "description": "Client-computed sha256 of the uploaded archive; the server recomputes\nand rejects on mismatch.",
+      "type": "string"
+    },
+    "size": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "vcs_commit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "vcs_tag": {
+      "description": "Tag that exists in the source repository for this version.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "manifest",
+    "vcs_tag",
+    "sha256",
+    "size"
+  ],
   "$defs": {
     "ArtifactFormat": {
       "description": "On-the-wire formats for published package artifacts.",
@@ -467,11 +505,15 @@
         },
         "name": {
           "description": "Package name, unique within the org. Lowercase slug.",
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         },
         "org": {
           "description": "Namespace the package is published under. Lowercase slug.",
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         },
         "repository": {
           "$ref": "#/$defs/RepositorySection"
@@ -604,6 +646,7 @@
     },
     "TargetSection": {
       "description": "One ecosystem's slice of a polyglot package — and, on publish, its own\nindependently installable package.\n\nA repo like `fiducia-clients` carrying `clients/ts`, `clients/java`, and\n`clients/go` declares one target each. `zed publish` then emits **one\nartifact per target**, named `<name>-<target>` by default:\n\n```text\nfiducia/fiducia-clients-nodejs@1.1.2   <- clients/ts only\nfiducia/fiducia-clients-java@1.1.2     <- clients/java only\nfiducia/fiducia-clients-golang@1.1.2   <- clients/go only\n```\n\nOne source of truth and one version in the repo; N packages on the wire.\nA Java consumer downloads only Java bytes — the decisive advantage over\nshipping one fat artifact and slicing it at install time.",
+      "type": "object",
       "properties": {
         "adapter": {
           "description": "Ecosystem adapter consumers of THIS target should use (`node`, `java`,\n`none`). Recorded in the published per-target manifest so a consumer\ngets the right wiring without configuring it.",
@@ -666,8 +709,7 @@
       },
       "required": [
         "dir"
-      ],
-      "type": "object"
+      ]
     },
     "Vcs": {
       "description": "Version-control systems a package's source repository can live on.\n\nzed-pkg is VCS-agnostic by design: what gets installed is always a\nregistry artifact, and the VCS is where provenance (tags) is anchored.\nAuthors must create a matching tag on their declared backing repo\n(GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo, Gitea, Azure\nDevOps, CodeCommit, Radicle, or self-hosted) before publishing.\n\n`jj` and Sapling are git-compatible and push to git remotes, so their\nprovenance is verified through git tags.",
@@ -714,43 +756,5 @@
         }
       }
     }
-  },
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "JSON half of the multipart publish request; the artifact bytes travel in\nthe [`PUBLISH_ARTIFACT_FIELD`] part.",
-  "properties": {
-    "format": {
-      "$ref": "#/$defs/ArtifactFormat",
-      "default": "tar.gz"
-    },
-    "manifest": {
-      "$ref": "#/$defs/Manifest"
-    },
-    "sha256": {
-      "description": "Client-computed sha256 of the uploaded archive; the server recomputes\nand rejects on mismatch.",
-      "type": "string"
-    },
-    "size": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0
-    },
-    "vcs_commit": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "vcs_tag": {
-      "description": "Tag that exists in the source repository for this version.",
-      "type": "string"
-    }
-  },
-  "required": [
-    "manifest",
-    "vcs_tag",
-    "sha256",
-    "size"
-  ],
-  "title": "PublishMeta",
-  "type": "object"
+  }
 }

@@ -117,8 +117,10 @@ pub struct Manifest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct PackageSection {
     /// Namespace the package is published under. Lowercase slug.
+    #[schemars(length(min = 1), regex(pattern = r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"))]
     pub org: String,
     /// Package name, unique within the org. Lowercase slug.
+    #[schemars(length(min = 1), regex(pattern = r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"))]
     pub name: String,
     /// Version of this package, interpreted according to `version_scheme`
     /// (semver by default).
