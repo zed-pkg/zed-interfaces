@@ -1,42 +1,4 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "PublishMeta",
-  "description": "JSON half of the multipart publish request; the artifact bytes travel in\nthe [`PUBLISH_ARTIFACT_FIELD`] part.",
-  "type": "object",
-  "properties": {
-    "format": {
-      "$ref": "#/$defs/ArtifactFormat",
-      "default": "tar.gz"
-    },
-    "manifest": {
-      "$ref": "#/$defs/Manifest"
-    },
-    "sha256": {
-      "description": "Client-computed sha256 of the uploaded archive; the server recomputes\nand rejects on mismatch.",
-      "type": "string"
-    },
-    "size": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0
-    },
-    "vcs_commit": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "vcs_tag": {
-      "description": "Tag that exists in the source repository for this version.",
-      "type": "string"
-    }
-  },
-  "required": [
-    "manifest",
-    "vcs_tag",
-    "sha256",
-    "size"
-  ],
   "$defs": {
     "ArtifactFormat": {
       "description": "On-the-wire formats for published package artifacts.",
@@ -117,11 +79,17 @@
       ]
     },
     "ForgeRegistry": {
+      "description": "A multi-format registry that re-serves a canonical registry's wire protocol\nat its own base URL: a source forge's package registry, or an enterprise\nbinary repository that proxies public registries and hosts private ones.\n\nThese add no protocol of their own, which is why they are a separate axis\nfrom [`NativeRegistry`] — an org proxying npm through Artifactory needs a\ndifferent URL and credential, not a different client.",
       "type": "string",
       "enum": [
         "github-packages",
         "gitlab-packages",
-        "bitbucket-packages"
+        "bitbucket-packages",
+        "artifactory",
+        "nexus",
+        "aws-codeartifact",
+        "cloudsmith",
+        "azure-artifacts"
       ]
     },
     "InstallHooksSection": {
@@ -328,24 +296,69 @@
       ]
     },
     "NativeRegistry": {
-      "type": "string",
-      "enum": [
-        "npm",
-        "crates-io",
-        "pub.dev",
-        "pypi",
-        "maven-central",
-        "rubygems",
-        "nuget",
-        "packagist",
-        "go-modules"
+      "description": "The ecosystem registry a target is mirrored into.\n\nOne variant per registry zed can route to, including the three that store\nno artifact — Zig, plain VCS, and Go's proxy — because a release plan still\nhas to name where those packages come from.\n\nThis enum is the *manifest token*. Everything else about a registry — its\nURLs, wire protocol, auth scheme, and how it spells a release candidate —\nlives on [`crate::native_host::NativeHost`], reached through\n[`NativeRegistry::host`]. Keeping the token separate from the host facts is\nwhat lets the manifest spelling stay frozen while endpoints move.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "npm",
+            "crates-io",
+            "pub.dev",
+            "pypi",
+            "maven-central",
+            "rubygems",
+            "nuget",
+            "packagist",
+            "go-modules",
+            "hex",
+            "hackage",
+            "clojars",
+            "luarocks",
+            "cpan",
+            "cran",
+            "conan-center",
+            "swift-package-index",
+            "cocoapods",
+            "julia-general",
+            "opam",
+            "dub",
+            "nimble",
+            "shards",
+            "racket",
+            "powershell-gallery"
+          ]
+        },
+        {
+          "description": "test.pypi.org, a full mirror used as a rehearsal track.",
+          "type": "string",
+          "const": "test-pypi"
+        },
+        {
+          "description": "Curated Hackage snapshots. Resolve-only: nothing publishes here.",
+          "type": "string",
+          "const": "stackage"
+        },
+        {
+          "description": "Zig, which has no registry: dependencies are URLs pinned by hash.",
+          "type": "string",
+          "const": "zig"
+        },
+        {
+          "description": "A plain Git or Mercurial remote on GitHub, GitLab, or Bitbucket —\nfirst-class in zed, and a complete route on its own.",
+          "type": "string",
+          "const": "vcs"
+        }
       ]
     },
     "NativeReleaseSection": {
       "type": "object",
       "properties": {
+        "channel": {
+          "description": "Default release track for this route. Overridden per release by\n`zed release --channel`; declared here when a target is *only* ever\npublished to a pre-release track — a client generated from an unstable\nAPI surface, say.\n\nThe version is not spelled here. How a channel becomes a version string\nis the host's business and differs per ecosystem, so it is resolved by\n[`crate::native_host::NativeHost::channel_route`] at plan time.",
+          "$ref": "#/$defs/ReleaseChannel"
+        },
         "forge": {
-          "description": "Optional copies in package registries run by source forges. The native\nregistry remains the canonical ecosystem destination; these mirrors\nuse the same native package format and version.",
+          "description": "Optional copies in package registries run by source forges or\nenterprise binary repositories. The native registry remains the\ncanonical ecosystem destination; these mirrors use the same native\npackage format and version.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/ForgeRegistry"
@@ -532,6 +545,34 @@
         }
       }
     },
+    "ReleaseChannel": {
+      "description": "A release track. `Stable` is the default everywhere; the rest are the\npre-release tracks a language ecosystem exposes, in descending maturity.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "stable",
+            "beta",
+            "alpha"
+          ]
+        },
+        {
+          "description": "Release candidate: feature-complete, expected to become the release.",
+          "type": "string",
+          "const": "rc"
+        },
+        {
+          "description": "Built from the tip of a branch on a schedule. Immutable per build.",
+          "type": "string",
+          "const": "nightly"
+        },
+        {
+          "description": "Deliberately **mutable**: one coordinate, republished repeatedly.\nMaven `-SNAPSHOT`, Packagist `dev-*`, LuaRocks `dev`. The release\ninvariant that rejects same-version/different-content output has to be\nrelaxed here — see [`ReleaseChannel::is_mutable`].",
+          "type": "string",
+          "const": "snapshot"
+        }
+      ]
+    },
     "RepositorySection": {
       "description": "Where the package's source of truth lives. Any Git or Mercurial host\nworks: GitHub, GitLab, Bitbucket, or a self-hosted server.",
       "type": "object",
@@ -563,7 +604,6 @@
     },
     "TargetSection": {
       "description": "One ecosystem's slice of a polyglot package — and, on publish, its own\nindependently installable package.\n\nA repo like `fiducia-clients` carrying `clients/ts`, `clients/java`, and\n`clients/go` declares one target each. `zed publish` then emits **one\nartifact per target**, named `<name>-<target>` by default:\n\n```text\nfiducia/fiducia-clients-nodejs@1.1.2   <- clients/ts only\nfiducia/fiducia-clients-java@1.1.2     <- clients/java only\nfiducia/fiducia-clients-golang@1.1.2   <- clients/go only\n```\n\nOne source of truth and one version in the repo; N packages on the wire.\nA Java consumer downloads only Java bytes — the decisive advantage over\nshipping one fat artifact and slicing it at install time.",
-      "type": "object",
       "properties": {
         "adapter": {
           "description": "Ecosystem adapter consumers of THIS target should use (`node`, `java`,\n`none`). Recorded in the published per-target manifest so a consumer\ngets the right wiring without configuring it.",
@@ -585,7 +625,7 @@
           "$ref": "#/$defs/InstallHooksSection"
         },
         "name": {
-          "description": "Published package name for this target. Defaults to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to\nbreak out of the suffix convention when an ecosystem expects a\ndifferent spelling.",
+          "description": "Published package name for this target. Non-root targets default to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may\noverride that convention here. A whole-repository target (`dir = \".\"`)\nalways publishes as the root `package.name`; omit `name` there or repeat\nthe canonical root name. A different root-target name is invalid.",
           "type": [
             "string",
             "null"
@@ -626,7 +666,8 @@
       },
       "required": [
         "dir"
-      ]
+      ],
+      "type": "object"
     },
     "Vcs": {
       "description": "Version-control systems a package's source repository can live on.\n\nzed-pkg is VCS-agnostic by design: what gets installed is always a\nregistry artifact, and the VCS is where provenance (tags) is anchored.\nAuthors must create a matching tag on their declared backing repo\n(GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo, Gitea, Azure\nDevOps, CodeCommit, Radicle, or self-hosted) before publishing.\n\n`jj` and Sapling are git-compatible and push to git remotes, so their\nprovenance is verified through git tags.",
@@ -673,5 +714,43 @@
         }
       }
     }
-  }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON half of the multipart publish request; the artifact bytes travel in\nthe [`PUBLISH_ARTIFACT_FIELD`] part.",
+  "properties": {
+    "format": {
+      "$ref": "#/$defs/ArtifactFormat",
+      "default": "tar.gz"
+    },
+    "manifest": {
+      "$ref": "#/$defs/Manifest"
+    },
+    "sha256": {
+      "description": "Client-computed sha256 of the uploaded archive; the server recomputes\nand rejects on mismatch.",
+      "type": "string"
+    },
+    "size": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "vcs_commit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "vcs_tag": {
+      "description": "Tag that exists in the source repository for this version.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "manifest",
+    "vcs_tag",
+    "sha256",
+    "size"
+  ],
+  "title": "PublishMeta",
+  "type": "object"
 }

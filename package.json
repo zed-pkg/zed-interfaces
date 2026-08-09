@@ -1,0 +1,12 @@
+{
+  "name": "@zed-pkg/zed-interfaces-codegen",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Repository tooling for zed-interfaces: turns the front-end-facing JSON Schemas into the src/dart and src/ts slices. The publishable TypeScript package is src/ts, not this one.",
+  "type": "module",
+  "scripts": {
+    "codegen": "node codegen/generate.mjs",
+    "codegen:check": "node codegen/generate.mjs --check",
+    "test": "node --test codegen/*.test.mjs && node codegen/generate.mjs --check"
+  }
+}

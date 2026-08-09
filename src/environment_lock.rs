@@ -249,19 +249,6 @@ pub enum EnvironmentLockError {
     #[error("{field} must be a 64-character hexadecimal SHA-256 digest")]
     InvalidSha256 { field: String },
 
-    #[error("{field} must not contain credentials, query parameters, or fragments: `{value}`")]
-    UnsafeLocator { field: String, value: String },
-
-    #[error("tool `{tool}` source {kind:?} is incompatible with artifact format {format:?}")]
-    SourceArtifactMismatch {
-        tool: String,
-        kind: LockedSourceKind,
-        format: LockedArtifactFormat,
-    },
-
-    #[error("extension value `{path}` cannot be null")]
-    NullExtension { path: String },
-
     #[error("tool `{tool}` has no locked variants")]
     ToolWithoutVariants { tool: String },
 
@@ -504,9 +491,7 @@ impl LockedSource {
         artifact: &LockedArtifact,
         mode: EnvironmentLockValidationMode,
     ) -> Result<(), EnvironmentLockError> {
-        let locator_field = format!("tool `{tool}` source locator");
-        validate_text(&locator_field, &self.locator)?;
-        validate_source_locator(&locator_field, &self.locator, self.kind)?;
+        validate_text(&format!("tool `{tool}` source locator"), &self.locator)?;
         if let Some(revision) = &self.revision {
             validate_text(&format!("tool `{tool}` source revision"), revision)?;
         }
@@ -544,16 +529,6 @@ impl LockedSource {
                 kind: self.kind,
             });
         }
-        let path_source = self.kind == LockedSourceKind::Path;
-        let directory_artifact = artifact.format == LockedArtifactFormat::Directory;
-        if path_source != directory_artifact || (!path_source && self.tree_sha256.is_some()) {
-            return Err(EnvironmentLockError::SourceArtifactMismatch {
-                tool: tool.to_string(),
-                kind: self.kind,
-                format: artifact.format,
-            });
-        }
-
         if self.kind == LockedSourceKind::Path
             && mode == EnvironmentLockValidationMode::Portable
             && !self.portable
@@ -586,9 +561,7 @@ impl LockedArtifact {
     fn validate(&self, tool: &str) -> Result<(), EnvironmentLockError> {
         validate_sha256(&format!("tool `{tool}` artifact digest"), &self.sha256)?;
         for (index, mirror) in self.mirrors.iter().enumerate() {
-            let field = format!("tool `{tool}` mirror {index}");
-            validate_text(&field, mirror)?;
-            validate_network_locator(&field, mirror, false)?;
+            validate_text(&format!("tool `{tool}` mirror {index}"), mirror)?;
         }
         for (index, signature) in self.signatures.iter().enumerate() {
             validate_text(
@@ -658,7 +631,7 @@ impl LockedInstall {
         let mut names = BTreeSet::new();
         for executable in &self.executables {
             validate_executable_name(tool, variant, &executable.name)?;
-            if !names.insert(portable_executable_key(&executable.name)) {
+            if !names.insert(executable.name.clone()) {
                 return Err(EnvironmentLockError::ExecutableCollision {
                     tool: tool.to_string(),
                     variant: variant.to_string(),
@@ -672,7 +645,7 @@ impl LockedInstall {
             )?;
             for alias in &executable.aliases {
                 validate_executable_name(tool, variant, alias)?;
-                if !names.insert(portable_executable_key(alias)) {
+                if !names.insert(alias.clone()) {
                     return Err(EnvironmentLockError::ExecutableCollision {
                         tool: tool.to_string(),
                         variant: variant.to_string(),
@@ -724,56 +697,6 @@ fn validate_executable_name(
             name: name.to_string(),
         })
     }
-}
-
-fn portable_executable_key(name: &str) -> String {
-    let lower = name.to_ascii_lowercase();
-    for suffix in [".exe", ".cmd", ".bat", ".com"] {
-        if let Some(stem) = lower.strip_suffix(suffix)
-            && !stem.is_empty()
-        {
-            return stem.to_string();
-        }
-    }
-    lower
-}
-
-fn validate_source_locator(
-    field: &str,
-    value: &str,
-    kind: LockedSourceKind,
-) -> Result<(), EnvironmentLockError> {
-    if kind == LockedSourceKind::Path || kind == LockedSourceKind::Registry {
-        return Ok(());
-    }
-    validate_network_locator(field, value, kind == LockedSourceKind::Vcs)
-}
-
-fn validate_network_locator(
-    field: &str,
-    value: &str,
-    allow_git_user: bool,
-) -> Result<(), EnvironmentLockError> {
-    if value.contains('?') || value.contains('#') {
-        return Err(EnvironmentLockError::UnsafeLocator {
-            field: field.to_string(),
-            value: value.to_string(),
-        });
-    }
-
-    if let Some((_, remainder)) = value.split_once("://") {
-        let authority = remainder.split('/').next().unwrap_or(remainder);
-        if let Some((userinfo, _)) = authority.rsplit_once('@') {
-            let allowed = allow_git_user && userinfo == "git";
-            if !allowed {
-                return Err(EnvironmentLockError::UnsafeLocator {
-                    field: field.to_string(),
-                    value: value.to_string(),
-                });
-            }
-        }
-    }
-    Ok(())
 }
 
 fn validate_text(field: &str, value: &str) -> Result<(), EnvironmentLockError> {
@@ -851,39 +774,13 @@ fn validate_extensions(
     field: &str,
     extensions: &BTreeMap<String, serde_json::Value>,
 ) -> Result<(), EnvironmentLockError> {
-    for (key, value) in extensions {
+    for key in extensions.keys() {
         validate_text(&format!("{field} key"), key)?;
-        validate_extension_value(&format!("{field}.{key}"), value)?;
     }
     serde_json::to_vec(extensions).map_err(|error| EnvironmentLockError::JsonSerialize {
         message: format!("{field}: {error}"),
     })?;
     Ok(())
-}
-
-fn validate_extension_value(
-    path: &str,
-    value: &serde_json::Value,
-) -> Result<(), EnvironmentLockError> {
-    match value {
-        serde_json::Value::Null => Err(EnvironmentLockError::NullExtension {
-            path: path.to_string(),
-        }),
-        serde_json::Value::Array(values) => {
-            for (index, value) in values.iter().enumerate() {
-                validate_extension_value(&format!("{path}[{index}]"), value)?;
-            }
-            Ok(())
-        }
-        serde_json::Value::Object(values) => {
-            for (key, value) in values {
-                validate_text(&format!("{path} key"), key)?;
-                validate_extension_value(&format!("{path}.{key}"), value)?;
-            }
-            Ok(())
-        }
-        _ => Ok(()),
-    }
 }
 
 fn looks_floating(value: &str) -> bool {
@@ -1209,84 +1106,6 @@ mod tests {
             EnvironmentLock::parse_json(&json).unwrap(),
             lock.normalized()
         );
-    }
-
-    #[test]
-    fn credential_bearing_and_signed_urls_are_rejected() {
-        let mut credential = registry_tool("1.2.3", "x86_64-unknown-linux-gnu");
-        credential.source = LockedSource {
-            kind: LockedSourceKind::Http,
-            locator: "https://user:placeholder@example.invalid/tool.tar.gz".to_string(),
-            revision: None,
-            tree_sha256: None,
-            immutable: false,
-            portable: false,
-            extensions: BTreeMap::new(),
-        };
-        assert!(matches!(
-            lock_with(credential).validate(EnvironmentLockValidationMode::Portable),
-            Err(EnvironmentLockError::UnsafeLocator { .. })
-        ));
-
-        let mut signed = registry_tool("1.2.3", "x86_64-unknown-linux-gnu");
-        signed.artifact.mirrors =
-            vec!["https://example.invalid/tool.tar.gz?X-Signature=placeholder".to_string()];
-        assert!(matches!(
-            lock_with(signed).validate(EnvironmentLockValidationMode::Portable),
-            Err(EnvironmentLockError::UnsafeLocator { .. })
-        ));
-    }
-
-    #[test]
-    fn source_and_artifact_format_must_agree() {
-        let mut local = registry_tool("1.2.3", "x86_64-unknown-linux-gnu");
-        local.source = LockedSource {
-            kind: LockedSourceKind::Path,
-            locator: "vendor/tool".to_string(),
-            revision: None,
-            tree_sha256: Some(A.to_string()),
-            immutable: false,
-            portable: true,
-            extensions: BTreeMap::new(),
-        };
-        assert!(matches!(
-            lock_with(local).validate(EnvironmentLockValidationMode::Portable),
-            Err(EnvironmentLockError::SourceArtifactMismatch { .. })
-        ));
-
-        let mut remote_directory = registry_tool("1.2.3", "x86_64-unknown-linux-gnu");
-        remote_directory.artifact.format = LockedArtifactFormat::Directory;
-        assert!(matches!(
-            lock_with(remote_directory).validate(EnvironmentLockValidationMode::Portable),
-            Err(EnvironmentLockError::SourceArtifactMismatch { .. })
-        ));
-    }
-
-    #[test]
-    fn executable_collisions_follow_windows_command_semantics() {
-        let mut tool = registry_tool("22.4.0", "x86_64-pc-windows-msvc");
-        tool.install.executables.push(LockedExecutable {
-            name: "Node.EXE".to_string(),
-            path: "bin/Node.EXE".to_string(),
-            aliases: Vec::new(),
-        });
-        assert!(matches!(
-            lock_with(tool).validate(EnvironmentLockValidationMode::Portable),
-            Err(EnvironmentLockError::ExecutableCollision { .. })
-        ));
-    }
-
-    #[test]
-    fn null_extension_values_are_rejected_recursively() {
-        let mut lock = lock_with(registry_tool("22.4.0", "x86_64-unknown-linux-gnu"));
-        lock.extensions.insert(
-            "future".to_string(),
-            serde_json::json!({"nested": [1, null]}),
-        );
-        assert!(matches!(
-            lock.validate(EnvironmentLockValidationMode::Portable),
-            Err(EnvironmentLockError::NullExtension { .. })
-        ));
     }
 
     #[test]

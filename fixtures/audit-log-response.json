@@ -1,0 +1,17 @@
+{
+  "chain": {
+    "entries": [
+      {
+        "action": "publish",
+        "action_kind": "publish",
+        "actor_role": "publisher",
+        "actor_token_name": "ci",
+        "at": "2026-08-06T00:00:00Z",
+        "entry_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seq": 1,
+        "subject": "acme/http-kit@1.0.0"
+      }
+    ],
+    "org": "acme"
+  }
+}
