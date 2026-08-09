@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryNamespaceClaimReceipt",
+  "description": "Auditable observation for a single provider. A receipt can report\nunavailability, manual work, or non-reservability; absence of a receipt is\nnever interpreted as success.",
+  "type": "object",
+  "properties": {
+    "coordinate": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistryNamespaceEvidence"
+      }
+    },
+    "observed_at_unix_seconds": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "outcome": {
+      "$ref": "#/$defs/RegistryNamespaceClaimOutcome"
+    },
+    "plan_sha256": {
+      "description": "Lowercase SHA-256 of `RegistryNamespacePlan::canonical_json_bytes()`.",
+      "type": "string"
+    },
+    "provider": {
+      "$ref": "#/$defs/RegistryNamespaceProvider"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "plan_sha256",
+    "provider",
+    "outcome",
+    "observed_at_unix_seconds"
+  ],
+  "$defs": {
+    "RegistryNamespaceClaimOutcome": {
+      "description": "Result observed after one provider-specific check or claim attempt.",
+      "type": "string",
+      "enum": [
+        "reserved",
+        "existing-ownership-verified",
+        "first-publication-completed",
+        "unavailable",
+        "manual-action-required",
+        "not-reservable"
+      ]
+    },
+    "RegistryNamespaceEvidence": {
+      "description": "Non-secret evidence attached to a claim observation. `reference` is an\nopaque provider reference or public URL; credentials and response bodies do\nnot belong in receipts.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/RegistryNamespaceProof"
+        },
+        "reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "subject"
+      ]
+    },
+    "RegistryNamespaceProof": {
+      "description": "Evidence or authority a provider requires before ownership can be asserted.",
+      "type": "string",
+      "enum": [
+        "registry-account-control",
+        "domain-control",
+        "github-account-control",
+        "forge-administrator",
+        "existing-package-ownership"
+      ]
+    },
+    "RegistryNamespaceProvider": {
+      "description": "Registry or source-forge namespace whose identity is being coordinated.",
+      "type": "string",
+      "enum": [
+        "npm",
+        "maven-central",
+        "crates-io",
+        "pub-dev",
+        "github",
+        "gitlab-com",
+        "bitbucket-cloud"
+      ]
+    }
+  }
+}

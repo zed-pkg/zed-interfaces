@@ -10,6 +10,8 @@ export * from "./common.ts";
 export * from "./package-list-response.ts";
 export * from "./package-metadata.ts";
 export * from "./publish-response.ts";
+export * from "./registry-namespace-claim-receipt.ts";
+export * from "./registry-namespace-plan.ts";
 export * from "./search-response.ts";
 export * from "./semantic-search-request.ts";
 export * from "./semantic-search-response.ts";

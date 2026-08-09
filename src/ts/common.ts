@@ -10,3 +10,19 @@ export interface PackageSummary {
   /** Free-form tags for filtering/discovery. */
   readonly tags?: readonly string[];
 }
+
+/**
+ * Evidence or authority a provider requires before ownership can be asserted.
+ */
+export type RegistryNamespaceProof = "registry-account-control" | "domain-control" | "github-account-control" | "forge-administrator" | "existing-package-ownership";
+
+/** Every `RegistryNamespaceProof` value, in schema order — for validation and pickers. */
+export const REGISTRY_NAMESPACE_PROOF_VALUES = ["registry-account-control", "domain-control", "github-account-control", "forge-administrator", "existing-package-ownership"] as const;
+
+/**
+ * Registry or source-forge namespace whose identity is being coordinated.
+ */
+export type RegistryNamespaceProvider = "npm" | "maven-central" | "crates-io" | "pub-dev" | "github" | "gitlab-com" | "bitbucket-cloud";
+
+/** Every `RegistryNamespaceProvider` value, in schema order — for validation and pickers. */
+export const REGISTRY_NAMESPACE_PROVIDER_VALUES = ["npm", "maven-central", "crates-io", "pub-dev", "github", "gitlab-com", "bitbucket-cloud"] as const;
