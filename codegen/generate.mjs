@@ -76,6 +76,18 @@ const dartIdent = (raw, reserved = DART_CLASS_MEMBERS) => {
   return DART_KEYWORDS.has(id) || reserved.has(id) ? `${id}_` : id;
 };
 const dartEnumIdent = (raw) => dartIdent(raw, DART_ENUM_MEMBERS);
+// Types exported by dart:core. dart:core is imported implicitly, and an
+// explicit import *wins* over it — so a generated class named `Duration` would
+// not raise an ambiguity error, it would silently shadow the real one and
+// break unrelated consumer code with a baffling message. Fail at generation
+// time instead. (zed-lib shipped exactly this bug with a `Comparator` class.)
+const DART_CORE_TYPES = new Set([
+  "BigInt", "Comparable", "Comparator", "DateTime", "Deprecated", "Duration", "Enum", "Error",
+  "Exception", "Expando", "Function", "Future", "Invocation", "Iterable", "Iterator", "List",
+  "Map", "MapEntry", "Match", "Null", "Object", "Pattern", "Record", "RegExp", "RegExpMatch",
+  "Rune", "Runes", "Set", "Sink", "StackTrace", "Stopwatch", "Stream", "String", "StringBuffer",
+  "StringSink", "Symbol", "Type", "Uri", "UriData", "WeakReference",
+]);
 // Dart's own lints prefer single quotes; `$` starts an interpolation, so it
 // has to be escaped even inside a plain literal.
 const dartStr = (value) =>
@@ -85,11 +97,34 @@ const dartStr = (value) =>
 const TS_IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const tsKey = (wire) => (TS_IDENT_RE.test(wire) ? wire : JSON.stringify(wire));
 
+/**
+ * Greedy word wrap. A word longer than `width` gets its own over-long line
+ * rather than being dropped: this used to be a regex that silently discarded
+ * everything before the last fitting chunk, which lost 112 of 200 characters
+ * on a description with no spaces.
+ */
+function wrap(text, width) {
+  const lines = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    if (!word) continue;
+    if (!line) line = word;
+    else if (line.length + 1 + word.length <= width) line += ` ${word}`;
+    else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 // Doc-comment escapers: a description can never break out of the comment.
-const dartDoc = (s, indent = "") =>
-  oneLine(s)
-    ? oneLine(s).replace(/\r?\n/g, " ").match(/.{1,88}(\s|$)/g).map((line) => `${indent}/// ${line.trim()}`).join("\n") + "\n"
-    : "";
+const dartDoc = (s, indent = "") => {
+  const text = oneLine(s);
+  if (!text) return "";
+  return `${wrap(text, 88).map((line) => `${indent}/// ${line}`).join("\n")}\n`;
+};
 const tsDoc = (s, indent = "") => {
   const text = oneLine(s).replace(/\*\//g, "*\\/");
   if (!text) return "";
@@ -183,6 +218,15 @@ function typeRef(schema, where, emit) {
 
 /** One named type: a class or an enum. */
 function buildType(name, schema, sourceFile, sink) {
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) {
+    fail(`${sourceFile}: type name \`${name}\` must be PascalCase — it becomes a class in three languages`);
+  }
+  if (DART_CORE_TYPES.has(name)) {
+    fail(
+      `${sourceFile}: type name \`${name}\` collides with dart:core's \`${name}\`, which it would ` +
+        `silently shadow in every consumer — rename the Rust type`,
+    );
+  }
   const values = enumValues(schema);
   if (values) {
     return { kind: "enum", name, description: schema.description || "", values, sourceFile };
@@ -231,6 +275,14 @@ export function loadIndex(dir = schemaDir) {
   const listed = new Map();
   for (const entry of index.schemas) {
     if (!entry || typeof entry.file !== "string") fail(`schemas/${INDEX_FILE}: every entry needs a \`file\``);
+    // The file name becomes an output path under src/, so it may not escape
+    // the schema directory. `manifest.rs` applies the same rule to target
+    // dirs; codegen should not be the looser of the two.
+    if (!/^[a-z0-9][a-z0-9-]*\.json$/.test(entry.file)) {
+      fail(
+        `schemas/${INDEX_FILE}: \`${entry.file}\` must be a kebab-case *.json file name in this directory`,
+      );
+    }
     if (listed.has(entry.file)) fail(`schemas/${INDEX_FILE}: ${entry.file} is listed twice`);
     if (!Array.isArray(entry.targets)) fail(`schemas/${INDEX_FILE}: ${entry.file} needs a \`targets\` array`);
     for (const target of entry.targets) {
@@ -631,7 +683,7 @@ function emitTs(built) {
       "\n";
     const importBlock = [...imports.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([owner, names]) => `import type { ${[...names].sort().join(", ")} } from "./${owner}";`)
+      .map(([owner, names]) => `import type { ${[...names].sort().join(", ")} } from "./${owner}.ts";`)
       .join("\n");
     const body = module.types
       .map((type) => (type.kind === "enum" ? tsEnum(type) : tsInterface(type, kinds)))
@@ -643,7 +695,7 @@ function emitTs(built) {
   files["ts/index.ts"] =
     BANNER.split("\n").map((line) => `// ${line}`).join("\n") +
     "\n\n" +
-    moduleFiles.sort().map((m) => `export * from "./${m}";`).join("\n") +
+    moduleFiles.sort().map((m) => `export * from "./${m}.ts";`).join("\n") +
     "\n";
   return files;
 }
@@ -660,8 +712,15 @@ export const internals = {
   buildType, typeRef, emitDart, emitTs, dartIdent, dartEnumIdent, dartStr, snake, pascal,
 };
 
-/** Generated files that are no longer produced must not linger. */
+/**
+ * Generated files that are no longer produced must not linger — but the
+ * cleanup may only touch files this generator wrote. Ownership is decided by
+ * the banner, not by "it has the right extension and I don't recognize it":
+ * the slice directories also hold hand-written files (tests, a tsconfig), and
+ * an over-broad rule here deletes them.
+ */
 function staleFiles(expected) {
+  const marker = BANNER.split("\n")[0];
   const stale = [];
   for (const dir of ["dart/lib", "ts"]) {
     const abs = path.join(outDir, dir);
@@ -671,7 +730,9 @@ function staleFiles(expected) {
       const full = path.join(abs, name);
       if (fs.statSync(full).isDirectory()) continue;
       if (!/\.(dart|ts)$/.test(name)) continue;
-      if (!(rel in expected)) stale.push(rel);
+      if (rel in expected) continue;
+      const head = fs.readFileSync(full, "utf8").slice(0, 200);
+      if (head.includes(marker)) stale.push(rel);
     }
   }
   return stale;

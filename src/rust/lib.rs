@@ -7,6 +7,7 @@
 //! `schemas/`) by the non-Rust client libraries in `zed-clients`.
 
 pub mod artifact;
+pub mod dependency_graph;
 pub mod environment;
 pub mod environment_lock;
 pub mod environment_v2;
@@ -14,7 +15,9 @@ pub mod excludes;
 pub mod language;
 pub mod lockfile;
 pub mod manifest;
+pub mod namespace_claim;
 pub mod native_dependency;
+pub mod native_host;
 pub mod native_registry;
 pub mod nix;
 pub mod nix_plan;
@@ -26,6 +29,18 @@ pub mod vcs;
 pub mod version;
 
 pub use artifact::ArtifactFormat;
+pub use dependency_graph::{
+    DEPENDENCY_GRAPH_DECLARED_ROUTE_TEMPLATE, DEPENDENCY_GRAPH_DEFAULT_MAX_EDGES,
+    DEPENDENCY_GRAPH_DEFAULT_MAX_ENCODED_BYTES, DEPENDENCY_GRAPH_DEFAULT_MAX_NODES,
+    DEPENDENCY_GRAPH_DEFAULT_MAX_PROJECTION_DEPTH, DEPENDENCY_GRAPH_DIGEST_HEADER,
+    DEPENDENCY_GRAPH_JSON_MEDIA_TYPE, DEPENDENCY_GRAPH_RESOLUTION_ROUTE_TEMPLATE,
+    DEPENDENCY_GRAPH_SCHEMA_V1, DEPENDENCY_GRAPH_TOML_MEDIA_TYPE, DEPENDENCY_GRAPH_YAML_MEDIA_TYPE,
+    DeclaredDependency, DependencyGraphCompleteness, DependencyGraphData, DependencyGraphDocument,
+    DependencyGraphError, DependencyGraphFormat, DependencyGraphProjection, DependencyKind,
+    PackageVersionIdentity, RegistrySnapshot, ResolutionProvenance, ResolvedDependencyEdge,
+    ResolvedDependencyNode, declared_dependency_graph_path, golden_fixture_documents,
+    resolution_dependency_graph_path,
+};
 pub use environment::{
     ActivationPolicy, Checksum, ChecksumAlgorithm, EnvironmentManager, EnvironmentPlan,
     EnvironmentPlanError, EnvironmentSource, EnvironmentValidationMode, ImmutableSource,
@@ -47,9 +62,21 @@ pub use manifest::{
     InstallHooksSection, Manifest, ManifestError, NATIVE_PACKAGE_MANAGERS, NativeDependencies,
     NixExportRoute,
 };
+pub use namespace_claim::{
+    REGISTRY_NAMESPACE_PLAN_SCHEMA_V1, REGISTRY_NAMESPACE_RECEIPT_SCHEMA_V1,
+    RegistryNamespaceAction, RegistryNamespaceAutomation, RegistryNamespaceClaimOutcome,
+    RegistryNamespaceClaimReceipt, RegistryNamespaceDisposition, RegistryNamespaceEntry,
+    RegistryNamespaceError, RegistryNamespaceEvidence, RegistryNamespaceModel,
+    RegistryNamespacePlan, RegistryNamespaceProof, RegistryNamespaceProvider,
+    RegistryNamespaceRequest, RegistryNamespaceStep,
+};
 pub use native_dependency::{
     NATIVE_DEPENDENCY_LOCK_SCHEMA_V1, NativeDependencyError, NativeDependencyLock,
     NativeVersionCandidate, NativeVersionRequirement,
+};
+pub use native_host::{
+    ApiKeyHeader, ChannelRoute, HostEndpoints, NativeHost, NativeHostError, PrereleaseSyntax,
+    RegistryAuth, RegistryProtocol, ReleaseChannel, UniversalHost,
 };
 pub use native_registry::{
     NATIVE_REGISTRY_ADAPTER_SCHEMA_V1, NativeArtifact, NativePackageIdentity, NativePlatform,

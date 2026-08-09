@@ -14,6 +14,8 @@ export 'common.dart';
 export 'package_list_response.dart';
 export 'package_metadata.dart';
 export 'publish_response.dart';
+export 'registry_namespace_claim_receipt.dart';
+export 'registry_namespace_plan.dart';
 export 'search_response.dart';
 export 'semantic_search_request.dart';
 export 'semantic_search_response.dart';

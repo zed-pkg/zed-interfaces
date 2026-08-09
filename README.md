@@ -176,3 +176,10 @@ cd src/ts   && npm install && npx tsc --noEmit
 ## License
 
 MIT
+
+
+## Polyglot contract layout
+
+The hand-written Rust contract lives in `src/rust`. JSON schemas are generated from Rust; the front-end-facing subset is then generated into `src/dart` and `src/ts`. See [`docs/multi-language-layout.md`](docs/multi-language-layout.md). Root `Cargo.toml` is a virtual workspace so git-based Rust consumers continue to resolve the `zed-interfaces` crate.
+
+A whole-repository Zed target uses `dir = "."` and the canonical root package identity `zed-interfaces`; it intentionally has no conflicting target-level `name`.

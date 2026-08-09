@@ -1,0 +1,28 @@
+{
+  "full": {
+    "description": "An HTTP kit",
+    "latest": "2.0.0",
+    "name": "http-kit",
+    "org": "acme",
+    "repo_url": "https://github.com/acme/http-kit",
+    "tags": [
+      "http",
+      "client"
+    ],
+    "vcs": "jj",
+    "version_scheme": "calver",
+    "versions": [
+      "2.0.0",
+      "1.0.0"
+    ]
+  },
+  "minimal": {
+    "name": "http-kit",
+    "org": "acme",
+    "repo_url": "https://github.com/acme/http-kit",
+    "vcs": "git",
+    "versions": [
+      "1.0.0"
+    ]
+  }
+}

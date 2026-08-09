@@ -2,7 +2,7 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/search-response.json
 
-import type { PackageSummary } from "./common";
+import type { PackageSummary } from "./common.ts";
 
 export interface SearchResponse {
   readonly items: readonly PackageSummary[];

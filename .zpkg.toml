@@ -35,9 +35,11 @@ exclude = [
 # Whole-repository slice: schemas + all three language trees + the generator.
 # Take this one to regenerate or to diff the contract; take a language slice to
 # consume it.
+# The whole-repository slice publishes under the canonical package name; the
+# model rejects a divergent `name` here (DEN-2960). Take this one to regenerate
+# or to diff the contract; take a language slice to consume it.
 [targets.repository]
 dir = "."
-name = "zed-interfaces-repository"
 
 # The Rust crate is hand-written and is the source of truth: `cargo run
 # --example generate_schemas` derives schemas/, and codegen/generate.mjs

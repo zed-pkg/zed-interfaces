@@ -38,3 +38,57 @@ class PackageSummary {
     'tags': tags,
   };
 }
+
+/// Evidence or authority a provider requires before ownership can be asserted.
+enum RegistryNamespaceProof {
+  registryAccountControl('registry-account-control'),
+  domainControl('domain-control'),
+  githubAccountControl('github-account-control'),
+  forgeAdministrator('forge-administrator'),
+  existingPackageOwnership('existing-package-ownership');
+
+  const RegistryNamespaceProof(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static RegistryNamespaceProof fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown RegistryNamespaceProof: $value'),
+  );
+
+  static RegistryNamespaceProof? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
+/// Registry or source-forge namespace whose identity is being coordinated.
+enum RegistryNamespaceProvider {
+  npm('npm'),
+  mavenCentral('maven-central'),
+  cratesIo('crates-io'),
+  pubDev('pub-dev'),
+  github('github'),
+  gitlabCom('gitlab-com'),
+  bitbucketCloud('bitbucket-cloud');
+
+  const RegistryNamespaceProvider(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static RegistryNamespaceProvider fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown RegistryNamespaceProvider: $value'),
+  );
+
+  static RegistryNamespaceProvider? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}

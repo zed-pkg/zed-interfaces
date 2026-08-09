@@ -118,7 +118,11 @@ fn lockfile_roundtrip() {
 fn excludes_respect_include_readme() {
     let with_readme_stripped = effective_excludes(&[], false);
     assert!(with_readme_stripped.iter().any(|p| p == "README*"));
-    assert!(with_readme_stripped.iter().any(|p| p == "tests/**"));
+    assert!(
+        with_readme_stripped
+            .iter()
+            .any(|p| p == "src/rust/tests/**")
+    );
 
     let readme_kept = effective_excludes(&["extra/**".to_string()], true);
     assert!(!readme_kept.iter().any(|p| p == "README*"));
@@ -832,5 +836,24 @@ fn audit_preimage_resists_field_injection() {
             detail: Some(""),
             ..base
         }),
+    );
+}
+
+#[test]
+fn default_excludes_prune_root_tests_and_the_polyglot_rust_slice() {
+    use zed_interfaces::excludes::DEFAULT_EXCLUDES;
+
+    // A package's root `tests/` is the near-universal convention — Cargo,
+    // npm, pytest, and Go all use it — and this repository's own polyglot
+    // layout additionally puts them under `src/rust/tests/`. Narrowing the
+    // default to only the second made every published package ship its
+    // tests, which is a size and provenance regression for every consumer.
+    assert!(
+        DEFAULT_EXCLUDES.contains(&"tests/**"),
+        "a package's root tests/ must not be published"
+    );
+    assert!(
+        DEFAULT_EXCLUDES.contains(&"src/rust/tests/**"),
+        "the polyglot Rust slice's tests must not be published either"
     );
 }

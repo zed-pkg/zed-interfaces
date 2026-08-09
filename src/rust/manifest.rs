@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::language::{Ecosystem, Language};
+use crate::native_host::{NativeHost, ReleaseChannel, UniversalHost};
 use crate::nix::NixExportSection;
 use crate::vcs::Vcs;
 use crate::version::{Requirement, VersionScheme};
@@ -278,10 +279,11 @@ pub struct TargetSection {
     /// `python` or `clients/go`. Must be a safe relative path (no leading `/`,
     /// no `..`) so a target can never escape the package.
     pub dir: String,
-    /// Published package name for this target. Defaults to
-    /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`). Set it to
-    /// break out of the suffix convention when an ecosystem expects a
-    /// different spelling.
+    /// Published package name for this target. Non-root targets default to
+    /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may
+    /// override that convention here. A whole-repository target (`dir = "."`)
+    /// always publishes as the root `package.name`; omit `name` there or repeat
+    /// the canonical root name. A different root-target name is invalid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// Ecosystem adapter consumers of THIS target should use (`node`, `java`,
@@ -353,13 +355,35 @@ pub struct NativeReleaseSection {
     /// for example `clients/go/v{version}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag_format: Option<String>,
-    /// Optional copies in package registries run by source forges. The native
-    /// registry remains the canonical ecosystem destination; these mirrors
-    /// use the same native package format and version.
+    /// Optional copies in package registries run by source forges or
+    /// enterprise binary repositories. The native registry remains the
+    /// canonical ecosystem destination; these mirrors use the same native
+    /// package format and version.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub forge: Vec<ForgeRegistry>,
+    /// Default release track for this route. Overridden per release by
+    /// `zed release --channel`; declared here when a target is *only* ever
+    /// published to a pre-release track — a client generated from an unstable
+    /// API surface, say.
+    ///
+    /// The version is not spelled here. How a channel becomes a version string
+    /// is the host's business and differs per ecosystem, so it is resolved by
+    /// [`crate::native_host::NativeHost::channel_route`] at plan time.
+    #[serde(default, skip_serializing_if = "ReleaseChannel::is_default")]
+    pub channel: ReleaseChannel,
 }
 
+/// The ecosystem registry a target is mirrored into.
+///
+/// One variant per registry zed can route to, including the three that store
+/// no artifact — Zig, plain VCS, and Go's proxy — because a release plan still
+/// has to name where those packages come from.
+///
+/// This enum is the *manifest token*. Everything else about a registry — its
+/// URLs, wire protocol, auth scheme, and how it spells a release candidate —
+/// lives on [`crate::native_host::NativeHost`], reached through
+/// [`NativeRegistry::host`]. Keeping the token separate from the host facts is
+/// what lets the manifest spelling stay frozen while endpoints move.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -371,6 +395,9 @@ pub enum NativeRegistry {
     PubDev,
     #[serde(rename = "pypi")]
     PyPi,
+    /// test.pypi.org, a full mirror used as a rehearsal track.
+    #[serde(rename = "test-pypi")]
+    TestPyPi,
     MavenCentral,
     #[serde(rename = "rubygems")]
     RubyGems,
@@ -378,8 +405,49 @@ pub enum NativeRegistry {
     NuGet,
     Packagist,
     GoModules,
+    #[serde(rename = "hex")]
+    Hex,
+    Hackage,
+    /// Curated Hackage snapshots. Resolve-only: nothing publishes here.
+    Stackage,
+    Clojars,
+    #[serde(rename = "luarocks")]
+    LuaRocks,
+    #[serde(rename = "cpan")]
+    Cpan,
+    #[serde(rename = "cran")]
+    Cran,
+    ConanCenter,
+    SwiftPackageIndex,
+    #[serde(rename = "cocoapods")]
+    CocoaPods,
+    JuliaGeneral,
+    #[serde(rename = "opam")]
+    Opam,
+    #[serde(rename = "dub")]
+    Dub,
+    #[serde(rename = "nimble")]
+    Nimble,
+    Shards,
+    Racket,
+    #[serde(rename = "powershell-gallery")]
+    PowerShellGallery,
+    /// Zig, which has no registry: dependencies are URLs pinned by hash.
+    #[serde(rename = "zig")]
+    Zig,
+    /// A plain Git or Mercurial remote on GitHub, GitLab, or Bitbucket —
+    /// first-class in zed, and a complete route on its own.
+    #[serde(rename = "vcs")]
+    Vcs,
 }
 
+/// A multi-format registry that re-serves a canonical registry's wire protocol
+/// at its own base URL: a source forge's package registry, or an enterprise
+/// binary repository that proxies public registries and hosts private ones.
+///
+/// These add no protocol of their own, which is why they are a separate axis
+/// from [`NativeRegistry`] — an org proxying npm through Artifactory needs a
+/// different URL and credential, not a different client.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -388,6 +456,11 @@ pub enum ForgeRegistry {
     GithubPackages,
     GitlabPackages,
     BitbucketPackages,
+    Artifactory,
+    Nexus,
+    AwsCodeartifact,
+    Cloudsmith,
+    AzureArtifacts,
 }
 
 impl ForgeRegistry {
@@ -396,35 +469,37 @@ impl ForgeRegistry {
             Self::GithubPackages => "github-packages",
             Self::GitlabPackages => "gitlab-packages",
             Self::BitbucketPackages => "bitbucket-packages",
+            Self::Artifactory => "artifactory",
+            Self::Nexus => "nexus",
+            Self::AwsCodeartifact => "aws-codeartifact",
+            Self::Cloudsmith => "cloudsmith",
+            Self::AzureArtifacts => "azure-artifacts",
         }
     }
 
-    /// Package-manager protocols currently documented by each forge. Failing
-    /// closed here prevents a manifest from promising e.g. Cargo support in
-    /// GitHub Packages when that registry has no Cargo endpoint.
-    pub fn supports(self, native: NativeRegistry) -> bool {
+    /// The mirror as [`crate::native_host::UniversalHost`] models it, which is
+    /// where the protocol compatibility matrix and URL rewriting live.
+    pub fn universal_host(self) -> UniversalHost {
         match self {
-            Self::GithubPackages => matches!(
-                native,
-                NativeRegistry::Npm
-                    | NativeRegistry::MavenCentral
-                    | NativeRegistry::RubyGems
-                    | NativeRegistry::NuGet
-            ),
-            Self::GitlabPackages => matches!(
-                native,
-                NativeRegistry::Npm
-                    | NativeRegistry::PyPi
-                    | NativeRegistry::MavenCentral
-                    | NativeRegistry::RubyGems
-                    | NativeRegistry::NuGet
-                    | NativeRegistry::Packagist
-                    | NativeRegistry::GoModules
-            ),
-            Self::BitbucketPackages => {
-                matches!(native, NativeRegistry::Npm | NativeRegistry::MavenCentral)
-            }
+            Self::GithubPackages => UniversalHost::GithubPackages,
+            Self::GitlabPackages => UniversalHost::GitlabPackages,
+            Self::BitbucketPackages => UniversalHost::BitbucketPackages,
+            Self::Artifactory => UniversalHost::Artifactory,
+            Self::Nexus => UniversalHost::Nexus,
+            Self::AwsCodeartifact => UniversalHost::AwsCodeArtifact,
+            Self::Cloudsmith => UniversalHost::Cloudsmith,
+            Self::AzureArtifacts => UniversalHost::AzureArtifacts,
         }
+    }
+
+    /// Whether this mirror serves the wire protocol the canonical registry
+    /// uses. Failing closed prevents a manifest from promising e.g. Cargo
+    /// support in GitHub Packages when that registry has no Cargo endpoint.
+    ///
+    /// Keyed on the *protocol*, not the registry, so a mirror that already
+    /// serves Maven automatically serves Clojars-shaped artifacts too.
+    pub fn supports(self, native: NativeRegistry) -> bool {
+        self.universal_host().supports(native.host().protocol())
     }
 }
 
@@ -441,11 +516,67 @@ impl NativeRegistry {
             Self::CratesIo => "crates-io",
             Self::PubDev => "pub.dev",
             Self::PyPi => "pypi",
+            Self::TestPyPi => "test-pypi",
             Self::MavenCentral => "maven-central",
             Self::RubyGems => "rubygems",
             Self::NuGet => "nuget",
             Self::Packagist => "packagist",
             Self::GoModules => "go-modules",
+            Self::Hex => "hex",
+            Self::Hackage => "hackage",
+            Self::Stackage => "stackage",
+            Self::Clojars => "clojars",
+            Self::LuaRocks => "luarocks",
+            Self::Cpan => "cpan",
+            Self::Cran => "cran",
+            Self::ConanCenter => "conan-center",
+            Self::SwiftPackageIndex => "swift-package-index",
+            Self::CocoaPods => "cocoapods",
+            Self::JuliaGeneral => "julia-general",
+            Self::Opam => "opam",
+            Self::Dub => "dub",
+            Self::Nimble => "nimble",
+            Self::Shards => "shards",
+            Self::Racket => "racket",
+            Self::PowerShellGallery => "powershell-gallery",
+            Self::Zig => "zig",
+            Self::Vcs => "vcs",
+        }
+    }
+
+    /// The host this route resolves to, which carries the endpoints, wire
+    /// protocol, auth scheme, and release-channel rules.
+    pub fn host(self) -> NativeHost {
+        match self {
+            Self::Npm => NativeHost::Npm,
+            Self::CratesIo => NativeHost::CratesIo,
+            Self::PubDev => NativeHost::PubDev,
+            Self::PyPi => NativeHost::PyPi,
+            Self::TestPyPi => NativeHost::TestPyPi,
+            Self::MavenCentral => NativeHost::MavenCentral,
+            Self::RubyGems => NativeHost::RubyGems,
+            Self::NuGet => NativeHost::NuGet,
+            Self::Packagist => NativeHost::Packagist,
+            Self::GoModules => NativeHost::GoProxy,
+            Self::Hex => NativeHost::Hex,
+            Self::Hackage => NativeHost::Hackage,
+            Self::Stackage => NativeHost::Stackage,
+            Self::Clojars => NativeHost::Clojars,
+            Self::LuaRocks => NativeHost::LuaRocks,
+            Self::Cpan => NativeHost::Cpan,
+            Self::Cran => NativeHost::Cran,
+            Self::ConanCenter => NativeHost::ConanCenter,
+            Self::SwiftPackageIndex => NativeHost::SwiftPackageIndex,
+            Self::CocoaPods => NativeHost::CocoaPods,
+            Self::JuliaGeneral => NativeHost::JuliaGeneral,
+            Self::Opam => NativeHost::Opam,
+            Self::Dub => NativeHost::Dub,
+            Self::Nimble => NativeHost::Nimble,
+            Self::Shards => NativeHost::Shards,
+            Self::Racket => NativeHost::Racket,
+            Self::PowerShellGallery => NativeHost::PowerShellGallery,
+            Self::Zig => NativeHost::Zig,
+            Self::Vcs => NativeHost::Vcs,
         }
     }
 
@@ -454,12 +585,46 @@ impl NativeRegistry {
             Self::Npm => is_valid_npm_package(package),
             Self::CratesIo => is_valid_crates_package(package),
             Self::PubDev => is_valid_pubdev_package(package),
-            Self::PyPi => is_valid_pypi_package(package),
+            Self::PyPi | Self::TestPyPi => is_valid_pypi_package(package),
             Self::MavenCentral => is_valid_maven_package(package),
             Self::RubyGems => is_valid_rubygems_package(package),
             Self::NuGet => is_valid_nuget_package(package),
             Self::Packagist => is_valid_packagist_package(package),
             Self::GoModules => is_valid_go_module(package),
+            // Clojars is Maven coordinates, but its own tooling writes them
+            // `group/artifact`, so accept either separator rather than making
+            // one of the two spellings a validation failure.
+            Self::Clojars => is_valid_maven_package(&package.replacen('/', ":", 1)),
+            // Hex, opam, Nimble, Shards, and Zig all require lowercase.
+            // Accepting an uppercase name here would produce a route that the
+            // host rejects at upload time, long after the plan was reviewed.
+            Self::Hex | Self::Opam | Self::Nimble | Self::Shards | Self::Zig => {
+                is_valid_lower_identity(package)
+            }
+            // LuaRocks rock names and Conan references are lowercase by rule.
+            Self::LuaRocks | Self::ConanCenter => is_valid_lower_identity(package),
+            // CocoaPods is not. `Alamofire` is the pod; `alamofire` 404s on
+            // Trunk. Lowercasing it produces a route that resolves to nothing.
+            Self::CocoaPods => is_valid_simple_identity(package),
+            Self::Hackage
+            | Self::Stackage
+            | Self::Cpan
+            | Self::Cran
+            | Self::JuliaGeneral
+            | Self::Racket
+            | Self::PowerShellGallery => is_valid_simple_identity(package),
+            // SE-0292 identifies a package as `scope.name`; DUB uses
+            // `package:subpackage`.
+            Self::SwiftPackageIndex => package.split_once('.').is_some_and(|(scope, name)| {
+                is_valid_simple_identity(scope) && is_valid_simple_identity(name)
+            }),
+            Self::Dub => match package.split_once(':') {
+                Some((root, sub)) => is_valid_lower_identity(root) && is_valid_lower_identity(sub),
+                None => is_valid_lower_identity(package),
+            },
+            // A VCS route names a repository, not a registry package, so it
+            // carries the same shape a Go module path does.
+            Self::Vcs => is_valid_go_module(package),
         };
         if valid {
             Ok(())
@@ -473,8 +638,13 @@ impl NativeRegistry {
 
     fn canonical_package(self, package: &str) -> String {
         match self {
-            Self::PyPi => normalize_pypi_package(package),
-            Self::NuGet => package.to_ascii_lowercase(),
+            Self::PyPi | Self::TestPyPi => normalize_pypi_package(package),
+            // These hosts compare names case-insensitively, so two routes that
+            // differ only in case are one destination and must collide.
+            Self::NuGet | Self::PowerShellGallery | Self::LuaRocks | Self::ConanCenter => {
+                package.to_ascii_lowercase()
+            }
+            Self::Clojars => package.replacen('/', ":", 1),
             _ => package.to_string(),
         }
     }
@@ -484,20 +654,10 @@ impl NativeRegistry {
     /// The two enums describe the same thing from opposite directions —
     /// `NativeRegistry` is where a slice is *mirrored to*, `Ecosystem` is what a
     /// consumer needs to *install* it — so a target declaring both must not
-    /// disagree. Mapping them here keeps that check in one place instead of
-    /// letting each caller re-derive it.
+    /// disagree. Delegating to the host keeps one table rather than two that
+    /// can drift.
     pub fn ecosystem(self) -> Ecosystem {
-        match self {
-            Self::Npm => Ecosystem::Npm,
-            Self::CratesIo => Ecosystem::Cargo,
-            Self::PubDev => Ecosystem::Pub,
-            Self::PyPi => Ecosystem::Pypi,
-            Self::MavenCentral => Ecosystem::Jvm,
-            Self::RubyGems => Ecosystem::Gem,
-            Self::NuGet => Ecosystem::Nuget,
-            Self::Packagist => Ecosystem::Composer,
-            Self::GoModules => Ecosystem::Gomod,
-        }
+        self.host().ecosystem()
     }
 }
 
@@ -508,6 +668,10 @@ pub struct NativeReleaseRoute {
     pub registry: NativeRegistry,
     pub package: String,
     pub vcs_tag: String,
+    /// The track this route declares. Carried here because a consumer reading
+    /// routes — not just `zed-cli` — would otherwise see an rc-only target as
+    /// an ordinary stable release and publish it as one.
+    pub channel: ReleaseChannel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -637,6 +801,33 @@ fn is_valid_packagist_package(value: &str) -> bool {
         return false;
     };
     !package.contains('/') && is_valid_npm_component(vendor) && is_valid_npm_component(package)
+}
+
+/// The conservative identity shape shared by registries whose naming rules are
+/// supersets of "starts and ends alphanumeric, ASCII alphanumerics plus `.`,
+/// `_`, or `-` in between": Hackage, CPAN, CRAN, Julia, Racket, the PowerShell
+/// Gallery.
+///
+/// Deliberately narrower than several of them allow. A name this rejects can
+/// still be published by hand; a name it accepts is portable across all of
+/// them, which is what a *route* declaration needs — the point is to fail while
+/// a plan is being reviewed rather than at upload time.
+fn is_valid_simple_identity(value: &str) -> bool {
+    !value.is_empty()
+        && value.as_bytes()[0].is_ascii_alphanumeric()
+        && value.as_bytes()[value.len() - 1].is_ascii_alphanumeric()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+/// [`is_valid_simple_identity`] for the registries that additionally reject
+/// uppercase — Hex, opam, Nimble, Shards, Zig, LuaRocks, and Conan.
+///
+/// CocoaPods is deliberately **not** in that list: pod names are
+/// case-sensitive (`Alamofire` resolves, `alamofire` 404s).
+fn is_valid_lower_identity(value: &str) -> bool {
+    !value.bytes().any(|byte| byte.is_ascii_uppercase()) && is_valid_simple_identity(value)
 }
 
 fn is_valid_go_module(value: &str) -> bool {
@@ -979,6 +1170,35 @@ fn validate_native_release_section(
             ));
         }
     }
+    // A channel the host cannot express must fail here, not halfway through a
+    // release. `crates-io` + `snapshot` and `luarocks` + `rc` both parsed
+    // cleanly and then died at publish time, after artifacts were built.
+    // The base version is irrelevant to channel support, so a placeholder is
+    // enough to ask the question.
+    if let Err(error) = native
+        .registry
+        .host()
+        .channel_route("1.0.0", native.channel, 1)
+    {
+        return Err(ManifestError::InvalidNativeRoute(
+            route_name.to_string(),
+            error.to_string(),
+        ));
+    }
+    // A host that only re-serves another registry publishes nothing of its
+    // own, so a release route to it can never mean anything. Deliberately
+    // narrower than "has no upload endpoint": ConanCenter takes recipes by
+    // pull request and the Swift Package Index reads git tags — both are real
+    // destinations reached without an HTTP upload.
+    if native.registry.host().is_mirror_of_another_registry() {
+        return Err(ManifestError::InvalidNativeRoute(
+            route_name.to_string(),
+            format!(
+                "`{}` accepts no uploads; it mirrors another registry's contents",
+                native.registry.as_str()
+            ),
+        ));
+    }
     if native.registry == NativeRegistry::GoModules && route_dir != "." {
         let required_prefix = format!("{}/", route_dir.trim_end_matches('/'));
         let Some(tag_format) = &native.tag_format else {
@@ -1131,10 +1351,25 @@ impl Manifest {
                     ),
                 ));
             }
-            let published_name = target
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("{}-{name}", self.package.name));
+            let published_name = if target.dir == "." {
+                if let Some(explicit) = target.name.as_deref()
+                    && explicit != self.package.name
+                {
+                    return Err(ManifestError::InvalidTarget(
+                        name.clone(),
+                        format!(
+                            "whole-repository target publishes as canonical package `{}`; omit `name` or set it to that value, not `{explicit}`",
+                            self.package.name
+                        ),
+                    ));
+                }
+                self.package.name.clone()
+            } else {
+                target
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("{}-{name}", self.package.name))
+            };
             if !is_slug(&published_name) {
                 return Err(ManifestError::InvalidTarget(
                     name.clone(),
@@ -1143,7 +1378,7 @@ impl Manifest {
                     ),
                 ));
             }
-            if published_name == self.package.name {
+            if target.dir != "." && published_name == self.package.name {
                 return Err(ManifestError::InvalidTarget(
                     name.clone(),
                     format!(
@@ -1306,14 +1541,21 @@ impl Manifest {
         !self.targets.is_empty()
     }
 
-    /// The package name a target publishes under: its explicit `name`, else
-    /// the `<name>-<target>` convention (`fiducia-clients` + `java` →
+    /// The package name a target publishes under. A whole-repository target
+    /// (`dir = "."`) is the canonical root package and therefore uses
+    /// `package.name`; non-root targets use their explicit `name` or the
+    /// `<name>-<target>` convention (`fiducia-clients` + `java` →
     /// `fiducia-clients-java`).
     pub fn target_package_name(&self, target: &str) -> Option<String> {
-        self.targets.get(target).map(|t| {
-            t.name
-                .clone()
-                .unwrap_or_else(|| format!("{}-{}", self.package.name, target))
+        self.targets.get(target).map(|section| {
+            if section.dir == "." {
+                self.package.name.clone()
+            } else {
+                section
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("{}-{}", self.package.name, target))
+            }
         })
     }
 
@@ -1334,10 +1576,9 @@ impl Manifest {
                 routes.push(NixExportRoute {
                     target: target.clone(),
                     dir: section.dir.clone(),
-                    package: section
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| format!("{}-{target}", self.package.name)),
+                    package: self
+                        .target_package_name(target)
+                        .expect("target iterated from manifest exists"),
                     intent: intent.clone(),
                 });
             }
@@ -1361,6 +1602,7 @@ impl Manifest {
                     .as_deref()
                     .unwrap_or(&self.publish.tag_format)
                     .replace("{version}", &self.package.version),
+                channel: native.channel,
             })
             .chain(self.targets.iter().filter_map(|(target, section)| {
                 section.native.as_ref().map(|native| NativeReleaseRoute {
@@ -1373,6 +1615,7 @@ impl Manifest {
                         .as_deref()
                         .unwrap_or(&self.publish.tag_format)
                         .replace("{version}", &self.package.version),
+                    channel: native.channel,
                 })
             }))
             .collect()
