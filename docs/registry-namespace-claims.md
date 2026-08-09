@@ -33,6 +33,21 @@ contract. A future provider-policy change requires a new planner implementation
 or a versioned contract change rather than silent reinterpretation of stored
 plans.
 
+## Canonical wire spellings
+
+Acronym-bearing provider names are explicitly pinned instead of relying on a
+generic case converter:
+
+```text
+github
+gitlab-com
+github-account-control
+```
+
+The generated JSON Schemas, TypeScript, and Dart slices use these exact values.
+Spellings such as `git-hub`, `git-lab-com`, or `git-hub-account-control` are
+version skew and must fail closed.
+
 ## Plan versus receipt
 
 A `RegistryNamespacePlan` is deterministic pre-mutation intent. It contains:
