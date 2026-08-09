@@ -57,12 +57,86 @@ jobs:
           node --version
           npm --version
 
-      - name: Register generated schemas and front-end targets
+      - name: Register schemas and correct deterministic test fixtures
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json
           from pathlib import Path
+
+          source = Path('src/rust/namespace_claim.rs')
+          text = source.read_text(encoding='utf-8')
+          old = '''    fn provider_model_and_requested_set_fail_closed() {
+              let mut plan = plan();
+              plan.entries[0].model = RegistryNamespaceModel::ForgeWorkspace;
+              assert!(matches!(
+                  plan.validate(),
+                  Err(RegistryNamespaceError::ProviderModelMismatch { .. })
+              ));
+
+              let mut plan = plan();
+              plan.request.providers.pop();
+              assert!(matches!(
+                  plan.validate(),
+                  Err(RegistryNamespaceError::UnrequestedProvider { .. })
+              ));
+          }
+          '''
+          new = '''    fn provider_model_and_requested_set_fail_closed() {
+              let mut model_plan = plan();
+              model_plan.entries[0].model = RegistryNamespaceModel::ForgeWorkspace;
+              assert!(matches!(
+                  model_plan.validate(),
+                  Err(RegistryNamespaceError::ProviderModelMismatch { .. })
+              ));
+
+              let mut requested_plan = plan();
+              requested_plan.request.providers.pop();
+              assert!(matches!(
+                  requested_plan.validate(),
+                  Err(RegistryNamespaceError::UnrequestedProvider { .. })
+              ));
+          }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('provider-model test fixture anchor drifted')
+          text = text.replace(old, new)
+
+          old = '''    fn portable_identity_rejects_confusables_and_noncanonical_domains() {
+              let mut request = request();
+              request.brand = "acmе-cloud".to_owned(); // Cyrillic `е`.
+              assert!(matches!(
+                  request.validate(),
+                  Err(RegistryNamespaceError::InvalidPortableSlug { .. })
+              ));
+
+              let mut request = request();
+              request.domain = Some("HTTPS://Acme.Example/".to_owned());
+              assert!(matches!(
+                  request.validate(),
+                  Err(RegistryNamespaceError::InvalidDomain { .. })
+              ));
+          }
+          '''
+          new = '''    fn portable_identity_rejects_confusables_and_noncanonical_domains() {
+              let mut brand_request = request();
+              brand_request.brand = "acmе-cloud".to_owned(); // Cyrillic `е`.
+              assert!(matches!(
+                  brand_request.validate(),
+                  Err(RegistryNamespaceError::InvalidPortableSlug { .. })
+              ));
+
+              let mut domain_request = request();
+              domain_request.domain = Some("HTTPS://Acme.Example/".to_owned());
+              assert!(matches!(
+                  domain_request.validate(),
+                  Err(RegistryNamespaceError::InvalidDomain { .. })
+              ));
+          }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('portable-identity test fixture anchor drifted')
+          source.write_text(text.replace(old, new), encoding='utf-8')
 
           generator = Path('src/rust/examples/generate_schemas.rs')
           text = generator.read_text(encoding='utf-8')
@@ -142,5 +216,6 @@ jobs:
 
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
           git commit -m "chore(DEN-3329): generate namespace contract schemas and clients"
           git push origin HEAD:${TARGET_BRANCH}
