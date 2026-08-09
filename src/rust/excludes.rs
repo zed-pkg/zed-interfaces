@@ -11,6 +11,11 @@ pub const DEFAULT_EXCLUDES: &[&str] = &[
     ".git/**",
     ".hg/**",
     ".svn/**",
+    // Both, not either. A package's root `tests/` is the near-universal
+    // convention (Cargo, npm, pytest, Go); `src/rust/tests/` is where this
+    // repository's own polyglot layout puts them. Replacing the first with the
+    // second made every published package ship its test suite.
+    "tests/**",
     "src/rust/tests/**",
     "test/**",
     "spec/**",
