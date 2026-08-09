@@ -34,7 +34,9 @@ pub enum RegistryNamespaceProvider {
     MavenCentral,
     CratesIo,
     PubDev,
+    #[serde(rename = "github")]
     GitHub,
+    #[serde(rename = "gitlab-com")]
     GitLabCom,
     BitbucketCloud,
 }
@@ -138,6 +140,7 @@ pub enum RegistryNamespaceDisposition {
 pub enum RegistryNamespaceProof {
     RegistryAccountControl,
     DomainControl,
+    #[serde(rename = "github-account-control")]
     GitHubAccountControl,
     ForgeAdministrator,
     ExistingPackageOwnership,

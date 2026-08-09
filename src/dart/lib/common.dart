@@ -43,7 +43,7 @@ class PackageSummary {
 enum RegistryNamespaceProof {
   registryAccountControl('registry-account-control'),
   domainControl('domain-control'),
-  gitHubAccountControl('git-hub-account-control'),
+  githubAccountControl('github-account-control'),
   forgeAdministrator('forge-administrator'),
   existingPackageOwnership('existing-package-ownership');
 
@@ -71,8 +71,8 @@ enum RegistryNamespaceProvider {
   mavenCentral('maven-central'),
   cratesIo('crates-io'),
   pubDev('pub-dev'),
-  gitHub('git-hub'),
-  gitLabCom('git-lab-com'),
+  github('github'),
+  gitlabCom('gitlab-com'),
   bitbucketCloud('bitbucket-cloud');
 
   const RegistryNamespaceProvider(this.wire);

@@ -95,7 +95,7 @@
       "enum": [
         "registry-account-control",
         "domain-control",
-        "git-hub-account-control",
+        "github-account-control",
         "forge-administrator",
         "existing-package-ownership"
       ]
@@ -108,8 +108,8 @@
         "maven-central",
         "crates-io",
         "pub-dev",
-        "git-hub",
-        "git-lab-com",
+        "github",
+        "gitlab-com",
         "bitbucket-cloud"
       ]
     }
