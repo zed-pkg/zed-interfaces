@@ -1,0 +1,196 @@
+name: finalize registry namespace contract once
+
+on:
+  push:
+    branches:
+      - alexanderdmills/den-3329-registry-namespace-contract-v1
+    paths:
+      - .github/workflows/den-3329-finalize-namespace-contract-once.yml
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/den-3329-finalize-namespace-contract-once.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-3329-finalize-namespace-contract
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  TARGET_BRANCH: alexanderdmills/den-3329-registry-namespace-contract-v1
+
+jobs:
+  finalize:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/alexanderdmills/den-3329-registry-namespace-contract-v1') ||
+      (github.event_name == 'pull_request' &&
+       github.head_ref == 'alexanderdmills/den-3329-registry-namespace-contract-v1' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact contract candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+          persist-credentials: true
+          show-progress: false
+
+      - name: Install declared tools
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+          rustc --version --verbose
+          cargo --version --verbose
+          cargo clippy --version
+          node --version
+          npm --version
+
+      - name: Apply exact test and generator corrections
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          source = Path('src/rust/namespace_claim.rs')
+          text = source.read_text(encoding='utf-8')
+
+          provider_body = '''    fn provider_model_and_requested_set_fail_closed() {
+              let mut model_plan = plan();
+              model_plan.entries[0].model = RegistryNamespaceModel::LiteralOrganizationScope;
+              assert!(matches!(
+                  model_plan.validate(),
+                  Err(RegistryNamespaceError::ProviderModelMismatch { .. })
+              ));
+
+              let mut requested_plan = plan();
+              requested_plan.request.providers.pop();
+              assert!(matches!(
+                  requested_plan.validate(),
+                  Err(RegistryNamespaceError::UnrequestedProvider { .. })
+              ));
+          }
+          '''
+          pattern = re.compile(
+              r'    fn provider_model_and_requested_set_fail_closed\(\) \{.*?\n    \}\n(?=\n    #\[test\])',
+              re.S,
+          )
+          text, count = pattern.subn(provider_body, text, count=1)
+          if count != 1:
+              raise SystemExit('provider-model test function anchor drifted')
+
+          identity_body = '''    fn portable_identity_rejects_confusables_and_noncanonical_domains() {
+              let mut brand_request = request();
+              brand_request.brand = "acmе-cloud".to_owned(); // Cyrillic `е`.
+              assert!(matches!(
+                  brand_request.validate(),
+                  Err(RegistryNamespaceError::InvalidPortableSlug { .. })
+              ));
+
+              let mut domain_request = request();
+              domain_request.domain = Some("HTTPS://Acme.Example/".to_owned());
+              assert!(matches!(
+                  domain_request.validate(),
+                  Err(RegistryNamespaceError::InvalidDomain { .. })
+              ));
+          }
+          '''
+          pattern = re.compile(
+              r'    fn portable_identity_rejects_confusables_and_noncanonical_domains\(\) \{.*?\n    \}\n(?=\n    #\[test\])',
+              re.S,
+          )
+          text, count = pattern.subn(identity_body, text, count=1)
+          if count != 1:
+              raise SystemExit('portable-identity test function anchor drifted')
+          source.write_text(text, encoding='utf-8')
+
+          generator = Path('src/rust/examples/generate_schemas.rs')
+          text = generator.read_text(encoding='utf-8')
+          anchor = '    write::<zed_interfaces::NativeRegistryAdapterRecord>(dir, "native-registry-adapter-record");\n'
+          insertion = '''    write::<zed_interfaces::RegistryNamespacePlan>(dir, "registry-namespace-plan");
+              write::<zed_interfaces::RegistryNamespaceClaimReceipt>(
+                  dir,
+                  "registry-namespace-claim-receipt",
+              );
+          '''
+          if insertion not in text:
+              if text.count(anchor) != 1:
+                  raise SystemExit('schema generator anchor drifted')
+              text = text.replace(anchor, anchor + insertion)
+          generator.write_text(text, encoding='utf-8')
+
+          index_path = Path('schemas/index.json')
+          index = json.loads(index_path.read_text(encoding='utf-8'))
+          additions = [
+              {
+                  'file': 'registry-namespace-claim-receipt.json',
+                  'targets': ['dart', 'ts'],
+                  'why': 'Organization governance screens render and audit provider claim results.'
+              },
+              {
+                  'file': 'registry-namespace-plan.json',
+                  'targets': ['dart', 'ts'],
+                  'why': 'Cross-registry organization claim planning is rendered by web and Flutter administration flows.'
+              },
+          ]
+          existing = {entry['file'] for entry in index['schemas']}
+          index['schemas'].extend(entry for entry in additions if entry['file'] not in existing)
+          index['schemas'].sort(key=lambda entry: entry['file'])
+          index_path.write_text(json.dumps(index, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Run complete contract and generation pipeline
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo test --workspace --all-targets --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo run --locked --example generate_schemas
+          npm run codegen
+          npm test
+          git diff --check
+          test -f schemas/registry-namespace-plan.json
+          test -f schemas/registry-namespace-claim-receipt.json
+          grep -R -F 'RegistryNamespacePlan' src/dart src/ts
+          grep -R -F 'RegistryNamespaceClaimReceipt' src/dart src/ts
+
+      - name: Enforce generated change boundary
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git status --short | sed -E 's/^.. //')
+          for path in "${changed[@]}"; do
+            case "$path" in
+              .github/workflows/den-3329-generate-namespace-contract-once.yml|.github/workflows/den-3329-finalize-namespace-contract-once.yml|src/rust/namespace_claim.rs|src/rust/lib.rs|src/rust/examples/generate_schemas.rs|schemas/index.json|schemas/registry-namespace-plan.json|schemas/registry-namespace-claim-receipt.json|src/dart/*|src/dart/**|src/ts/*|src/ts/**|docs/registry-namespace-claims.md)
+                ;;
+              *)
+                echo "namespace generation changed an unexpected path: $path" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+      - name: Remove one-shot workflows and publish generated contract
+        run: |
+          set -euo pipefail
+          rm -f \
+            .github/workflows/den-3329-generate-namespace-contract-once.yml \
+            .github/workflows/den-3329-finalize-namespace-contract-once.yml
+          git add -A
+          git diff --cached --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "chore(DEN-3329): generate namespace schemas and clients"
+          git push origin HEAD:${TARGET_BRANCH}
