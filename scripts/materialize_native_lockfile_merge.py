@@ -9,8 +9,33 @@ by the workflow itself.
 
 from pathlib import Path
 
-PATH = Path("src/lockfile.rs")
+PATH_CANDIDATES = (Path("src/rust/lockfile.rs"), Path("src/lockfile.rs"))
+PATH = next((path for path in PATH_CANDIDATES if path.is_file()), None)
+if PATH is None:
+    expected = ", ".join(str(path) for path in PATH_CANDIDATES)
+    raise SystemExit(f"lockfile source not found; expected one of: {expected}")
 text = PATH.read_text(encoding="utf-8")
+
+# The native lockfile product is already part of current main. Keep this
+# branch-scoped materializer useful as a fail-closed CI check after the Rust
+# crate moved under src/rust, while retaining its original ability to compose
+# the older candidate branch.
+if "pub native_dependencies: Vec<NativeDependencyLock>" in text:
+    required_fragments = (
+        "use crate::native_dependency::NativeDependencyLock;",
+        "use crate::native_registry::NativeRegistry;",
+        "lockfile.validate_native_dependencies()?;",
+        "normalized.validate_native_dependencies()?;",
+        "fn validate_native_dependencies(&self) -> Result<(), LockfileError>",
+    )
+    missing = [fragment for fragment in required_fragments if fragment not in text]
+    if missing:
+        raise SystemExit(
+            "native dependency field exists without its complete contract: "
+            + ", ".join(missing)
+        )
+    print(f"verified existing semantic native-dependency lockfile merge in {PATH}")
+    raise SystemExit(0)
 
 
 def replace_once(old: str, new: str, label: str) -> None:
