@@ -62,6 +62,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json
+          import re
           from pathlib import Path
 
           source = Path('src/rust/namespace_claim.rs')
@@ -83,11 +84,31 @@ jobs:
           if segment.count('let mut plan = plan();') != 2:
               raise SystemExit('provider-model fixture must contain two plan bindings')
           segment = segment.replace('let mut plan = plan();', 'let mut model_plan = plan();', 1)
-          segment = segment.replace('plan.entries[0]', 'model_plan.entries[0]', 1)
-          segment = segment.replace('plan.validate()', 'model_plan.validate()', 1)
+          segment = re.sub(
+              r'(?<![A-Za-z0-9_])plan\.entries\[0\]',
+              'model_plan.entries[0]',
+              segment,
+              count=1,
+          )
+          segment = re.sub(
+              r'(?<![A-Za-z0-9_])plan\.validate\(\)',
+              'model_plan.validate()',
+              segment,
+              count=1,
+          )
           segment = segment.replace('let mut plan = plan();', 'let mut requested_plan = plan();', 1)
-          segment = segment.replace('plan.request.providers.pop()', 'requested_plan.request.providers.pop()', 1)
-          segment = segment.replace('plan.validate()', 'requested_plan.validate()', 1)
+          segment = re.sub(
+              r'(?<![A-Za-z0-9_])plan\.request\.providers\.pop\(\)',
+              'requested_plan.request.providers.pop()',
+              segment,
+              count=1,
+          )
+          segment = re.sub(
+              r'(?<![A-Za-z0-9_])plan\.validate\(\)',
+              'requested_plan.validate()',
+              segment,
+              count=1,
+          )
           text = text[:start] + segment + text[end:]
 
           start, end, segment = function_segment(
@@ -100,15 +121,35 @@ jobs:
               'let mut brand_request = request();',
               1,
           )
-          segment = segment.replace('request.brand', 'brand_request.brand', 1)
-          segment = segment.replace('request.validate()', 'brand_request.validate()', 1)
+          segment = re.sub(
+              r'(?<![A-Za-z0-9_])request\.brand',
+              'brand_request.brand',
+              segment,
+              count=1,
+          )
+          segment = re.sub(
+              r'(?<![A-Za-z0-9_])request\.validate\(\)',
+              'brand_request.validate()',
+              segment,
+              count=1,
+          )
           segment = segment.replace(
               'let mut request = request();',
               'let mut domain_request = request();',
               1,
           )
-          segment = segment.replace('request.domain', 'domain_request.domain', 1)
-          segment = segment.replace('request.validate()', 'domain_request.validate()', 1)
+          segment = re.sub(
+              r'(?<![A-Za-z0-9_])request\.domain',
+              'domain_request.domain',
+              segment,
+              count=1,
+          )
+          segment = re.sub(
+              r'(?<![A-Za-z0-9_])request\.validate\(\)',
+              'domain_request.validate()',
+              segment,
+              count=1,
+          )
           source.write_text(text[:start] + segment + text[end:], encoding='utf-8')
 
           generator = Path('src/rust/examples/generate_schemas.rs')
