@@ -489,9 +489,13 @@ fn every_language_host_is_routable_from_a_manifest() {
         ("haskell", "hackage", "acme-client", "hackage"),
         ("clojure", "clojars", "com.acme:client", "jvm"),
         ("lua", "luarocks", "acme-client", "luarocks"),
-        ("perl", "cpan", "Acme-Client", "cran"),
+        // Perl has no ecosystem token of its own; folding it into `cran`
+        // made the install guard accept an R package for a CPAN route.
+        ("perl", "cpan", "Acme-Client", "universal"),
         ("r", "cran", "acme.client", "cran"),
         ("cpp", "conan-center", "acme-client", "cmake"),
+        // D builds with dub, not CMake.
+        ("d", "dub", "acme-client", "universal"),
         ("swift", "swift-package-index", "acme.client", "swiftpm"),
         // Verified live: CocoaPods Trunk serves `Alamofire` and 404s on
         // `alamofire`, so a route must preserve the podspec's case.
@@ -622,4 +626,131 @@ forge = ["github-packages"]
     assert!(ForgeRegistry::Nexus.supports(NativeRegistry::Clojars));
     assert!(ForgeRegistry::BitbucketPackages.supports(NativeRegistry::Clojars));
     assert!(!ForgeRegistry::BitbucketPackages.supports(NativeRegistry::Hex));
+}
+
+#[test]
+fn a_channel_the_host_cannot_express_is_rejected_at_parse_time() {
+    // Both of these parsed cleanly and then died at publish time, after the
+    // artifacts were already built. Failing while the manifest is read costs
+    // nothing; failing halfway through a release costs the release.
+    for (target, registry, package, channel) in [
+        // crates.io has no mutable coordinate.
+        ("rust", "crates-io", "acme-client", "snapshot"),
+        // LuaRocks has no candidate track at all.
+        ("lua", "luarocks", "acme-client", "rc"),
+        // PVP aside, CPAN expresses only TRIAL, not beta.
+        ("perl", "cpan", "Acme-Client", "beta"),
+    ] {
+        let parsed = Manifest::parse(&manifest(&format!(
+            r#"
+[targets.{target}]
+dir = "clients/{target}"
+
+[targets.{target}.native]
+registry = "{registry}"
+package = "{package}"
+channel = "{channel}"
+"#
+        )));
+        assert!(
+            matches!(parsed, Err(ManifestError::InvalidNativeRoute(_, _))),
+            "`{registry}` + `{channel}` should not parse"
+        );
+    }
+
+    // The same routes on a track their host does support are fine.
+    assert!(
+        Manifest::parse(&manifest(
+            r#"
+[targets.rust]
+dir = "clients/rust"
+
+[targets.rust.native]
+registry = "crates-io"
+package = "acme-client"
+channel = "rc"
+"#,
+        ))
+        .is_ok()
+    );
+}
+
+#[test]
+fn a_declared_channel_reaches_the_route_it_describes() {
+    // The channel used to stop at the manifest section, so any consumer
+    // reading `native_release_routes()` saw an rc-only target as an ordinary
+    // stable release — and would publish it as one.
+    let parsed = Manifest::parse(&manifest(
+        r#"
+[targets.nodejs]
+dir = "clients/typescript"
+
+[targets.nodejs.native]
+registry = "npm"
+package = "@acme/client"
+channel = "beta"
+"#,
+    ))
+    .unwrap();
+    let routes = parsed.native_release_routes();
+    assert_eq!(routes.len(), 1);
+    assert_eq!(routes[0].channel, ReleaseChannel::Beta);
+
+    // And an undeclared one is stable, not absent.
+    let stable = Manifest::parse(&manifest(
+        r#"
+[targets.nodejs]
+dir = "clients/typescript"
+
+[targets.nodejs.native]
+registry = "npm"
+package = "@acme/client"
+"#,
+    ))
+    .unwrap();
+    assert_eq!(
+        stable.native_release_routes()[0].channel,
+        ReleaseChannel::Stable
+    );
+}
+
+#[test]
+fn a_mirror_is_not_a_publish_destination() {
+    // Stackage curates Hackage and publishes nothing of its own.
+    assert!(matches!(
+        Manifest::parse(&manifest(
+            r#"
+[targets.haskell]
+dir = "clients/haskell"
+
+[targets.haskell.native]
+registry = "stackage"
+package = "acme-client"
+"#,
+        )),
+        Err(ManifestError::InvalidNativeRoute(_, _))
+    ));
+
+    // ConanCenter and the Swift Package Index have no upload endpoint either,
+    // but they are reached by pull request and git tag respectively — real
+    // destinations, and still routable.
+    for (target, registry, package) in [
+        ("cpp", "conan-center", "acme-client"),
+        ("swift", "swift-package-index", "acme.client"),
+    ] {
+        assert!(
+            Manifest::parse(&manifest(&format!(
+                r#"
+[targets.{target}]
+dir = "clients/{target}"
+
+[targets.{target}.native]
+registry = "{registry}"
+package = "{package}"
+"#
+            )))
+            .is_ok(),
+            "`{registry}` should remain routable"
+        );
+    }
 }
