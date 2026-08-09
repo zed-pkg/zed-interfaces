@@ -667,6 +667,10 @@ pub struct NativeReleaseRoute {
     pub registry: NativeRegistry,
     pub package: String,
     pub vcs_tag: String,
+    /// The track this route declares. Carried here because a consumer reading
+    /// routes — not just `zed-cli` — would otherwise see an rc-only target as
+    /// an ordinary stable release and publish it as one.
+    pub channel: ReleaseChannel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -817,7 +821,10 @@ fn is_valid_simple_identity(value: &str) -> bool {
 }
 
 /// [`is_valid_simple_identity`] for the registries that additionally reject
-/// uppercase — Hex, opam, Nimble, Shards, Zig, LuaRocks, Conan, CocoaPods.
+/// uppercase — Hex, opam, Nimble, Shards, Zig, LuaRocks, and Conan.
+///
+/// CocoaPods is deliberately **not** in that list: pod names are
+/// case-sensitive (`Alamofire` resolves, `alamofire` 404s).
 fn is_valid_lower_identity(value: &str) -> bool {
     !value.bytes().any(|byte| byte.is_ascii_uppercase()) && is_valid_simple_identity(value)
 }
@@ -1161,6 +1168,35 @@ fn validate_native_release_section(
                 "native `tag_format` must be a non-empty VCS ref without whitespace".to_string(),
             ));
         }
+    }
+    // A channel the host cannot express must fail here, not halfway through a
+    // release. `crates-io` + `snapshot` and `luarocks` + `rc` both parsed
+    // cleanly and then died at publish time, after artifacts were built.
+    // The base version is irrelevant to channel support, so a placeholder is
+    // enough to ask the question.
+    if let Err(error) = native
+        .registry
+        .host()
+        .channel_route("1.0.0", native.channel, 1)
+    {
+        return Err(ManifestError::InvalidNativeRoute(
+            route_name.to_string(),
+            error.to_string(),
+        ));
+    }
+    // A host that only re-serves another registry publishes nothing of its
+    // own, so a release route to it can never mean anything. Deliberately
+    // narrower than "has no upload endpoint": ConanCenter takes recipes by
+    // pull request and the Swift Package Index reads git tags — both are real
+    // destinations reached without an HTTP upload.
+    if native.registry.host().is_mirror_of_another_registry() {
+        return Err(ManifestError::InvalidNativeRoute(
+            route_name.to_string(),
+            format!(
+                "`{}` accepts no uploads; it mirrors another registry's contents",
+                native.registry.as_str()
+            ),
+        ));
     }
     if native.registry == NativeRegistry::GoModules && route_dir != "." {
         let required_prefix = format!("{}/", route_dir.trim_end_matches('/'));
@@ -1544,6 +1580,7 @@ impl Manifest {
                     .as_deref()
                     .unwrap_or(&self.publish.tag_format)
                     .replace("{version}", &self.package.version),
+                channel: native.channel,
             })
             .chain(self.targets.iter().filter_map(|(target, section)| {
                 section.native.as_ref().map(|native| NativeReleaseRoute {
@@ -1556,6 +1593,7 @@ impl Manifest {
                         .as_deref()
                         .unwrap_or(&self.publish.tag_format)
                         .replace("{version}", &self.package.version),
+                    channel: native.channel,
                 })
             }))
             .collect()
