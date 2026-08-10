@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryIndexRecordV1",
+  "description": "One authoritative NDJSON sparse-index record.",
+  "type": "object",
+  "properties": {
+    "archive": {
+      "$ref": "#/$defs/RegistryArchiveReferenceV1"
+    },
+    "checkpoint_sequence": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistryDependencyV1"
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "lifecycle": {
+      "$ref": "#/$defs/RegistryLifecycleStateV1"
+    },
+    "lifecycle_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "org": {
+      "type": "string"
+    },
+    "registry_id": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "registry_id",
+    "org",
+    "name",
+    "version",
+    "archive",
+    "lifecycle",
+    "checkpoint_sequence"
+  ],
+  "$defs": {
+    "RegistryArchiveFormatV1": {
+      "description": "Archive formats accepted by protocol v1.",
+      "type": "string",
+      "enum": [
+        "tar-zstd"
+      ]
+    },
+    "RegistryArchiveReferenceV1": {
+      "description": "Immutable archive reference bound by signed metadata.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/RegistryArchiveFormatV1"
+        },
+        "manifest_sha256": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "sha256",
+        "manifest_sha256",
+        "size",
+        "format"
+      ]
+    },
+    "RegistryDependencyV1": {
+      "description": "One dependency edge with an explicit registry trust identity.",
+      "type": "object",
+      "properties": {
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "registry_id": {
+          "type": "string"
+        },
+        "requirement": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "registry_id",
+        "org",
+        "name",
+        "requirement"
+      ]
+    },
+    "RegistryLifecycleStateV1": {
+      "description": "Package version lifecycle. Version identities remain permanently burned.",
+      "type": "string",
+      "enum": [
+        "active",
+        "yanked",
+        "security-revoked",
+        "legal-tombstoned"
+      ]
+    }
+  }
+}

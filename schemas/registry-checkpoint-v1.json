@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryCheckpointV1",
+  "description": "Signed, monotonically advancing freshness checkpoint.",
+  "type": "object",
+  "properties": {
+    "expires_at": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "index_root_sha256": {
+      "description": "SHA-256 of canonical `RegistryIndexSnapshotV1` bytes. The same\nlowercase digest is substituted into the `{snapshot}` endpoint token.",
+      "type": "string"
+    },
+    "previous_checkpoint_sha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "registry_id": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "signature": {
+      "type": "string"
+    },
+    "signing_key_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "registry_id",
+    "sequence",
+    "generated_at",
+    "expires_at",
+    "index_root_sha256",
+    "signing_key_id",
+    "signature"
+  ]
+}

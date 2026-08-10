@@ -24,6 +24,7 @@ pub mod nix_plan;
 pub mod oci;
 pub mod paths;
 pub mod registry;
+pub mod registry_protocol_v1;
 pub mod sync;
 pub mod vcs;
 pub mod version;
@@ -100,6 +101,19 @@ pub use oci::{
     ZED_OCI_BINARY_MEDIA_TYPE_V1, ZED_OCI_CONFIG_MEDIA_TYPE_V1, ZED_OCI_LOCK_MEDIA_TYPE_V1,
     ZED_OCI_MANIFEST_MEDIA_TYPE_V1, ZED_OCI_PACKAGE_TAR_GZ_MEDIA_TYPE_V1,
     ZED_OCI_PACKAGE_ZIP_MEDIA_TYPE_V1,
+};
+pub use registry_protocol_v1::{
+    REGISTRY_ARCHIVE_MANIFEST_SCHEMA_V1, REGISTRY_CHECKPOINT_SCHEMA_V1,
+    REGISTRY_DISCOVERY_SCHEMA_V1, REGISTRY_INDEX_RECORD_SCHEMA_V1,
+    REGISTRY_INDEX_SNAPSHOT_SCHEMA_V1, REGISTRY_PROTOCOL_ERROR_SCHEMA_V1, REGISTRY_PROTOCOL_V1,
+    REGISTRY_PUBLISH_REQUEST_SCHEMA_V1, RegistryArchiveEntryKindV1, RegistryArchiveEntryV1,
+    RegistryArchiveFormatV1, RegistryArchiveManifestV1, RegistryArchiveReferenceV1,
+    RegistryAuthDescriptorV1, RegistryAuthModeV1, RegistryCapabilitiesV1, RegistryCheckpointV1,
+    RegistryDependencyV1, RegistryDiscoveryV1, RegistryEndpointsV1, RegistryIndexRecordV1,
+    RegistryIndexSnapshotEntryV1, RegistryIndexSnapshotV1, RegistryLifecycleStateV1,
+    RegistryLimitsV1, RegistryProtocolErrorCodeV1, RegistryProtocolErrorV1,
+    RegistryProtocolV1Error, RegistryPublishRequestV1, RegistryRootSignatureV1,
+    RegistrySigningKeyStateV1, RegistrySigningKeyV1, RegistryVisibilityV1,
 };
 pub use vcs::Vcs;
 pub use version::{Requirement, VersionScheme};

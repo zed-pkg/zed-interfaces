@@ -148,6 +148,41 @@
       "why": "Shown after a UI-driven or extension-driven publish."
     },
     {
+      "file": "registry-archive-manifest-v1.json",
+      "targets": [],
+      "why": "Registry protocol v1 trust and archive verification is currently implemented by the Rust client and server boundary."
+    },
+    {
+      "file": "registry-checkpoint-v1.json",
+      "targets": [],
+      "why": "Registry protocol v1 trust and checkpoint verification is currently implemented by the Rust client and server boundary."
+    },
+    {
+      "file": "registry-discovery-v1.json",
+      "targets": [],
+      "why": "Registry protocol v1 trust enrollment is currently implemented by the Rust client and server boundary."
+    },
+    {
+      "file": "registry-index-record-v1.json",
+      "targets": [],
+      "why": "Registry protocol v1 sparse-index verification is currently implemented by the Rust client and server boundary."
+    },
+    {
+      "file": "registry-index-snapshot-v1.json",
+      "targets": [],
+      "why": "Registry protocol v1 snapshot verification is currently implemented by the Rust client and server boundary."
+    },
+    {
+      "file": "registry-protocol-error-v1.json",
+      "targets": [],
+      "why": "Registry protocol v1 fail-closed errors are currently implemented by the Rust client and server boundary."
+    },
+    {
+      "file": "registry-publish-request-v1.json",
+      "targets": [],
+      "why": "Registry protocol v1 publication verification is currently implemented by the Rust client and server boundary."
+    },
+    {
       "file": "registry-namespace-claim-receipt.json",
       "targets": [
         "dart",

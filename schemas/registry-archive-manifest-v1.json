@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegistryArchiveManifestV1",
+  "description": "Canonical archive contents bound to an immutable package version.",
+  "type": "object",
+  "properties": {
+    "archive_sha256": {
+      "type": "string"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegistryArchiveEntryV1"
+      }
+    },
+    "expanded_size": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "name": {
+      "type": "string"
+    },
+    "org": {
+      "type": "string"
+    },
+    "registry_id": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "registry_id",
+    "org",
+    "name",
+    "version",
+    "archive_sha256",
+    "expanded_size",
+    "entries"
+  ],
+  "$defs": {
+    "RegistryArchiveEntryKindV1": {
+      "description": "Entry kinds supported by a canonical package archive.",
+      "type": "string",
+      "enum": [
+        "directory",
+        "file",
+        "symlink"
+      ]
+    },
+    "RegistryArchiveEntryV1": {
+      "description": "One normalized package archive entry.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/RegistryArchiveEntryKindV1"
+        },
+        "link_target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "kind",
+        "mode",
+        "size"
+      ]
+    }
+  }
+}
