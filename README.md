@@ -46,7 +46,7 @@ A package is `<org>/<name>`. Its source of truth is a repository on any VCS
 host — GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo/Gitea, Azure
 DevOps, CodeCommit, Radicle, or a server you run — using git, hg, jj, sapling,
 fossil, or pijul (jj and sapling verify through git tags since they push to
-git remotes). The registry at zpkg.tech is the primary artifact host; the
+git remotes). The registry at zpkg.net is the primary artifact host; the
 declared backing repo doubles as mirror/backup. What gets installed is never
 a clone: `zed publish` packs a pruned artifact (no tests, no
 CI config, no README unless opted in; licenses always kept), verifies that a
