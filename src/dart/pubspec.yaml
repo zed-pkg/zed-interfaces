@@ -1,0 +1,16 @@
+name: zed_interfaces
+description: >-
+  Front-end contract types for the zed-pkg registry — generated from the JSON
+  Schemas that the Rust crate in src/rust is the source of truth for.
+version: 0.1.0
+# Published as a zed-package ([targets.dart] in ../../.zpkg.toml) and mirrored
+# to pub.dev from there, never with a bare `dart pub publish` from this tree.
+publish_to: none
+repository: https://github.com/zed-pkg/zed-interfaces
+
+environment:
+  sdk: ^3.0.0
+
+dev_dependencies:
+  lints: ^4.0.0
+  test: ^1.25.0

@@ -1,0 +1,127 @@
+name: semantically rebase EnvironmentLock v1
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/rebase-environment-lock-v1.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebase-environment-lock-v1
+  cancel-in-progress: false
+
+jobs:
+  rebase:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent/environment-lock-v1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out lock branch with history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: agent/environment-lock-v1
+          fetch-depth: 0
+          persist-credentials: true
+          show-progress: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+          components: rustfmt,clippy
+
+      - name: Merge main and resolve the public interface semantically
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git merge --no-commit --no-ff origin/main || true
+
+          cat > src/lib.rs <<'RS'
+          //! Core interface definitions for the zed-pkg universal package manager.
+          //!
+          //! This crate is the single source of truth for the on-disk formats
+          //! (`.zpkg.toml`, `.zpkg.lock`, store layout), the registry REST API DTOs, and
+          //! the publish-time exclusion rules. It is consumed by `zed-cli`,
+          //! `zed-api-server`, `zed-web-server`, and (via generated JSON Schemas in
+          //! `schemas/`) by the non-Rust client libraries in `zed-clients`.
+
+          pub mod artifact;
+          pub mod environment;
+          pub mod environment_lock;
+          pub mod environment_v2;
+          pub mod excludes;
+          pub mod language;
+          pub mod lockfile;
+          pub mod manifest;
+          pub mod nix;
+          pub mod paths;
+          pub mod registry;
+          pub mod sync;
+          pub mod vcs;
+          pub mod version;
+
+          pub use artifact::ArtifactFormat;
+          pub use environment::{
+              ActivationPolicy, Checksum, ChecksumAlgorithm, EnvironmentManager, EnvironmentPlan,
+              EnvironmentPlanError, EnvironmentSource, EnvironmentValidationMode, ImmutableSource,
+              SystemPackageRequirement, ToolRequirement, differ_only_in_build_metadata,
+              validate_semver_export,
+          };
+          pub use environment_lock::{
+              ENVIRONMENT_LOCK_SCHEMA_VERSION, EnvironmentLock, EnvironmentLockError,
+              EnvironmentLockValidationMode, LockedArtifact, LockedArtifactFormat, LockedExecutable,
+              LockedInstall, LockedPlatform, LockedSignature, LockedSource, LockedSourceKind, LockedTool,
+          };
+          pub use environment_v2::{
+              EnvironmentPlanV2, EnvironmentPlanV2Error, EnvironmentValue, SystemPackageSpec,
+              TaskConfirmation, TaskGroup, TaskInvocation, TaskSpec, TaskStep, ToolSpec, ToolVersion,
+          };
+          pub use language::{Ecosystem, Language, detect_ecosystems};
+          pub use lockfile::{LockedPackage, Lockfile, LockfileError};
+          pub use manifest::{Manifest, ManifestError, NixExportRoute};
+          pub use nix::{
+              NIX_ADAPTER_SCHEMA_V1, NixAdapterRecord, NixBuilderNetwork, NixExportMode,
+              NixExportSection, NixInteropArtifact, NixInteropError, NixOutputOrigin,
+              NixPackageIdentity, NixPolicyEvidence, NixPolicyProfile, NixRealizedOutput,
+              NixStoreReference, ZedArtifactOrigin,
+          };
+          pub use vcs::Vcs;
+          pub use version::{Requirement, VersionScheme};
+          RS
+
+          git add -A
+          unresolved="$(git diff --name-only --diff-filter=U)"
+          if [[ -n "$unresolved" ]]; then
+            printf 'unresolved semantic merge paths:\n%s\n' "$unresolved" >&2
+            exit 1
+          fi
+
+      - name: Validate the combined v1/v2/lock contract
+        run: |
+          set -euo pipefail
+          cargo update -p zed-interfaces
+          cargo fmt --all
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+          cargo test --locked --doc
+          cargo run --locked --example generate_schemas
+          cargo run --locked --example generate_environment_lock_schema
+          test -s schemas/environment-plan-v1.json
+          test -s schemas/environment-plan.json
+          test -s schemas/environment-lock-v1.json
+
+      - name: Commit semantic merge and remove bootstrap workflow
+        run: |
+          set -euo pipefail
+          rm .github/workflows/rebase-environment-lock-v1.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'merge: compose EnvironmentPlan v2 with EnvironmentLock v1'
+          git push origin HEAD:agent/environment-lock-v1

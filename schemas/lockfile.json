@@ -25,9 +25,11 @@
       }
     },
     "version": {
+      "description": "On-disk lockfile contract version. Version 1 is the only format this\ncrate currently reads or writes.",
       "type": "integer",
       "format": "uint32",
-      "minimum": 0
+      "maximum": 1,
+      "minimum": 1
     }
   },
   "required": [
@@ -51,11 +53,13 @@
         },
         "name": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         },
         "org": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         },
         "sha256": {
           "description": "Canonical lowercase hex sha256 of the artifact archive; also its store address.",

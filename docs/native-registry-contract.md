@@ -19,6 +19,7 @@ A publication family may contain:
 
 - at most one portable package;
 - at most one generic meta package, with at least one platform edge; and
+- at most one generic meta package, with at least one platform edge;
 - one package for each unique platform selector.
 
 When a meta package is present it must select every platform publication in the

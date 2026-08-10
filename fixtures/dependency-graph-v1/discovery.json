@@ -1,0 +1,79 @@
+{
+  "schema": "zpkg/dependency-graph-discovery/v1",
+  "supported_schemas": [
+    "zpkg/dependency-graph/v1"
+  ],
+  "routes": {
+    "declared": "/v1/packages/{org}/{name}/versions/{version}/dependency-graph?view=declared",
+    "resolved": "/v1/resolutions/{resolution_digest}/dependency-graph"
+  },
+  "formats": [
+    {
+      "name": "json",
+      "extension": "json",
+      "media_type": "application/vnd.zpkg.dependency-graph.v1+json",
+      "authoritative": true
+    },
+    {
+      "name": "yaml",
+      "extension": "yaml",
+      "media_type": "application/vnd.zpkg.dependency-graph.v1+yaml",
+      "authoritative": true
+    },
+    {
+      "name": "toml",
+      "extension": "toml",
+      "media_type": "application/vnd.zpkg.dependency-graph.v1+toml",
+      "authoritative": true
+    },
+    {
+      "name": "dot",
+      "extension": "dot",
+      "media_type": "text/vnd.graphviz; charset=utf-8",
+      "authoritative": false
+    },
+    {
+      "name": "mermaid",
+      "extension": "mmd",
+      "media_type": "text/vnd.mermaid; charset=utf-8",
+      "authoritative": false
+    }
+  ],
+  "headers": {
+    "semantic_digest": "x-zpkg-graph-digest",
+    "representation_validator": "ETag"
+  },
+  "conditional_requests": {
+    "if_none_match": true,
+    "not_modified_status": 304,
+    "validator": "ETag"
+  },
+  "projection_filters": [
+    "target",
+    "feature",
+    "kind",
+    "max_depth"
+  ],
+  "limit_policy": {
+    "behavior": "error",
+    "silent_truncation": false,
+    "server_advertised": true,
+    "default_limits": {
+      "max_nodes": 50000,
+      "max_edges": 500000,
+      "max_projection_depth": 1000,
+      "max_encoded_bytes": 33554432
+    },
+    "error_codes": [
+      "graph_limit_exceeded",
+      "graph_representation_too_large"
+    ]
+  },
+  "privacy": {
+    "private_graphs_publicly_cacheable": false,
+    "unauthorized_and_missing_indistinguishable": true,
+    "partial_redaction": false
+  },
+  "openapi": "openapi/dependency-graph-v1.yaml",
+  "json_schema": "schemas/dependency-graph-v1.json"
+}

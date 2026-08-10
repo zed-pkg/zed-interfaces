@@ -1,0 +1,31 @@
+{
+  "name": "@zed-pkg/zed-interfaces",
+  "version": "0.1.0",
+  "description": "Front-end contract types for the zed-pkg registry, generated from the JSON Schemas that the Rust crate in src/rust is the source of truth for.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zed-pkg/zed-interfaces.git",
+    "directory": "src/ts"
+  },
+  "type": "module",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./*": "./*.ts"
+  },
+  "files": [
+    "*.ts",
+    "!*.test.ts",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test wire-format.test.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}

@@ -1,527 +1,677 @@
-//! Shared contracts for developer-environment interoperability.
+//! Reproducible development-environment contracts shared by Zed and its
+//! interoperability adapters.
 //!
-//! Zed remains authoritative for the Zed package graph. These types describe
-//! exact toolchains, system packages, manager-native lock provenance, and the
-//! fixed activation policy used by Flox, Devbox, mise, asdf, and future Nix
-//! development-shell adapters. Arbitrary imported shell hooks and secrets are
-//! intentionally not representable.
+//! Zed remains the resolver for `.zpkg.toml` package dependencies. This module
+//! models the adjacent developer-environment plane: runtime/tool pins,
+//! environment variables, task graphs, system packages, and source-manager
+//! provenance. mise, asdf, Devbox, Flox, Nix, and native Zed implementations
+//! translate through this schema instead of translating directly into one
+//! another.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use schemars::JsonSchema;
-use semver::Version;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-/// Environment managers with a first-class adapter contract.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
-)]
-#[serde(rename_all = "kebab-case")]
-pub enum EnvironmentManager {
-    Mise,
-    Asdf,
-    Devbox,
-    Flox,
-    /// Development-shell provenance only. Nix package/derivation import and
-    /// export is a separate interoperability boundary.
-    Nix,
+/// Current on-disk/wire schema for [`EnvironmentPlan`].
+pub const ENVIRONMENT_PLAN_SCHEMA_VERSION: u32 = 1;
+
+fn default_schema_version() -> u32 {
+    ENVIRONMENT_PLAN_SCHEMA_VERSION
 }
 
-/// The only activation behavior a Zed environment adapter may add.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "kebab-case")]
-pub enum ActivationPolicy {
-    #[default]
-    None,
-    FrozenInstall,
-}
-
-impl ActivationPolicy {
-    /// The exact command emitted by adapters that support activation hooks.
-    pub fn command(self) -> Option<&'static str> {
-        match self {
-            Self::None => None,
-            Self::FrozenInstall => Some("zed install --frozen"),
-        }
-    }
-}
-
-/// How strictly an environment plan is validated.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// How strictly an environment plan should be validated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub enum EnvironmentValidationMode {
-    /// Requirements may be ranges and resolved identities are optional.
-    Authoring,
-    /// Every identity must be exact, immutable, and portable.
-    FrozenPortable,
-    /// Every identity must be exact and immutable; explicit local paths are
-    /// allowed and make the plan intentionally non-portable.
-    FrozenLocal,
+    /// Accept unresolved requirements while still enforcing structural safety.
+    Permissive,
+    /// Require exact, non-floating resolutions and immutable provenance.
+    Frozen,
 }
 
-impl EnvironmentValidationMode {
-    fn is_frozen(self) -> bool {
-        !matches!(self, Self::Authoring)
-    }
-
-    fn allows_local_paths(self) -> bool {
-        matches!(self, Self::FrozenLocal)
-    }
-}
-
-/// Supported checksum algorithms in environment provenance.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
-)]
-#[serde(rename_all = "lowercase")]
-pub enum ChecksumAlgorithm {
-    Sha256,
-    Sha512,
-    Blake3,
-}
-
-impl ChecksumAlgorithm {
-    fn expected_hex_len(self) -> usize {
-        match self {
-            Self::Sha256 | Self::Blake3 => 64,
-            Self::Sha512 => 128,
-        }
-    }
-}
-
-/// One lowercase hexadecimal content checksum in canonical output.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
-pub struct Checksum {
-    pub algorithm: ChecksumAlgorithm,
-    pub value: String,
-}
-
-impl Checksum {
-    fn normalized(&self) -> Self {
-        Self {
-            algorithm: self.algorithm,
-            value: self.value.trim().to_ascii_lowercase(),
-        }
-    }
-
-    fn validate(&self, field: &str) -> Result<(), EnvironmentPlanError> {
-        let expected_hex_len = self.algorithm.expected_hex_len();
-        let value = self.value.trim();
-        if value.len() != expected_hex_len || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return Err(EnvironmentPlanError::InvalidChecksum {
-                field: field.to_string(),
-                algorithm: self.algorithm,
-                expected_hex_len,
-                value: self.value.clone(),
-            });
-        }
-        Ok(())
-    }
-}
-
-/// A source whose immutable revision is part of environment identity.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct ImmutableSource {
-    pub url: String,
-    /// A full immutable commit or content digest. Moving tags and branches are
-    /// rejected in frozen validation.
-    pub revision: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subdir: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub checksums: Vec<Checksum>,
-}
-
-impl ImmutableSource {
-    fn normalized(&self) -> Self {
-        let mut source = self.clone();
-        source.url = source.url.trim().to_string();
-        source.revision = source.revision.trim().to_ascii_lowercase();
-        source.subdir = normalize_optional(&source.subdir);
-        normalize_checksums(&mut source.checksums);
-        source
-    }
-
-    fn validate(
-        &self,
-        field: &str,
-        mode: EnvironmentValidationMode,
-    ) -> Result<(), EnvironmentPlanError> {
-        if self.url.trim().is_empty() {
-            return Err(EnvironmentPlanError::EmptyField {
-                field: format!("{field}.url"),
-            });
-        }
-        if mode == EnvironmentValidationMode::FrozenPortable && is_local_reference(&self.url) {
-            return Err(EnvironmentPlanError::NonPortableLocalReference {
-                field: format!("{field}.url"),
-                value: self.url.clone(),
-            });
-        }
-        if mode.is_frozen() && !is_immutable_revision(&self.revision) {
-            return Err(EnvironmentPlanError::MutableSourceRevision {
-                field: format!("{field}.revision"),
-                revision: self.revision.clone(),
-            });
-        }
-        if let Some(subdir) = &self.subdir {
-            validate_relative_path(&format!("{field}.subdir"), subdir)?;
-        }
-        validate_checksums(&format!("{field}.checksums"), &self.checksums)
-    }
-}
-
-/// Desired and resolved identity for one runtime or developer tool.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct ToolRequirement {
-    /// Author-authored requirement. It may be a range in authoring mode.
-    pub requirement: String,
-    /// Exact manager-native result. Required in frozen modes.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resolved: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backend: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<ImmutableSource>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub checksums: Vec<Checksum>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub platforms: Vec<String>,
-}
-
-impl ToolRequirement {
-    fn normalized(&self) -> Self {
-        let mut requirement = self.clone();
-        requirement.requirement = requirement.requirement.trim().to_string();
-        requirement.resolved = normalize_optional(&requirement.resolved);
-        requirement.provider = normalize_optional(&requirement.provider);
-        requirement.backend = normalize_optional(&requirement.backend);
-        requirement.source = requirement.source.as_ref().map(ImmutableSource::normalized);
-        normalize_checksums(&mut requirement.checksums);
-        normalize_strings(&mut requirement.platforms);
-        requirement
-    }
-
-    fn validate(
-        &self,
-        name: &str,
-        mode: EnvironmentValidationMode,
-    ) -> Result<(), EnvironmentPlanError> {
-        validate_requirement(
-            "tool",
-            name,
-            &self.requirement,
-            self.resolved.as_deref(),
-            mode,
-        )?;
-        if let Some(source) = &self.source {
-            source.validate(&format!("tools.{name}.source"), mode)?;
-        }
-        validate_checksums(&format!("tools.{name}.checksums"), &self.checksums)?;
-        validate_platforms(&format!("tools.{name}.platforms"), &self.platforms)
-    }
-}
-
-/// Desired and resolved identity for one system package supplied by an
-/// environment manager rather than by the Zed dependency graph.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct SystemPackageRequirement {
-    pub requirement: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resolved: Option<String>,
-    /// Manager/catalog provider, such as `nixpkgs`, a Flox catalog, or a flake.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-    /// Exact provider-native attribute/reference when it differs from the
-    /// normalized package name.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub package_ref: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<ImmutableSource>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub checksums: Vec<Checksum>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub platforms: Vec<String>,
-}
-
-impl SystemPackageRequirement {
-    fn normalized(&self) -> Self {
-        let mut requirement = self.clone();
-        requirement.requirement = requirement.requirement.trim().to_string();
-        requirement.resolved = normalize_optional(&requirement.resolved);
-        requirement.provider = normalize_optional(&requirement.provider);
-        requirement.package_ref = normalize_optional(&requirement.package_ref);
-        requirement.source = requirement.source.as_ref().map(ImmutableSource::normalized);
-        normalize_checksums(&mut requirement.checksums);
-        normalize_strings(&mut requirement.platforms);
-        requirement
-    }
-
-    fn validate(
-        &self,
-        name: &str,
-        mode: EnvironmentValidationMode,
-    ) -> Result<(), EnvironmentPlanError> {
-        validate_requirement(
-            "system package",
-            name,
-            &self.requirement,
-            self.resolved.as_deref(),
-            mode,
-        )?;
-        if let Some(source) = &self.source {
-            source.validate(&format!("system-packages.{name}.source"), mode)?;
-        }
-        validate_checksums(
-            &format!("system-packages.{name}.checksums"),
-            &self.checksums,
-        )?;
-        validate_platforms(
-            &format!("system-packages.{name}.platforms"),
-            &self.platforms,
-        )
-    }
-}
-
-/// Provenance for one manager-native input and optional lock file.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct EnvironmentSource {
-    pub manager: EnvironmentManager,
-    /// Project-relative manager input path.
-    pub path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lock_path: Option<String>,
-    /// Digest of the normalized manager-native lock/input state.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub digest: Option<Checksum>,
-}
-
-impl EnvironmentSource {
-    fn normalized(&self) -> Self {
-        Self {
-            manager: self.manager,
-            path: self.path.trim().to_string(),
-            lock_path: normalize_optional(&self.lock_path),
-            digest: self.digest.as_ref().map(Checksum::normalized),
-        }
-    }
-
-    fn validate(&self, index: usize) -> Result<(), EnvironmentPlanError> {
-        let field = format!("sources[{index}]");
-        validate_relative_path(&format!("{field}.path"), &self.path)?;
-        if let Some(lock_path) = &self.lock_path {
-            validate_relative_path(&format!("{field}.lock-path"), lock_path)?;
-        }
-        if let Some(digest) = &self.digest {
-            digest.validate(&format!("{field}.digest"))?;
-        }
-        Ok(())
-    }
-}
-
-/// Manager-neutral desired and resolved developer-environment state.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// A schema-versioned, manager-neutral development environment.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct EnvironmentPlan {
-    #[serde(default = "current_environment_schema")]
-    pub schema: u32,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub tools: BTreeMap<String, ToolRequirement>,
-    #[serde(
-        default,
-        rename = "system-packages",
-        alias = "system_packages",
-        skip_serializing_if = "BTreeMap::is_empty"
-    )]
-    pub system_packages: BTreeMap<String, SystemPackageRequirement>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub platforms: Vec<String>,
-    #[serde(default)]
-    pub activation: ActivationPolicy,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub sources: Vec<EnvironmentSource>,
-}
+    #[serde(default = "default_schema_version")]
+    pub schema_version: u32,
 
-fn current_environment_schema() -> u32 {
-    EnvironmentPlan::CURRENT_SCHEMA
+    /// Tool/runtime name to one or more requested versions.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tools: BTreeMap<String, ToolSpec>,
+
+    /// Environment values applied during activation and task execution.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, EnvironmentValue>,
+
+    /// Named task DAG. Command order inside a task is semantic and preserved.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tasks: BTreeMap<String, TaskSpec>,
+
+    /// System packages that are not language runtimes or Zed dependencies.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub system_packages: BTreeMap<String, SystemPackageSpec>,
+
+    /// Project-local configuration and lock data that produced this plan.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provenance: Vec<EnvironmentProvenance>,
 }
 
 impl Default for EnvironmentPlan {
     fn default() -> Self {
         Self {
-            schema: Self::CURRENT_SCHEMA,
+            schema_version: ENVIRONMENT_PLAN_SCHEMA_VERSION,
             tools: BTreeMap::new(),
+            env: BTreeMap::new(),
+            tasks: BTreeMap::new(),
             system_packages: BTreeMap::new(),
-            platforms: Vec::new(),
-            activation: ActivationPolicy::None,
-            sources: Vec::new(),
+            provenance: Vec::new(),
         }
     }
 }
 
-impl EnvironmentPlan {
-    pub const CURRENT_SCHEMA: u32 = 1;
+/// TOML-compatible value used for environment variables and backend options.
+///
+/// Scalar values cover ordinary environment variables; arrays/tables preserve
+/// manager-specific structured forms without reducing them to lossy strings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum EnvironmentValue {
+    String(String),
+    Integer(i64),
+    Float(f64),
+    Boolean(bool),
+    Array(Vec<EnvironmentValue>),
+    Table(BTreeMap<String, EnvironmentValue>),
+}
 
-    /// Return a presentation-independent form for deterministic generation and
-    /// hashing. Invalid map keys remain unchanged so validation cannot be
-    /// bypassed by normalization.
+impl EnvironmentValue {
+    fn validate(&self, path: &str) -> Result<(), EnvironmentPlanError> {
+        match self {
+            Self::Float(value) if !value.is_finite() => Err(EnvironmentPlanError::NonFiniteFloat {
+                path: path.to_string(),
+            }),
+            Self::Array(values) => {
+                for (index, value) in values.iter().enumerate() {
+                    value.validate(&format!("{path}[{index}]"))?;
+                }
+                Ok(())
+            }
+            Self::Table(values) => {
+                for (key, value) in values {
+                    value.validate(&format!("{path}.{key}"))?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// Backend plus all versions requested for one logical tool name.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ToolSpec {
+    /// Backend/provider identity, such as `core`, `aqua`, `github`, `npm`,
+    /// `cargo`, `ubi`, `asdf`, or `vfox`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub versions: Vec<ToolVersion>,
+
+    /// Lossless adapter metadata not yet promoted into the shared schema.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extensions: BTreeMap<String, serde_json::Value>,
+}
+
+/// One requested and, when locked, resolved version of a tool.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ToolVersion {
+    /// Original user requirement (`24`, `^3.12`, `latest`, or an exact pin).
+    pub requirement: String,
+
+    /// Exact manager-resolved version used by frozen installs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ToolSourceIdentity>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub platforms: Vec<PlatformSelector>,
+
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub options: BTreeMap<String, EnvironmentValue>,
+}
+
+/// Kind of source from which a tool or system package was resolved.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolSourceKind {
+    Registry,
+    Vcs,
+    Http,
+    Path,
+    Other,
+}
+
+/// Immutable source identity used for offline replay and tamper detection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ToolSourceIdentity {
+    pub kind: ToolSourceKind,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry: Option<String>,
+
+    /// Commit, immutable tag/object identity, package revision, or equivalent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+
+    /// Digest including its algorithm, for example `sha256:abc...`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checksum: Option<String>,
+
+    /// True only when the named revision cannot move under manager semantics.
+    #[serde(default)]
+    pub immutable: bool,
+}
+
+impl ToolSourceIdentity {
+    fn has_text(value: &Option<String>) -> bool {
+        value
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+    }
+
+    fn frozen_identity_is_immutable(&self) -> bool {
+        match self.kind {
+            ToolSourceKind::Path => false,
+            ToolSourceKind::Http => Self::has_text(&self.url) && Self::has_text(&self.checksum),
+            ToolSourceKind::Vcs => {
+                Self::has_text(&self.url) && Self::has_text(&self.revision) && self.immutable
+            }
+            ToolSourceKind::Registry | ToolSourceKind::Other => {
+                Self::has_text(&self.checksum) || (Self::has_text(&self.revision) && self.immutable)
+            }
+        }
+    }
+}
+
+/// OS/architecture constraints. Empty selectors are rejected.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+pub struct PlatformSelector {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub os: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub libc: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abi: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+}
+
+impl PlatformSelector {
+    fn is_empty(&self) -> bool {
+        [&self.os, &self.arch, &self.libc, &self.abi, &self.target]
+            .into_iter()
+            .all(|value| value.as_deref().is_none_or(|value| value.trim().is_empty()))
+    }
+}
+
+/// A system package resolved by an external manager such as Nixpkgs, Flox, or
+/// Devbox. Zed package dependencies do not belong in this map.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SystemPackageSpec {
+    pub manager: String,
+    pub requirement: String,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ToolSourceIdentity>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub platforms: Vec<PlatformSelector>,
+
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extensions: BTreeMap<String, serde_json::Value>,
+}
+
+/// A named task, compatible with mise-style command arrays and task DAGs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TaskSpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub run: Vec<TaskStep>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_post: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wait_for: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, EnvironmentValue>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell: Option<String>,
+
+    #[serde(default)]
+    pub hide: bool,
+    #[serde(default)]
+    pub quiet: bool,
+    #[serde(default)]
+    pub silent: bool,
+    #[serde(default)]
+    pub raw: bool,
+
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub extensions: BTreeMap<String, serde_json::Value>,
+}
+
+impl TaskSpec {
+    fn referenced_tasks(&self) -> Vec<&str> {
+        let mut tasks = Vec::new();
+        tasks.extend(self.depends.iter().map(String::as_str));
+        tasks.extend(self.depends_post.iter().map(String::as_str));
+        tasks.extend(self.wait_for.iter().map(String::as_str));
+        for step in &self.run {
+            match step {
+                TaskStep::Command(_) => {}
+                TaskStep::Task(invocation) => tasks.push(invocation.task.as_str()),
+                TaskStep::Tasks(group) => tasks.extend(group.tasks.iter().map(String::as_str)),
+            }
+        }
+        tasks
+    }
+}
+
+/// A task command, one task invocation, or a parallel task group.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum TaskStep {
+    Command(String),
+    Task(TaskInvocation),
+    Tasks(TaskGroup),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TaskInvocation {
+    pub task: String,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, EnvironmentValue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct TaskGroup {
+    pub tasks: Vec<String>,
+}
+
+/// Provenance for one imported or generated environment-manager view.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct EnvironmentProvenance {
+    /// Manager/backend name such as `mise`, `asdf`, `devbox`, `flox`, `nix`,
+    /// or `zed-native`.
+    pub manager: String,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manager_version: Option<String>,
+
+    /// Project-relative configuration files. User-global configuration must be
+    /// represented only after an explicit opt-in by the caller.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub config_files: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lock_files: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_digest: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lock_digest: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_revision: Option<String>,
+}
+
+/// Validation and serialization failures for environment plans.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum EnvironmentPlanError {
+    #[error("unsupported environment schema version {found}; this build supports {supported}")]
+    UnsupportedSchemaVersion { found: u32, supported: u32 },
+
+    #[error("{kind} name cannot be empty")]
+    EmptyName { kind: &'static str },
+
+    #[error("tool `{tool}` must declare at least one version")]
+    ToolWithoutVersions { tool: String },
+
+    #[error("{kind} `{name}` has an empty requirement")]
+    EmptyRequirement { kind: &'static str, name: String },
+
+    #[error("{kind} `{name}` is missing an exact resolved version in frozen mode")]
+    MissingResolvedVersion { kind: &'static str, name: String },
+
+    #[error("{kind} `{name}` resolved to floating selector `{value}` in frozen mode")]
+    FloatingResolvedVersion {
+        kind: &'static str,
+        name: String,
+        value: String,
+    },
+
+    #[error("{kind} `{name}` has mutable or incomplete source provenance")]
+    MutableSource { kind: &'static str, name: String },
+
+    #[error("platform selector for {kind} `{name}` is empty")]
+    EmptyPlatform { kind: &'static str, name: String },
+
+    #[error("environment value `{path}` contains a non-finite float")]
+    NonFiniteFloat { path: String },
+
+    #[error("task alias `{alias}` is claimed by both `{first}` and `{second}`")]
+    DuplicateTaskAlias {
+        alias: String,
+        first: String,
+        second: String,
+    },
+
+    #[error("task `{task}` references unknown task `{dependency}`")]
+    UnknownTaskDependency { task: String, dependency: String },
+
+    #[error("task dependency cycle detected: {cycle}")]
+    TaskDependencyCycle { cycle: String },
+
+    #[error("environment provenance manager cannot be empty")]
+    EmptyProvenanceManager,
+
+    #[error("environment provenance path must be project-relative: `{path}`")]
+    NonProjectLocalProvenancePath { path: String },
+
+    #[error("invalid environment plan TOML: {message}")]
+    TomlParse { message: String },
+
+    #[error("could not serialize environment plan as TOML: {message}")]
+    TomlSerialize { message: String },
+
+    #[error("could not serialize normalized environment plan: {message}")]
+    JsonSerialize { message: String },
+}
+
+impl EnvironmentPlan {
+    /// Parse and structurally validate a TOML environment plan.
+    pub fn parse_toml(input: &str) -> Result<Self, EnvironmentPlanError> {
+        let plan: Self =
+            toml::from_str(input).map_err(|error| EnvironmentPlanError::TomlParse {
+                message: error.to_string(),
+            })?;
+        plan.validate(EnvironmentValidationMode::Permissive)?;
+        Ok(plan)
+    }
+
+    /// Emit a deterministic, pretty TOML representation.
+    pub fn to_toml_string(&self) -> Result<String, EnvironmentPlanError> {
+        self.validate(EnvironmentValidationMode::Permissive)?;
+        toml::to_string_pretty(&self.normalized()).map_err(|error| {
+            EnvironmentPlanError::TomlSerialize {
+                message: error.to_string(),
+            }
+        })
+    }
+
+    /// Validate structural integrity and, in frozen mode, exact immutable pins.
+    pub fn validate(&self, mode: EnvironmentValidationMode) -> Result<(), EnvironmentPlanError> {
+        if self.schema_version != ENVIRONMENT_PLAN_SCHEMA_VERSION {
+            return Err(EnvironmentPlanError::UnsupportedSchemaVersion {
+                found: self.schema_version,
+                supported: ENVIRONMENT_PLAN_SCHEMA_VERSION,
+            });
+        }
+
+        for (name, tool) in &self.tools {
+            validate_name("tool", name)?;
+            if tool.versions.is_empty() {
+                return Err(EnvironmentPlanError::ToolWithoutVersions { tool: name.clone() });
+            }
+            if tool
+                .backend
+                .as_deref()
+                .is_some_and(|value| value.trim().is_empty())
+            {
+                return Err(EnvironmentPlanError::EmptyName {
+                    kind: "tool backend",
+                });
+            }
+            validate_json_extensions(&tool.extensions, &format!("tools.{name}.extensions"))?;
+            for version in &tool.versions {
+                validate_requirement("tool", name, &version.requirement)?;
+                validate_resolution("tool", name, version.resolved.as_deref(), mode)?;
+                validate_source("tool", name, version.source.as_ref(), mode)?;
+                validate_platforms("tool", name, &version.platforms)?;
+                for (key, value) in &version.options {
+                    value.validate(&format!("tools.{name}.options.{key}"))?;
+                }
+            }
+        }
+
+        for (name, package) in &self.system_packages {
+            validate_name("system package", name)?;
+            validate_name("system package manager", &package.manager)?;
+            validate_requirement("system package", name, &package.requirement)?;
+            validate_resolution("system package", name, package.resolved.as_deref(), mode)?;
+            validate_source("system package", name, package.source.as_ref(), mode)?;
+            validate_platforms("system package", name, &package.platforms)?;
+            validate_json_extensions(
+                &package.extensions,
+                &format!("system_packages.{name}.extensions"),
+            )?;
+        }
+
+        for (key, value) in &self.env {
+            validate_name("environment variable", key)?;
+            value.validate(&format!("env.{key}"))?;
+        }
+
+        self.validate_tasks()?;
+        self.validate_provenance()?;
+        Ok(())
+    }
+
+    /// Return a canonical clone suitable for drift checks and hashing.
     pub fn normalized(&self) -> Self {
         let mut plan = self.clone();
-        plan.tools = plan
-            .tools
-            .iter()
-            .map(|(name, requirement)| (name.clone(), requirement.normalized()))
-            .collect();
-        plan.system_packages = plan
-            .system_packages
-            .iter()
-            .map(|(name, requirement)| (name.clone(), requirement.normalized()))
-            .collect();
-        normalize_strings(&mut plan.platforms);
-        plan.sources = plan
-            .sources
-            .iter()
-            .map(EnvironmentSource::normalized)
-            .collect();
-        plan.sources.sort_by(|left, right| {
-            (left.manager, &left.path, &left.lock_path, &left.digest).cmp(&(
-                right.manager,
-                &right.path,
-                &right.lock_path,
-                &right.digest,
-            ))
-        });
-        plan.sources.dedup();
+
+        for tool in plan.tools.values_mut() {
+            tool.versions.sort_by_cached_key(stable_json_key);
+            for version in &mut tool.versions {
+                sort_dedup(&mut version.platforms);
+            }
+        }
+
+        for package in plan.system_packages.values_mut() {
+            sort_dedup(&mut package.platforms);
+        }
+
+        for task in plan.tasks.values_mut() {
+            sort_dedup(&mut task.aliases);
+            sort_dedup(&mut task.depends);
+            sort_dedup(&mut task.depends_post);
+            sort_dedup(&mut task.wait_for);
+            sort_dedup(&mut task.sources);
+            sort_dedup(&mut task.outputs);
+            // `run` is intentionally not sorted: command order is semantic.
+        }
+
+        for provenance in &mut plan.provenance {
+            sort_dedup(&mut provenance.config_files);
+            sort_dedup(&mut provenance.lock_files);
+        }
+        plan.provenance.sort_by_cached_key(stable_json_key);
+
         plan
     }
 
-    /// Canonical compact JSON bytes for the environment-plan digest.
-    pub fn canonical_json_bytes(&self) -> Result<Vec<u8>, EnvironmentPlanError> {
-        serde_json::to_vec(&self.normalized())
-            .map_err(|error| EnvironmentPlanError::Serialization(error.to_string()))
+    /// SHA-256 over canonical JSON. BTreeMap ordering plus normalization makes
+    /// the digest independent of source-manager formatting and map insertion.
+    pub fn normalized_digest_sha256(&self) -> Result<String, EnvironmentPlanError> {
+        self.validate(EnvironmentValidationMode::Permissive)?;
+        let bytes = serde_json::to_vec(&self.normalized()).map_err(|error| {
+            EnvironmentPlanError::JsonSerialize {
+                message: error.to_string(),
+            }
+        })?;
+        Ok(hex::encode(Sha256::digest(bytes)))
     }
 
-    pub fn validate(&self, mode: EnvironmentValidationMode) -> Result<(), EnvironmentPlanError> {
-        if self.schema == 0 || self.schema > Self::CURRENT_SCHEMA {
-            return Err(EnvironmentPlanError::UnsupportedSchema {
-                found: self.schema,
-                supported: Self::CURRENT_SCHEMA,
-            });
+    fn validate_tasks(&self) -> Result<(), EnvironmentPlanError> {
+        let mut aliases = BTreeMap::<String, String>::new();
+        for (name, task) in &self.tasks {
+            validate_name("task", name)?;
+            for alias in &task.aliases {
+                validate_name("task alias", alias)?;
+                if let Some(first) = aliases.insert(alias.clone(), name.clone()) {
+                    if first != *name {
+                        return Err(EnvironmentPlanError::DuplicateTaskAlias {
+                            alias: alias.clone(),
+                            first,
+                            second: name.clone(),
+                        });
+                    }
+                }
+            }
+            for (key, value) in &task.env {
+                validate_name("task environment variable", key)?;
+                value.validate(&format!("tasks.{name}.env.{key}"))?;
+            }
+            validate_json_extensions(&task.extensions, &format!("tasks.{name}.extensions"))?;
         }
-        validate_platforms("platforms", &self.platforms)?;
-        for (name, requirement) in &self.tools {
-            validate_name("tool", name)?;
-            requirement.validate(name, mode)?;
+
+        for (name, task) in &self.tasks {
+            for dependency in task.referenced_tasks() {
+                if is_task_pattern(dependency) {
+                    continue;
+                }
+                if !self.tasks.contains_key(dependency) && !aliases.contains_key(dependency) {
+                    return Err(EnvironmentPlanError::UnknownTaskDependency {
+                        task: name.clone(),
+                        dependency: dependency.to_string(),
+                    });
+                }
+            }
         }
-        for (name, requirement) in &self.system_packages {
-            validate_name("system package", name)?;
-            requirement.validate(name, mode)?;
+
+        let mut visiting = BTreeSet::new();
+        let mut visited = BTreeSet::new();
+        let mut stack = Vec::new();
+        for task in self.tasks.keys() {
+            visit_task(
+                task,
+                &self.tasks,
+                &aliases,
+                &mut visiting,
+                &mut visited,
+                &mut stack,
+            )?;
         }
-        for (index, source) in self.sources.iter().enumerate() {
-            source.validate(index)?;
+        Ok(())
+    }
+
+    fn validate_provenance(&self) -> Result<(), EnvironmentPlanError> {
+        for provenance in &self.provenance {
+            if provenance.manager.trim().is_empty() {
+                return Err(EnvironmentPlanError::EmptyProvenanceManager);
+            }
+            for path in provenance
+                .config_files
+                .iter()
+                .chain(provenance.lock_files.iter())
+            {
+                if !is_project_local(path) {
+                    return Err(EnvironmentPlanError::NonProjectLocalProvenancePath {
+                        path: path.clone(),
+                    });
+                }
+            }
         }
         Ok(())
     }
 }
 
-/// Parse strict SemVer 2.0.0 for an adapter or registry that requires it.
-pub fn validate_semver_export(version: &str) -> Result<Version, EnvironmentPlanError> {
-    Version::parse(version).map_err(|error| EnvironmentPlanError::InvalidSemver {
-        version: version.to_string(),
-        detail: error.to_string(),
-    })
-}
-
-/// Return true when valid SemVer strings have identical precedence fields and
-/// differ only in build metadata.
-pub fn differ_only_in_build_metadata(
-    left: &str,
-    right: &str,
-) -> Result<bool, EnvironmentPlanError> {
-    let left = validate_semver_export(left)?;
-    let right = validate_semver_export(right)?;
-    Ok(left.major == right.major
-        && left.minor == right.minor
-        && left.patch == right.patch
-        && left.pre == right.pre
-        && left.build != right.build)
-}
-
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum EnvironmentPlanError {
-    #[error("unsupported environment plan schema {found}; this build supports {supported}")]
-    UnsupportedSchema { found: u32, supported: u32 },
-    #[error("{field} must not be empty")]
-    EmptyField { field: String },
-    #[error("invalid {kind} name `{name}`; names cannot contain whitespace or controls")]
-    InvalidName { kind: &'static str, name: String },
-    #[error("{kind} `{name}` has no exact resolved identity for frozen validation")]
-    Unresolved { kind: &'static str, name: String },
-    #[error("{kind} `{name}` resolves to moving selector `{value}`")]
-    MovingSelector {
-        kind: &'static str,
-        name: String,
-        value: String,
-    },
-    #[error("{field} uses non-portable local reference `{value}`")]
-    NonPortableLocalReference { field: String, value: String },
-    #[error("{field} has mutable or non-canonical source revision `{revision}`")]
-    MutableSourceRevision { field: String, revision: String },
-    #[error(
-        "{field} has invalid {algorithm:?} checksum `{value}`; expected {expected_hex_len} hexadecimal characters"
-    )]
-    InvalidChecksum {
-        field: String,
-        algorithm: ChecksumAlgorithm,
-        expected_hex_len: usize,
-        value: String,
-    },
-    #[error("{field} must be a safe project-relative path, got `{value}`")]
-    UnsafeRelativePath { field: String, value: String },
-    #[error("{field} contains invalid platform `{value}`")]
-    InvalidPlatform { field: String, value: String },
-    #[error("`{version}` is not strict SemVer 2.0.0: {detail}")]
-    InvalidSemver { version: String, detail: String },
-    #[error("environment plan serialization failed: {0}")]
-    Serialization(String),
+fn validate_name(kind: &'static str, name: &str) -> Result<(), EnvironmentPlanError> {
+    if name.trim().is_empty() {
+        Err(EnvironmentPlanError::EmptyName { kind })
+    } else {
+        Ok(())
+    }
 }
 
 fn validate_requirement(
     kind: &'static str,
     name: &str,
     requirement: &str,
+) -> Result<(), EnvironmentPlanError> {
+    if requirement.trim().is_empty() {
+        Err(EnvironmentPlanError::EmptyRequirement {
+            kind,
+            name: name.to_string(),
+        })
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_resolution(
+    kind: &'static str,
+    name: &str,
     resolved: Option<&str>,
     mode: EnvironmentValidationMode,
 ) -> Result<(), EnvironmentPlanError> {
-    if requirement.trim().is_empty() {
-        return Err(EnvironmentPlanError::EmptyField {
-            field: format!("{kind} `{name}` requirement"),
-        });
-    }
-    if !mode.is_frozen() {
+    if mode == EnvironmentValidationMode::Permissive {
         return Ok(());
     }
-
-    let resolved = resolved
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| EnvironmentPlanError::Unresolved {
+    let Some(resolved) = resolved.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Err(EnvironmentPlanError::MissingResolvedVersion {
             kind,
             name: name.to_string(),
-        })?;
-
-    if is_local_reference(resolved) {
-        if !mode.allows_local_paths() {
-            return Err(EnvironmentPlanError::NonPortableLocalReference {
-                field: format!("{kind} `{name}` resolved identity"),
-                value: resolved.to_string(),
-            });
-        }
-        return Ok(());
-    }
-    if is_moving_selector(resolved) {
-        return Err(EnvironmentPlanError::MovingSelector {
+        });
+    };
+    if looks_floating(resolved) {
+        return Err(EnvironmentPlanError::FloatingResolvedVersion {
             kind,
             name: name.to_string(),
             value: resolved.to_string(),
@@ -530,14 +680,35 @@ fn validate_requirement(
     Ok(())
 }
 
-fn validate_name(kind: &'static str, name: &str) -> Result<(), EnvironmentPlanError> {
-    if name.is_empty()
-        || name.trim() != name
-        || name
-            .chars()
-            .any(|character| character.is_whitespace() || character.is_control())
-    {
-        return Err(EnvironmentPlanError::InvalidName {
+fn validate_source(
+    kind: &'static str,
+    name: &str,
+    source: Option<&ToolSourceIdentity>,
+    mode: EnvironmentValidationMode,
+) -> Result<(), EnvironmentPlanError> {
+    let Some(source) = source else {
+        return Ok(());
+    };
+
+    for value in [
+        &source.url,
+        &source.registry,
+        &source.revision,
+        &source.checksum,
+    ] {
+        if value
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            return Err(EnvironmentPlanError::MutableSource {
+                kind,
+                name: name.to_string(),
+            });
+        }
+    }
+
+    if mode == EnvironmentValidationMode::Frozen && !source.frozen_identity_is_immutable() {
+        return Err(EnvironmentPlanError::MutableSource {
             kind,
             name: name.to_string(),
         });
@@ -545,356 +716,318 @@ fn validate_name(kind: &'static str, name: &str) -> Result<(), EnvironmentPlanEr
     Ok(())
 }
 
-fn validate_checksums(field: &str, checksums: &[Checksum]) -> Result<(), EnvironmentPlanError> {
-    for checksum in checksums {
-        checksum.validate(field)?;
+fn validate_platforms(
+    kind: &'static str,
+    name: &str,
+    platforms: &[PlatformSelector],
+) -> Result<(), EnvironmentPlanError> {
+    if platforms.iter().any(PlatformSelector::is_empty) {
+        Err(EnvironmentPlanError::EmptyPlatform {
+            kind,
+            name: name.to_string(),
+        })
+    } else {
+        Ok(())
     }
+}
+
+fn validate_json_extensions(
+    extensions: &BTreeMap<String, serde_json::Value>,
+    path: &str,
+) -> Result<(), EnvironmentPlanError> {
+    serde_json::to_vec(extensions).map_err(|error| EnvironmentPlanError::JsonSerialize {
+        message: format!("{path}: {error}"),
+    })?;
     Ok(())
 }
 
-fn validate_platforms(field: &str, platforms: &[String]) -> Result<(), EnvironmentPlanError> {
-    for platform in platforms {
-        let value = platform.trim();
-        if value.is_empty()
-            || value != platform
-            || value
-                .chars()
-                .any(|character| character.is_whitespace() || character.is_control())
-        {
-            return Err(EnvironmentPlanError::InvalidPlatform {
-                field: field.to_string(),
-                value: platform.clone(),
-            });
-        }
+fn looks_floating(value: &str) -> bool {
+    let value = value.trim().to_ascii_lowercase();
+    if value.is_empty() {
+        return true;
     }
-    Ok(())
-}
-
-fn validate_relative_path(field: &str, value: &str) -> Result<(), EnvironmentPlanError> {
-    let trimmed = value.trim();
-    let has_drive_prefix = trimmed.as_bytes().get(1) == Some(&b':');
-    let has_unsafe_segment = trimmed
-        .split(['/', '\\'])
-        .any(|segment| segment.is_empty() || segment == "." || segment == "..");
-    if trimmed.is_empty()
-        || trimmed != value
-        || trimmed.starts_with('/')
-        || trimmed.starts_with('\\')
-        || has_drive_prefix
-        || has_unsafe_segment
-        || trimmed.chars().any(|character| character.is_control())
-    {
-        return Err(EnvironmentPlanError::UnsafeRelativePath {
-            field: field.to_string(),
-            value: value.to_string(),
-        });
+    if matches!(
+        value.as_str(),
+        "latest"
+            | "stable"
+            | "current"
+            | "system"
+            | "present"
+            | "head"
+            | "main"
+            | "master"
+            | "nightly"
+            | "canary"
+            | "beta"
+            | "alpha"
+            | "lts"
+    ) {
+        return true;
     }
-    Ok(())
+    value.contains('*')
+        || value.ends_with(".x")
+        || value.starts_with(['^', '~', '>', '<', '='])
+        || value.starts_with("lts/")
+        || value.starts_with("prefix:")
+        || value.starts_with("path:")
+        || value.starts_with("file:")
+        || value.starts_with("ref:main")
+        || value.starts_with("ref:master")
+        || value.contains(" || ")
+        || value.contains(" && ")
 }
 
-fn normalize_optional(value: &Option<String>) -> Option<String> {
-    value
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
+fn is_project_local(path: &str) -> bool {
+    let trimmed = path.trim();
+    !trimmed.is_empty()
+        && !Path::new(trimmed).is_absolute()
+        && !trimmed.starts_with('~')
+        && !trimmed.starts_with("$HOME")
+        && !trimmed.starts_with("${HOME}")
+        && !trimmed.starts_with("%USERPROFILE%")
+        && !trimmed.split(['/', '\\']).any(|part| part == "..")
 }
 
-fn normalize_strings(values: &mut Vec<String>) {
-    *values = values
-        .iter()
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .collect();
+fn is_task_pattern(task: &str) -> bool {
+    task.contains(['*', '?', '['])
+}
+
+fn sort_dedup<T: Ord>(values: &mut Vec<T>) {
     values.sort();
     values.dedup();
 }
 
-fn normalize_checksums(checksums: &mut Vec<Checksum>) {
-    *checksums = checksums.iter().map(Checksum::normalized).collect();
-    checksums.sort();
-    checksums.dedup();
+fn stable_json_key<T: Serialize + std::fmt::Debug>(value: &T) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| format!("{value:?}"))
 }
 
-fn is_local_reference(value: &str) -> bool {
-    let value = value.trim();
-    value.starts_with("path:")
-        || value.starts_with("file:")
-        || value.starts_with("./")
-        || value.starts_with("../")
-        || value.starts_with('/')
-        || value.starts_with('\\')
-        || value.as_bytes().get(1) == Some(&b':')
-}
-
-fn is_moving_selector(value: &str) -> bool {
-    let value = value.trim().to_ascii_lowercase();
-    if matches!(
-        value.as_str(),
-        "latest" | "stable" | "lts" | "system" | "head" | "main" | "master"
-    ) {
-        return true;
+fn visit_task(
+    task: &str,
+    tasks: &BTreeMap<String, TaskSpec>,
+    aliases: &BTreeMap<String, String>,
+    visiting: &mut BTreeSet<String>,
+    visited: &mut BTreeSet<String>,
+    stack: &mut Vec<String>,
+) -> Result<(), EnvironmentPlanError> {
+    let canonical = aliases.get(task).map(String::as_str).unwrap_or(task);
+    if visited.contains(canonical) {
+        return Ok(());
     }
-    if value.starts_with("prefix:") || value.starts_with("sub-") {
-        return true;
-    }
-    if let Some(revision) = value.strip_prefix("ref:") {
-        return !is_full_hex_revision(revision);
-    }
-    if value.contains('*')
-        || value.contains('^')
-        || value.contains('~')
-        || value.contains('<')
-        || value.contains('>')
-        || value.contains('|')
-        || value.contains(',')
-        || value.chars().any(char::is_whitespace)
-    {
-        return true;
+    if visiting.contains(canonical) {
+        let start = stack
+            .iter()
+            .position(|entry| entry == canonical)
+            .unwrap_or(0);
+        let mut cycle = stack[start..].to_vec();
+        cycle.push(canonical.to_string());
+        return Err(EnvironmentPlanError::TaskDependencyCycle {
+            cycle: cycle.join(" -> "),
+        });
     }
 
-    let precedence_core = value.split(['-', '+']).next().unwrap_or(value.as_str());
-    precedence_core.split('.').any(|segment| segment == "x")
-}
-
-fn is_immutable_revision(value: &str) -> bool {
-    let value = value.trim().to_ascii_lowercase();
-    if is_full_hex_revision(&value) {
-        return true;
+    let Some(spec) = tasks.get(canonical) else {
+        return Ok(());
+    };
+    visiting.insert(canonical.to_string());
+    stack.push(canonical.to_string());
+    for dependency in spec.referenced_tasks() {
+        if is_task_pattern(dependency) {
+            continue;
+        }
+        visit_task(dependency, tasks, aliases, visiting, visited, stack)?;
     }
-    if let Some(digest) = value.strip_prefix("sha256:") {
-        return digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit());
-    }
-    if let Some(digest) = value.strip_prefix("sha512:") {
-        return digest.len() == 128 && digest.bytes().all(|byte| byte.is_ascii_hexdigit());
-    }
-    false
-}
-
-fn is_full_hex_revision(value: &str) -> bool {
-    matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+    stack.pop();
+    visiting.remove(canonical);
+    visited.insert(canonical.to_string());
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn sha256(digit: char) -> Checksum {
-        Checksum {
-            algorithm: ChecksumAlgorithm::Sha256,
-            value: digit.to_string().repeat(64),
-        }
-    }
-
-    fn exact_tool(resolved: &str) -> ToolRequirement {
-        ToolRequirement {
-            requirement: "^22".to_string(),
-            resolved: Some(resolved.to_string()),
-            provider: Some("core".to_string()),
-            backend: None,
-            source: None,
-            checksums: vec![sha256('a')],
-            platforms: vec!["x86_64-linux".to_string()],
-        }
-    }
-
-    #[test]
-    fn activation_policy_exposes_only_the_fixed_frozen_command() {
-        assert_eq!(ActivationPolicy::None.command(), None);
-        assert_eq!(
-            ActivationPolicy::FrozenInstall.command(),
-            Some("zed install --frozen")
-        );
-    }
-
-    #[test]
-    fn authoring_accepts_ranges_but_frozen_requires_resolution() {
-        let mut plan = EnvironmentPlan::default();
-        plan.tools.insert(
-            "node".to_string(),
-            ToolRequirement {
-                requirement: "^22".to_string(),
-                resolved: None,
-                provider: None,
-                backend: None,
+    fn exact_tool(requirement: &str, resolved: &str) -> ToolSpec {
+        ToolSpec {
+            backend: Some("core".to_string()),
+            versions: vec![ToolVersion {
+                requirement: requirement.to_string(),
+                resolved: Some(resolved.to_string()),
                 source: None,
-                checksums: Vec::new(),
                 platforms: Vec::new(),
-            },
-        );
-
-        plan.validate(EnvironmentValidationMode::Authoring).unwrap();
-        assert!(matches!(
-            plan.validate(EnvironmentValidationMode::FrozenPortable),
-            Err(EnvironmentPlanError::Unresolved { .. })
-        ));
-    }
-
-    #[test]
-    fn frozen_validation_rejects_moving_and_nonportable_resolutions() {
-        for value in ["latest", "lts", "prefix:22", "ref:master", "^22", "22.x"] {
-            let mut plan = EnvironmentPlan::default();
-            plan.tools.insert("node".to_string(), exact_tool(value));
-            assert!(matches!(
-                plan.validate(EnvironmentValidationMode::FrozenPortable),
-                Err(EnvironmentPlanError::MovingSelector { .. })
-            ));
+                options: BTreeMap::new(),
+            }],
+            extensions: BTreeMap::new(),
         }
+    }
 
+    fn command_task(command: &str) -> TaskSpec {
+        TaskSpec {
+            description: None,
+            aliases: Vec::new(),
+            run: vec![TaskStep::Command(command.to_string())],
+            depends: Vec::new(),
+            depends_post: Vec::new(),
+            wait_for: Vec::new(),
+            env: BTreeMap::new(),
+            dir: None,
+            sources: Vec::new(),
+            outputs: Vec::new(),
+            confirm: None,
+            shell: None,
+            hide: false,
+            quiet: false,
+            silent: false,
+            raw: false,
+            extensions: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn default_plan_uses_current_schema() {
+        assert_eq!(
+            EnvironmentPlan::default().schema_version,
+            ENVIRONMENT_PLAN_SCHEMA_VERSION
+        );
+    }
+
+    #[test]
+    fn exact_resolution_can_preserve_original_range() {
         let mut plan = EnvironmentPlan::default();
         plan.tools
-            .insert("node".to_string(), exact_tool("path:./toolchain"));
+            .insert("node".to_string(), exact_tool("24", "24.18.0"));
+        assert_eq!(plan.validate(EnvironmentValidationMode::Frozen), Ok(()));
+    }
+
+    #[test]
+    fn frozen_mode_rejects_floating_resolutions() {
+        let mut plan = EnvironmentPlan::default();
+        plan.tools
+            .insert("node".to_string(), exact_tool("latest", "latest"));
         assert!(matches!(
-            plan.validate(EnvironmentValidationMode::FrozenPortable),
-            Err(EnvironmentPlanError::NonPortableLocalReference { .. })
+            plan.validate(EnvironmentValidationMode::Frozen),
+            Err(EnvironmentPlanError::FloatingResolvedVersion { .. })
         ));
-        plan.validate(EnvironmentValidationMode::FrozenLocal)
-            .unwrap();
     }
 
     #[test]
-    fn prerelease_x_is_not_a_wildcard() {
-        let mut plan = EnvironmentPlan::default();
-        plan.tools
-            .insert("node".to_string(), exact_tool("22.0.0-x.1"));
-        plan.validate(EnvironmentValidationMode::FrozenPortable)
-            .unwrap();
-    }
-
-    #[test]
-    fn frozen_sources_require_full_immutable_revisions() {
-        let mut plan = EnvironmentPlan::default();
-        let mut tool = exact_tool("22.11.0");
-        tool.source = Some(ImmutableSource {
-            url: "https://github.com/example/tool.git".to_string(),
-            revision: "main".to_string(),
-            subdir: None,
-            checksums: Vec::new(),
+    fn frozen_mode_rejects_mutable_vcs_source() {
+        let mut tool = exact_tool("1.0", "1.0.0");
+        tool.versions[0].source = Some(ToolSourceIdentity {
+            kind: ToolSourceKind::Vcs,
+            url: Some("https://github.com/acme/tool".to_string()),
+            registry: None,
+            revision: Some("main".to_string()),
+            checksum: None,
+            immutable: false,
         });
-        plan.tools.insert("node".to_string(), tool);
+        let mut plan = EnvironmentPlan::default();
+        plan.tools.insert("acme-tool".to_string(), tool);
         assert!(matches!(
-            plan.validate(EnvironmentValidationMode::FrozenPortable),
-            Err(EnvironmentPlanError::MutableSourceRevision { .. })
+            plan.validate(EnvironmentValidationMode::Frozen),
+            Err(EnvironmentPlanError::MutableSource { .. })
         ));
-
-        plan.tools
-            .get_mut("node")
-            .unwrap()
-            .source
-            .as_mut()
-            .unwrap()
-            .revision = "0123456789abcdef0123456789abcdef01234567".to_string();
-        plan.validate(EnvironmentValidationMode::FrozenPortable)
-            .unwrap();
     }
 
     #[test]
-    fn canonical_bytes_ignore_set_order_and_duplicates() {
-        let mut first = EnvironmentPlan {
-            platforms: vec![
-                "x86_64-linux".to_string(),
-                "aarch64-darwin".to_string(),
-                "x86_64-linux".to_string(),
-            ],
-            activation: ActivationPolicy::FrozenInstall,
-            sources: vec![
-                EnvironmentSource {
-                    manager: EnvironmentManager::Mise,
-                    path: "mise.toml".to_string(),
-                    lock_path: Some("mise.lock".to_string()),
-                    digest: Some(sha256('b')),
-                },
-                EnvironmentSource {
-                    manager: EnvironmentManager::Mise,
-                    path: "mise.toml".to_string(),
-                    lock_path: Some("mise.lock".to_string()),
-                    digest: Some(sha256('b')),
-                },
-            ],
-            ..EnvironmentPlan::default()
-        };
-        let mut node = exact_tool("22.11.0");
-        node.platforms = vec![
-            "x86_64-linux".to_string(),
-            "aarch64-darwin".to_string(),
-            "x86_64-linux".to_string(),
+    fn normalized_digest_ignores_nonsemantic_collection_order() {
+        let mut first = EnvironmentPlan::default();
+        let mut build = command_task("cargo build");
+        build.aliases = vec!["b".to_string(), "build-all".to_string()];
+        first.tasks.insert("build".to_string(), build);
+        first.provenance = vec![
+            EnvironmentProvenance {
+                manager: "mise".to_string(),
+                manager_version: Some("2026.5.15".to_string()),
+                config_files: vec!["mise.toml".to_string(), ".tool-versions".to_string()],
+                lock_files: vec!["mise.lock".to_string()],
+                config_digest: Some("sha256:a".to_string()),
+                lock_digest: Some("sha256:b".to_string()),
+                source_revision: None,
+            },
+            EnvironmentProvenance {
+                manager: "zed-native".to_string(),
+                manager_version: None,
+                config_files: vec![".zpkg.env.toml".to_string()],
+                lock_files: Vec::new(),
+                config_digest: None,
+                lock_digest: None,
+                source_revision: None,
+            },
         ];
-        first.tools.insert("node".to_string(), node);
 
         let mut second = first.clone();
-        second.platforms.reverse();
-        second.sources.reverse();
-        second.tools.get_mut("node").unwrap().platforms.reverse();
+        second.tasks.get_mut("build").unwrap().aliases.reverse();
+        second.provenance.reverse();
+        second.provenance[1].config_files.reverse();
 
         assert_eq!(
-            first.canonical_json_bytes().unwrap(),
-            second.canonical_json_bytes().unwrap()
+            first.normalized_digest_sha256().unwrap(),
+            second.normalized_digest_sha256().unwrap()
         );
     }
 
     #[test]
-    fn normalization_does_not_hide_invalid_map_keys() {
+    fn task_cycles_are_rejected() {
         let mut plan = EnvironmentPlan::default();
-        plan.tools
-            .insert(" node ".to_string(), exact_tool("22.11.0"));
+        let mut a = command_task("echo a");
+        a.depends.push("b".to_string());
+        let mut b = command_task("echo b");
+        b.depends.push("a".to_string());
+        plan.tasks.insert("a".to_string(), a);
+        plan.tasks.insert("b".to_string(), b);
         assert!(matches!(
+            plan.validate(EnvironmentValidationMode::Permissive),
+            Err(EnvironmentPlanError::TaskDependencyCycle { .. })
+        ));
+    }
+
+    #[test]
+    fn task_aliases_resolve_in_dependency_graph() {
+        let mut plan = EnvironmentPlan::default();
+        let mut build = command_task("cargo build");
+        build.aliases.push("b".to_string());
+        let mut test = command_task("cargo test");
+        test.depends.push("b".to_string());
+        plan.tasks.insert("build".to_string(), build);
+        plan.tasks.insert("test".to_string(), test);
+        assert_eq!(plan.validate(EnvironmentValidationMode::Permissive), Ok(()));
+    }
+
+    #[test]
+    fn project_global_provenance_is_rejected() {
+        let mut plan = EnvironmentPlan::default();
+        plan.provenance.push(EnvironmentProvenance {
+            manager: "mise".to_string(),
+            manager_version: None,
+            config_files: vec!["~/.config/mise/config.toml".to_string()],
+            lock_files: Vec::new(),
+            config_digest: None,
+            lock_digest: None,
+            source_revision: None,
+        });
+        assert!(matches!(
+            plan.validate(EnvironmentValidationMode::Permissive),
+            Err(EnvironmentPlanError::NonProjectLocalProvenancePath { .. })
+        ));
+    }
+
+    #[test]
+    fn toml_roundtrip_preserves_nested_values() {
+        let mut plan = EnvironmentPlan::default();
+        plan.env.insert(
+            "ZED_EXAMPLE".to_string(),
+            EnvironmentValue::Table(BTreeMap::from([
+                (
+                    "path".to_string(),
+                    EnvironmentValue::String(".zed/dev".to_string()),
+                ),
+                ("enabled".to_string(), EnvironmentValue::Boolean(true)),
+            ])),
+        );
+        let text = plan.to_toml_string().unwrap();
+        assert_eq!(
+            EnvironmentPlan::parse_toml(&text).unwrap(),
             plan.normalized()
-                .validate(EnvironmentValidationMode::FrozenPortable),
-            Err(EnvironmentPlanError::InvalidName { .. })
-        ));
-    }
-
-    #[test]
-    fn canonical_json_roundtrips() {
-        let mut plan = EnvironmentPlan {
-            activation: ActivationPolicy::FrozenInstall,
-            ..EnvironmentPlan::default()
-        };
-        plan.tools.insert("node".to_string(), exact_tool("22.11.0"));
-        let bytes = plan.canonical_json_bytes().unwrap();
-        let parsed: EnvironmentPlan = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(parsed, plan.normalized());
-    }
-
-    #[test]
-    fn checksums_are_length_checked() {
-        let mut plan = EnvironmentPlan::default();
-        let mut tool = exact_tool("22.11.0");
-        tool.checksums = vec![Checksum {
-            algorithm: ChecksumAlgorithm::Sha256,
-            value: "abc".to_string(),
-        }];
-        plan.tools.insert("node".to_string(), tool);
-        assert!(matches!(
-            plan.validate(EnvironmentValidationMode::FrozenPortable),
-            Err(EnvironmentPlanError::InvalidChecksum { .. })
-        ));
-    }
-
-    #[test]
-    fn strict_semver_is_an_export_boundary() {
-        assert!(validate_semver_export("1.2.3-rc.1+build.7").is_ok());
-        assert!(validate_semver_export("v1.2.3").is_err());
-        assert!(validate_semver_export("legacy-api").is_err());
-        assert!(differ_only_in_build_metadata("1.2.3+arm64", "1.2.3+x86-64").unwrap());
-        assert!(!differ_only_in_build_metadata("1.2.3", "1.2.4").unwrap());
-    }
-
-    #[test]
-    fn manager_paths_cannot_escape_the_project() {
-        let plan = EnvironmentPlan {
-            sources: vec![EnvironmentSource {
-                manager: EnvironmentManager::Devbox,
-                path: "../devbox.json".to_string(),
-                lock_path: None,
-                digest: None,
-            }],
-            ..EnvironmentPlan::default()
-        };
-        assert!(matches!(
-            plan.validate(EnvironmentValidationMode::Authoring),
-            Err(EnvironmentPlanError::UnsafeRelativePath { .. })
-        ));
+        );
     }
 }

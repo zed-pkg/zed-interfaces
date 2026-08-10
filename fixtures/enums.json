@@ -1,0 +1,9 @@
+{
+  "artifact_format": "zip",
+  "audit_action": "org_claim",
+  "conflict_resolution": "server_wins",
+  "error_policy": "emit_only",
+  "vcs": "sapling",
+  "version_scheme": "opaque",
+  "write_mode": "optimistic_queue"
+}

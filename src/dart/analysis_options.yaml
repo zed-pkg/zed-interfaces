@@ -1,0 +1,12 @@
+include: package:lints/recommended.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  errors:
+    # Everything here is generated: a warning means the generator emitted bad
+    # Dart, which is a bug to fix in codegen/generate.mjs, not to tolerate.
+    unused_import: error
+    dead_code: error
