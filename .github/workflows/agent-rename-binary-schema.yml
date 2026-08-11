@@ -1,0 +1,60 @@
+name: normalize binary schema name
+
+on:
+  push:
+    branches:
+      - agent/binary-artifacts-v1
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: ${{ !contains(github.event.head_commit.message, '[binary-schema-renamed]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: agent/binary-artifacts-v1
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          components: rustfmt
+      - name: Rename and regenerate the schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          index_path = Path('schemas/index.json')
+          index = json.loads(index_path.read_text())
+          for item in index['schemas']:
+              if item['file'] == 'binary-artifact-v1.schema.json':
+                  item['file'] = 'binary-artifact-v1.json'
+          index['schemas'].sort(key=lambda item: item['file'])
+          index_path.write_text(json.dumps(index, indent=2, ensure_ascii=False) + '\n')
+
+          generator_path = Path('src/rust/examples/generate_schemas.rs')
+          generator = generator_path.read_text().replace(
+              '"binary-artifact-v1.schema"',
+              '"binary-artifact-v1"',
+          )
+          generator_path.write_text(generator)
+          PY
+          rm -f schemas/binary-artifact-v1.schema.json
+          cargo fmt --manifest-path src/rust/Cargo.toml
+          cargo run --locked --manifest-path src/rust/Cargo.toml --example generate_schemas
+          rm .github/workflows/agent-rename-binary-schema.yml
+      - name: Commit normalized schema name
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add --all
+          git commit -m 'chore: use canonical binary schema name [binary-schema-renamed]'
+          git push origin HEAD:agent/binary-artifacts-v1
