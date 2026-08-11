@@ -29,7 +29,9 @@ JSON is the stored semantic authority. YAML must use a JSON-compatible safe subs
 
 When both `Accept` and `format=` are present and disagree, the server returns `406 Not Acceptable`. Download filenames are server-generated from validated package coordinates or the resolution digest and delivered in a `Content-Disposition` attachment header with a fixed character set; caller-supplied path separators, control characters, quotes, and non-ASCII bytes are never reflected.
 
-Both routes support conditional requests per representation: `GET` or `HEAD` with `If-None-Match` matching the representation's strong `ETag` returns `304 Not Modified` carrying the same `ETag`, `x-zpkg-graph-digest`, and `Cache-Control` metadata with no body. Because strong ETags are representation-specific, a JSON validator never produces a `304` for a YAML or TOML request.
+Both routes support conditional requests per representation: `GET` or `HEAD` with `If-None-Match` matching the representation's strong `ETag` returns `304 Not Modified` carrying the same `ETag`, `x-zpkg-graph-digest`, and `Cache-Control` metadata with no body. RFC 9110 requires weak comparison for `If-None-Match`, so a presented `W/"tag"` matches an emitted `"tag"`; the opaque tag still remains representation-specific, and a JSON validator never produces a `304` for a YAML or TOML request.
+
+Public successful and `304` responses carry `Vary: Accept`. This remains necessary for immutable graphs because the same canonical route selects different representation bytes from `Accept`; a shared cache must not reuse JSON for a YAML-only request. Authorized private responses add `Authorization` to `Vary` and use `Cache-Control: private, no-store`.
 
 ## Canonicalization and identity
 
@@ -118,7 +120,7 @@ Exceeding a graph limit returns `422` with code `graph_limit_exceeded`; an encod
 
 ## Privacy and cache behavior
 
-Public immutable resolution artifacts may be stored in R2/S3 and served through static or edge caches. Private resolution artifacts are authorization-gated, non-enumerable, and never publicly cacheable. A denied response must not expose private package names, node/edge counts, registry paths, object keys, signed URLs, or credential material.
+Public immutable resolution artifacts may be stored in R2/S3 and served through static or edge caches. Protected `internal` and `private` resolution artifacts are authorization-gated, non-enumerable, and never publicly cacheable. A denied response must not expose protected package names, node/edge counts, registry paths, object keys, signed URLs, or credential material.
 
 There is no partial-redaction mode in v1. Returning a graph with hidden nodes would change semantics and can leak topology. The caller either receives the authorized complete/projected graph or an indistinguishable denial. The denial status is `404 Not Found` for missing, nonexistent, and unauthorized-private alike; these routes define no `401` or `403`, and denied responses are never publicly cacheable.
 

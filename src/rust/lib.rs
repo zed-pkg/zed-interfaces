@@ -9,6 +9,7 @@
 pub mod artifact;
 pub mod binary_artifact;
 pub mod dependency_graph;
+pub mod dependency_graph_export;
 pub mod environment;
 pub mod environment_lock;
 pub mod environment_v2;
@@ -52,6 +53,13 @@ pub use dependency_graph::{
     PackageVersionIdentity, RegistrySnapshot, ResolutionProvenance, ResolvedDependencyEdge,
     ResolvedDependencyNode, declared_dependency_graph_path, golden_fixture_documents,
     resolution_dependency_graph_path,
+};
+pub use dependency_graph_export::{
+    DEPENDENCY_GRAPH_AUTHORITATIVE_HEADER, DEPENDENCY_GRAPH_CSV_MEDIA_TYPE,
+    DEPENDENCY_GRAPH_EXPORT_ROUTE_TEMPLATE, DEPENDENCY_GRAPH_JSON5_MEDIA_TYPE,
+    DEPENDENCY_GRAPH_MESSAGEPACK_MEDIA_TYPE, DEPENDENCY_GRAPH_PROTOBUF_MEDIA_TYPE,
+    DEPENDENCY_GRAPH_XML_MEDIA_TYPE, DependencyGraphExportFormat,
+    declared_dependency_graph_export_path,
 };
 pub use environment::{
     ActivationPolicy, Checksum, ChecksumAlgorithm, EnvironmentManager, EnvironmentPlan,
