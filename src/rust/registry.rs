@@ -6,6 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::artifact::ArtifactFormat;
+use crate::binary_artifact::BinaryArchiveFormatV1;
 use crate::manifest::Manifest;
 use crate::vcs::Vcs;
 
@@ -30,6 +31,31 @@ pub fn package_path(org: &str, name: &str) -> String {
 /// `PUT` (multipart, bearer token) — publish this version.
 pub fn version_path(org: &str, name: &str, version: &str) -> String {
     format!("{API_V1}/packages/{org}/{name}/versions/{version}")
+}
+
+/// `GET` — list every platform artifact published for one release.
+pub fn binary_artifacts_path(org: &str, name: &str, version: &str) -> String {
+    format!("{}/artifacts", version_path(org, name, version))
+}
+
+/// `GET` — fetch metadata for one immutable release/target/format artifact.
+/// `PUT` (multipart, bearer token) — publish the same artifact identity.
+///
+/// The target and format are separate path segments and never SemVer build
+/// metadata. Callers must pass a target already accepted by
+/// `BinaryPlatformV1::validate`; path construction deliberately performs no
+/// lossy URL normalization.
+pub fn binary_artifact_path(
+    org: &str,
+    name: &str,
+    version: &str,
+    target: &str,
+    format: BinaryArchiveFormatV1,
+) -> String {
+    format!(
+        "{}/{target}/{format}",
+        binary_artifacts_path(org, name, version)
+    )
 }
 
 /// `GET` — download (or get redirected to) the artifact with this sha256.

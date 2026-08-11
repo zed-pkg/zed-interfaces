@@ -7,6 +7,7 @@
 //! `schemas/`) by the non-Rust client libraries in `zed-clients`.
 
 pub mod artifact;
+pub mod binary_artifact;
 pub mod dependency_graph;
 pub mod dependency_graph_export;
 pub mod environment;
@@ -31,6 +32,16 @@ pub mod vcs;
 pub mod version;
 
 pub use artifact::ArtifactFormat;
+pub use binary_artifact::{
+    BINARY_ARCHIVE_ROOT, BINARY_ARTIFACT_LIST_SCHEMA_V1, BINARY_ARTIFACT_LOCK_SCHEMA_V1,
+    BINARY_ARTIFACT_METADATA_SCHEMA_V1, BINARY_ARTIFACT_PUBLISH_META_SCHEMA_V1,
+    BINARY_ARTIFACT_SCHEMA_V1, BINARY_DESCRIPTOR_ARCHIVE_PATH, BINARY_DESCRIPTOR_PATH,
+    BINARY_PACKAGE_MANIFEST_ARCHIVE_PATH, BINARY_PACKAGE_MANIFEST_PATH, BinaryArchiveFormatV1,
+    BinaryArtifactAttachmentKindV1, BinaryArtifactAttachmentV1, BinaryArtifactError,
+    BinaryArtifactListResponseV1, BinaryArtifactLockV1, BinaryArtifactManifestV1,
+    BinaryArtifactMetadataV1, BinaryArtifactPublishMetaV1, BinaryFileV1, BinaryPackageIdentityV1,
+    BinaryPlatformV1, BinarySourceProvenanceV1,
+};
 pub use dependency_graph::{
     DEPENDENCY_GRAPH_DECLARED_ROUTE_TEMPLATE, DEPENDENCY_GRAPH_DEFAULT_MAX_EDGES,
     DEPENDENCY_GRAPH_DEFAULT_MAX_ENCODED_BYTES, DEPENDENCY_GRAPH_DEFAULT_MAX_NODES,

@@ -24,7 +24,12 @@ use zed_interfaces::sync::{
     SyncChangeEvent, SyncConflictResolution, SyncErrorPolicy, SyncOp, SyncWriteMode,
 };
 use zed_interfaces::version::VersionScheme;
-use zed_interfaces::{ArtifactFormat, Vcs};
+use zed_interfaces::{
+    ArtifactFormat, BINARY_ARTIFACT_LIST_SCHEMA_V1, BINARY_ARTIFACT_METADATA_SCHEMA_V1,
+    BinaryArchiveFormatV1, BinaryArtifactAttachmentKindV1, BinaryArtifactAttachmentV1,
+    BinaryArtifactListResponseV1, BinaryArtifactMetadataV1, BinaryPlatformV1,
+    BinarySourceProvenanceV1, Vcs,
+};
 
 fn write<T: Serialize>(dir: &Path, name: &str, cases: &[(&str, T)]) {
     let mut map = serde_json::Map::new();
@@ -100,6 +105,59 @@ fn main() {
             },
         )],
     );
+
+    let binary_metadata = BinaryArtifactMetadataV1 {
+        schema: BINARY_ARTIFACT_METADATA_SCHEMA_V1.into(),
+        org: "acme".into(),
+        name: "zed-tool".into(),
+        version: "1.2.3".into(),
+        platform: BinaryPlatformV1 {
+            target: "x86_64-unknown-linux-gnu".into(),
+            os: "linux".into(),
+            arch: "x86_64".into(),
+            libc: Some("gnu".into()),
+            abi: None,
+        },
+        format: BinaryArchiveFormatV1::Zip,
+        sha256: "a".repeat(64),
+        size: 4096,
+        descriptor_sha256: "b".repeat(64),
+        download_url: format!("/v1/artifacts/{}", "a".repeat(64)),
+        published_at: "2026-08-11T16:00:00Z".into(),
+        yanked: false,
+        source: Some(BinarySourceProvenanceV1 {
+            repository: "https://github.com/acme/zed-tool".into(),
+            vcs_tag: "v1.2.3".into(),
+            vcs_commit: Some("c".repeat(40)),
+        }),
+        attachments: vec![BinaryArtifactAttachmentV1 {
+            kind: BinaryArtifactAttachmentKindV1::Sbom,
+            media_type: "application/spdx+json".into(),
+            sha256: "d".repeat(64),
+            size: 512,
+            subject_sha256: "a".repeat(64),
+            download_url: format!("/v1/artifacts/{}", "d".repeat(64)),
+        }],
+    };
+    binary_metadata
+        .validate()
+        .expect("binary metadata fixture is valid");
+    write(
+        dir,
+        "binary-artifact-metadata-v1",
+        &[("exact", binary_metadata.clone())],
+    );
+    let binary_list = BinaryArtifactListResponseV1 {
+        schema: BINARY_ARTIFACT_LIST_SCHEMA_V1.into(),
+        org: "acme".into(),
+        name: "zed-tool".into(),
+        version: "1.2.3".into(),
+        artifacts: vec![binary_metadata],
+    };
+    binary_list
+        .validate()
+        .expect("binary list fixture is valid");
+    write(dir, "binary-artifact-list-v1", &[("release", binary_list)]);
 
     write(
         dir,
@@ -208,6 +266,14 @@ fn main() {
             (
                 "artifact_format",
                 serde_json::to_value(ArtifactFormat::Zip).unwrap(),
+            ),
+            (
+                "binary_archive_format",
+                serde_json::to_value(BinaryArchiveFormatV1::Zip).unwrap(),
+            ),
+            (
+                "binary_attachment_kind",
+                serde_json::to_value(BinaryArtifactAttachmentKindV1::Sbom).unwrap(),
             ),
             ("vcs", serde_json::to_value(Vcs::Sapling).unwrap()),
             (

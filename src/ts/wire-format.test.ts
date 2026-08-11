@@ -24,6 +24,8 @@ import type {
   ApiError,
   AuditIntegrityResponse,
   AuditLogResponse,
+  BinaryArtifactListResponseV1,
+  BinaryArtifactMetadataV1,
   ClaimOrgRequest,
   ClaimOrgResponse,
   PackageListResponse,
@@ -40,6 +42,8 @@ import type {
 import {
   ARTIFACT_FORMAT_VALUES,
   AUDIT_ACTION_VALUES,
+  BINARY_ARCHIVE_FORMAT_V1_VALUES,
+  BINARY_ARTIFACT_ATTACHMENT_KIND_V1_VALUES,
   SYNC_CONFLICT_RESOLUTION_VALUES,
   SYNC_ERROR_POLICY_VALUES,
   SYNC_OP_VALUES,
@@ -75,6 +79,16 @@ test("VersionMetadata: numbers and defaulted fields", () => {
   assert.equal(published.size, 4096);
   assert.equal(published.format ?? "tar.gz", "tar.gz");
   assert.equal(published.yanked ?? false, false);
+});
+
+test("target-qualified binary metadata and list responses share one wire type", () => {
+  const { exact } = fixture<{ exact: BinaryArtifactMetadataV1 }>("binary-artifact-metadata-v1");
+  const { release } = fixture<{ release: BinaryArtifactListResponseV1 }>("binary-artifact-list-v1");
+  assert.equal(exact.platform.target, "x86_64-unknown-linux-gnu");
+  assert.equal(exact.format ?? "zip", "zip");
+  assert.equal(exact.attachments?.[0]?.kind, "sbom");
+  assert.equal(exact.attachments?.[0]?.subject_sha256, exact.sha256);
+  assert.deepEqual(release.artifacts[0], exact);
 });
 
 test("responses that share PackageSummary decode consistently", () => {
@@ -113,6 +127,8 @@ test("every enum spelling serde emits is a member of the generated union", () =>
     ["error_policy", SYNC_ERROR_POLICY_VALUES],
     ["conflict_resolution", SYNC_CONFLICT_RESOLUTION_VALUES],
     ["artifact_format", ARTIFACT_FORMAT_VALUES],
+    ["binary_archive_format", BINARY_ARCHIVE_FORMAT_V1_VALUES],
+    ["binary_attachment_kind", BINARY_ARTIFACT_ATTACHMENT_KIND_V1_VALUES],
     ["vcs", VCS_VALUES],
     ["version_scheme", VERSION_SCHEME_VALUES],
     ["audit_action", AUDIT_ACTION_VALUES],

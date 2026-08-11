@@ -2,6 +2,268 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: types shared by more than one schema
 
+/// Binary artifacts use ZIP exclusively in v1. ZIP is portable to Windows, preserves POSIX
+/// executable bits when present, and supports safe central- directory inspection before
+/// extraction.
+enum BinaryArchiveFormatV1 {
+  zip('zip');
+
+  const BinaryArchiveFormatV1(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static BinaryArchiveFormatV1 fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown BinaryArchiveFormatV1: $value'),
+  );
+
+  static BinaryArchiveFormatV1? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
+/// Digest-addressed evidence associated with an immutable binary archive. The attachment
+/// digest identifies the evidence bytes. `subject_sha256` prevents a valid signature, SBOM,
+/// or provenance statement for one archive from being replayed as evidence for another
+/// archive. Cryptographic verification of the attachment contents remains implementation
+/// behavior.
+enum BinaryArtifactAttachmentKindV1 {
+  signature('signature'),
+  attestation('attestation'),
+  provenance('provenance'),
+  sbom('sbom');
+
+  const BinaryArtifactAttachmentKindV1(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static BinaryArtifactAttachmentKindV1 fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown BinaryArtifactAttachmentKindV1: $value'),
+  );
+
+  static BinaryArtifactAttachmentKindV1? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
+/// One immutable signature, attestation, provenance, or SBOM object.
+class BinaryArtifactAttachmentV1 {
+  const BinaryArtifactAttachmentV1({
+    required this.downloadUrl,
+    required this.kind,
+    required this.mediaType,
+    required this.sha256,
+    required this.size,
+    required this.subjectSha256,
+  });
+
+  factory BinaryArtifactAttachmentV1.fromJson(Map<String, dynamic> json) => BinaryArtifactAttachmentV1(
+    downloadUrl: json['download_url'] as String,
+    kind: BinaryArtifactAttachmentKindV1.fromJson(json['kind'] as String),
+    mediaType: json['media_type'] as String,
+    sha256: json['sha256'] as String,
+    size: (json['size'] as num).toInt(),
+    subjectSha256: json['subject_sha256'] as String,
+  );
+
+  /// Absolute or registry-relative immutable download URL.
+  final String downloadUrl;
+
+  final BinaryArtifactAttachmentKindV1 kind;
+
+  final String mediaType;
+
+  /// SHA-256 of the exact attachment bytes.
+  final String sha256;
+
+  final int size;
+
+  /// SHA-256 of the exact binary ZIP bytes described by this attachment.
+  final String subjectSha256;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'download_url': downloadUrl,
+    'kind': kind.toJson(),
+    'media_type': mediaType,
+    'sha256': sha256,
+    'size': size,
+    'subject_sha256': subjectSha256,
+  };
+}
+
+/// Immutable registry metadata for one release + target + format artifact. `(org, name,
+/// version)` is release identity. `platform.target` and `format` complete artifact
+/// identity; the remaining platform fields are resolved attributes and must not be encoded
+/// in SemVer build metadata.
+class BinaryArtifactMetadataV1 {
+  const BinaryArtifactMetadataV1({
+    this.attachments,
+    required this.descriptorSha256,
+    required this.downloadUrl,
+    this.format = BinaryArchiveFormatV1.zip,
+    required this.name,
+    required this.org,
+    required this.platform,
+    required this.publishedAt,
+    required this.schema,
+    required this.sha256,
+    required this.size,
+    this.source,
+    required this.version,
+    this.yanked = false,
+  });
+
+  factory BinaryArtifactMetadataV1.fromJson(Map<String, dynamic> json) => BinaryArtifactMetadataV1(
+    attachments: (json['attachments'] as List<dynamic>?)?.map((e) => BinaryArtifactAttachmentV1.fromJson(e as Map<String, dynamic>)).toList(),
+    descriptorSha256: json['descriptor_sha256'] as String,
+    downloadUrl: json['download_url'] as String,
+    format: json['format'] == null
+        ? BinaryArchiveFormatV1.zip
+        : BinaryArchiveFormatV1.fromJson(json['format'] as String),
+    name: json['name'] as String,
+    org: json['org'] as String,
+    platform: BinaryPlatformV1.fromJson(json['platform'] as Map<String, dynamic>),
+    publishedAt: json['published_at'] as String,
+    schema: json['schema'] as String,
+    sha256: json['sha256'] as String,
+    size: (json['size'] as num).toInt(),
+    source: json['source'] == null ? null : BinarySourceProvenanceV1.fromJson(json['source'] as Map<String, dynamic>),
+    version: json['version'] as String,
+    yanked: json['yanked'] == null
+        ? false
+        : json['yanked'] as bool,
+  );
+
+  /// Strictly sorted, digest-addressed evidence. Optional evidence is omitted, never
+  /// serialized as JSON null in the canonical form.
+  final List<BinaryArtifactAttachmentV1>? attachments;
+
+  /// SHA-256 of the exact canonical `pkg/.zpkg-binary.json` bytes.
+  final String descriptorSha256;
+
+  /// Absolute or registry-relative immutable download URL.
+  final String downloadUrl;
+
+  final BinaryArchiveFormatV1 format;
+
+  final String name;
+
+  final String org;
+
+  final BinaryPlatformV1 platform;
+
+  /// Exact UTC publication second (`YYYY-MM-DDTHH:MM:SSZ`).
+  final String publishedAt;
+
+  final String schema;
+
+  /// SHA-256 and size of the exact deterministic ZIP bytes.
+  final String sha256;
+
+  final int size;
+
+  final BinarySourceProvenanceV1? source;
+
+  final String version;
+
+  final bool yanked;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    if (attachments != null) 'attachments': attachments?.map((e) => e.toJson()).toList(),
+    'descriptor_sha256': descriptorSha256,
+    'download_url': downloadUrl,
+    'format': format.toJson(),
+    'name': name,
+    'org': org,
+    'platform': platform.toJson(),
+    'published_at': publishedAt,
+    'schema': schema,
+    'sha256': sha256,
+    'size': size,
+    if (source != null) 'source': source?.toJson(),
+    'version': version,
+    'yanked': yanked,
+  };
+}
+
+/// Normalized native platform selected for this one artifact. `target` is normally a
+/// Rust-style target triple such as `x86_64-unknown-linux-gnu`, but Zed treats it as an
+/// opaque normalized token so non-Rust toolchains can use their canonical spelling. `os`,
+/// `arch`, `libc`, and `abi` remain structured for resolver filtering.
+class BinaryPlatformV1 {
+  const BinaryPlatformV1({
+    this.abi,
+    required this.arch,
+    this.libc,
+    required this.os,
+    required this.target,
+  });
+
+  factory BinaryPlatformV1.fromJson(Map<String, dynamic> json) => BinaryPlatformV1(
+    abi: json['abi'] as String?,
+    arch: json['arch'] as String,
+    libc: json['libc'] as String?,
+    os: json['os'] as String,
+    target: json['target'] as String,
+  );
+
+  final String? abi;
+
+  final String arch;
+
+  final String? libc;
+
+  final String os;
+
+  final String target;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    if (abi != null) 'abi': abi,
+    'arch': arch,
+    if (libc != null) 'libc': libc,
+    'os': os,
+    'target': target,
+  };
+}
+
+/// Optional source/VCS provenance carried inside the archive. The registry's signed
+/// publication metadata remains the trust anchor; this is an inspectable copy bound by the
+/// archive digest.
+class BinarySourceProvenanceV1 {
+  const BinarySourceProvenanceV1({
+    required this.repository,
+    this.vcsCommit,
+    required this.vcsTag,
+  });
+
+  factory BinarySourceProvenanceV1.fromJson(Map<String, dynamic> json) => BinarySourceProvenanceV1(
+    repository: json['repository'] as String,
+    vcsCommit: json['vcs_commit'] as String?,
+    vcsTag: json['vcs_tag'] as String,
+  );
+
+  final String repository;
+
+  final String? vcsCommit;
+
+  final String vcsTag;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'repository': repository,
+    if (vcsCommit != null) 'vcs_commit': vcsCommit,
+    'vcs_tag': vcsTag,
+  };
+}
+
 class PackageSummary {
   const PackageSummary({
     this.description,

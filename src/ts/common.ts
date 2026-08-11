@@ -2,6 +2,74 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: types shared by more than one schema
 
+/**
+ * Binary artifacts use ZIP exclusively in v1. ZIP is portable to Windows, preserves POSIX executable bits when present, and supports safe central- directory inspection before extraction.
+ */
+export type BinaryArchiveFormatV1 = "zip";
+
+/** Every `BinaryArchiveFormatV1` value, in schema order — for validation and pickers. */
+export const BINARY_ARCHIVE_FORMAT_V1_VALUES = ["zip"] as const;
+
+/**
+ * Digest-addressed evidence associated with an immutable binary archive. The attachment digest identifies the evidence bytes. `subject_sha256` prevents a valid signature, SBOM, or provenance statement for one archive from being replayed as evidence for another archive. Cryptographic verification of the attachment contents remains implementation behavior.
+ */
+export type BinaryArtifactAttachmentKindV1 = "signature" | "attestation" | "provenance" | "sbom";
+
+/** Every `BinaryArtifactAttachmentKindV1` value, in schema order — for validation and pickers. */
+export const BINARY_ARTIFACT_ATTACHMENT_KIND_V1_VALUES = ["signature", "attestation", "provenance", "sbom"] as const;
+
+/** One immutable signature, attestation, provenance, or SBOM object. */
+export interface BinaryArtifactAttachmentV1 {
+  /** Absolute or registry-relative immutable download URL. */
+  readonly download_url: string;
+  readonly kind: BinaryArtifactAttachmentKindV1;
+  readonly media_type: string;
+  /** SHA-256 of the exact attachment bytes. */
+  readonly sha256: string;
+  readonly size: number;
+  /** SHA-256 of the exact binary ZIP bytes described by this attachment. */
+  readonly subject_sha256: string;
+}
+
+/** Immutable registry metadata for one release + target + format artifact. `(org, name, version)` is release identity. `platform.target` and `format` complete artifact identity; the remaining platform fields are resolved attributes and must not be encoded in SemVer build metadata. */
+export interface BinaryArtifactMetadataV1 {
+  /** Strictly sorted, digest-addressed evidence. Optional evidence is omitted, never serialized as JSON null in the canonical form. */
+  readonly attachments?: readonly BinaryArtifactAttachmentV1[];
+  /** SHA-256 of the exact canonical `pkg/.zpkg-binary.json` bytes. */
+  readonly descriptor_sha256: string;
+  /** Absolute or registry-relative immutable download URL. */
+  readonly download_url: string;
+  readonly format?: BinaryArchiveFormatV1;
+  readonly name: string;
+  readonly org: string;
+  readonly platform: BinaryPlatformV1;
+  /** Exact UTC publication second (`YYYY-MM-DDTHH:MM:SSZ`). */
+  readonly published_at: string;
+  readonly schema: string;
+  /** SHA-256 and size of the exact deterministic ZIP bytes. */
+  readonly sha256: string;
+  readonly size: number;
+  readonly source?: BinarySourceProvenanceV1;
+  readonly version: string;
+  readonly yanked?: boolean;
+}
+
+/** Normalized native platform selected for this one artifact. `target` is normally a Rust-style target triple such as `x86_64-unknown-linux-gnu`, but Zed treats it as an opaque normalized token so non-Rust toolchains can use their canonical spelling. `os`, `arch`, `libc`, and `abi` remain structured for resolver filtering. */
+export interface BinaryPlatformV1 {
+  readonly abi?: string;
+  readonly arch: string;
+  readonly libc?: string;
+  readonly os: string;
+  readonly target: string;
+}
+
+/** Optional source/VCS provenance carried inside the archive. The registry's signed publication metadata remains the trust anchor; this is an inspectable copy bound by the archive digest. */
+export interface BinarySourceProvenanceV1 {
+  readonly repository: string;
+  readonly vcs_commit?: string;
+  readonly vcs_tag: string;
+}
+
 export interface PackageSummary {
   readonly description?: string | null;
   readonly latest?: string | null;

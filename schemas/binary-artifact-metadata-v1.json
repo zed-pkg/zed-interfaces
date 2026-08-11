@@ -1,0 +1,218 @@
+{
+  "$defs": {
+    "BinaryArchiveFormatV1": {
+      "description": "Binary artifacts use ZIP exclusively in v1. ZIP is portable to Windows,\npreserves POSIX executable bits when present, and supports safe central-\ndirectory inspection before extraction.",
+      "enum": [
+        "zip"
+      ],
+      "type": "string"
+    },
+    "BinaryArtifactAttachmentKindV1": {
+      "description": "Digest-addressed evidence associated with an immutable binary archive.\n\nThe attachment digest identifies the evidence bytes. `subject_sha256`\nprevents a valid signature, SBOM, or provenance statement for one archive\nfrom being replayed as evidence for another archive. Cryptographic\nverification of the attachment contents remains implementation behavior.",
+      "enum": [
+        "signature",
+        "attestation",
+        "provenance",
+        "sbom"
+      ],
+      "type": "string"
+    },
+    "BinaryArtifactAttachmentV1": {
+      "additionalProperties": false,
+      "description": "One immutable signature, attestation, provenance, or SBOM object.",
+      "properties": {
+        "download_url": {
+          "description": "Absolute or registry-relative immutable download URL.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/BinaryArtifactAttachmentKindV1"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of the exact attachment bytes.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "subject_sha256": {
+          "description": "SHA-256 of the exact binary ZIP bytes described by this attachment.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "media_type",
+        "sha256",
+        "size",
+        "subject_sha256",
+        "download_url"
+      ],
+      "type": "object"
+    },
+    "BinaryPlatformV1": {
+      "additionalProperties": false,
+      "description": "Normalized native platform selected for this one artifact.\n\n`target` is normally a Rust-style target triple such as\n`x86_64-unknown-linux-gnu`, but Zed treats it as an opaque normalized token\nso non-Rust toolchains can use their canonical spelling. `os`, `arch`,\n`libc`, and `abi` remain structured for resolver filtering.",
+      "properties": {
+        "abi": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$",
+          "type": "string"
+        },
+        "arch": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$",
+          "type": "string"
+        },
+        "libc": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$",
+          "type": "string"
+        },
+        "os": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$",
+          "type": "string"
+        },
+        "target": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "os",
+        "arch"
+      ],
+      "type": "object"
+    },
+    "BinarySourceProvenanceV1": {
+      "additionalProperties": false,
+      "description": "Optional source/VCS provenance carried inside the archive. The registry's\nsigned publication metadata remains the trust anchor; this is an inspectable\ncopy bound by the archive digest.",
+      "properties": {
+        "repository": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "vcs_commit": {
+          "maxLength": 128,
+          "minLength": 7,
+          "pattern": "^[A-Za-z0-9._+:/-]+$",
+          "type": "string"
+        },
+        "vcs_tag": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository",
+        "vcs_tag"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Immutable registry metadata for one release + target + format artifact.\n\n`(org, name, version)` is release identity. `platform.target` and `format`\ncomplete artifact identity; the remaining platform fields are resolved\nattributes and must not be encoded in SemVer build metadata.",
+  "properties": {
+    "attachments": {
+      "description": "Strictly sorted, digest-addressed evidence. Optional evidence is omitted,\nnever serialized as JSON null in the canonical form.",
+      "items": {
+        "$ref": "#/$defs/BinaryArtifactAttachmentV1"
+      },
+      "type": "array"
+    },
+    "descriptor_sha256": {
+      "description": "SHA-256 of the exact canonical `pkg/.zpkg-binary.json` bytes.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "download_url": {
+      "description": "Absolute or registry-relative immutable download URL.",
+      "type": "string"
+    },
+    "format": {
+      "$ref": "#/$defs/BinaryArchiveFormatV1",
+      "default": "zip"
+    },
+    "name": {
+      "minLength": 1,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+      "type": "string"
+    },
+    "org": {
+      "minLength": 1,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+      "type": "string"
+    },
+    "platform": {
+      "$ref": "#/$defs/BinaryPlatformV1"
+    },
+    "published_at": {
+      "description": "Exact UTC publication second (`YYYY-MM-DDTHH:MM:SSZ`).",
+      "type": "string"
+    },
+    "schema": {
+      "const": "zpkg.binary-artifact-metadata/v1",
+      "type": "string"
+    },
+    "sha256": {
+      "description": "SHA-256 and size of the exact deterministic ZIP bytes.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "size": {
+      "format": "uint64",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "source": {
+      "$ref": "#/$defs/BinarySourceProvenanceV1"
+    },
+    "version": {
+      "minLength": 1,
+      "pattern": "^[^\\u0000-\\u0020\\u007f]+$",
+      "type": "string"
+    },
+    "yanked": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema",
+    "org",
+    "name",
+    "version",
+    "platform",
+    "sha256",
+    "size",
+    "descriptor_sha256",
+    "download_url",
+    "published_at"
+  ],
+  "title": "BinaryArtifactMetadataV1",
+  "type": "object"
+}

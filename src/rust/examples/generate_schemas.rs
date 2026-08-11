@@ -20,6 +20,350 @@ fn write<T: JsonSchema>(dir: &Path, name: &str) {
     println!("wrote {}", path.display());
 }
 
+/// The Rust validator enforces the binary descriptor's exact schema marker,
+/// sibling manifest location, digest alphabet, platform tokens, and safe path
+/// grammar. Schemars cannot infer those cross-format refinements from ordinary
+/// `String` fields, so pin them in the generated wire schema as well.
+fn write_binary_artifact_schema(dir: &Path) {
+    let schema = schema_for!(zed_interfaces::BinaryArtifactManifestV1);
+    let mut value = serde_json::to_value(schema).expect("schema serializes");
+    reject_explicit_nulls(&mut value);
+    pin_binary_artifact_contract(&mut value);
+    let json = serde_json::to_string_pretty(&value).expect("schema serializes");
+    let path = dir.join("binary-artifact-v1.json");
+    fs::write(&path, json + "\n").expect("schema file writes");
+    println!("wrote {}", path.display());
+}
+
+/// Generate a binary API/lock schema with the same canonical optional-member
+/// rule as the in-archive descriptor. Rust `Option<T>` accepts JSON null for
+/// ergonomic deserialization, but signed/canonical binary records have one
+/// spelling for absence: the member is omitted.
+fn write_versioned_binary_schema<T: JsonSchema>(dir: &Path, name: &str, schema_id: &str) {
+    let schema = schema_for!(T);
+    let mut value = serde_json::to_value(schema).expect("schema serializes");
+    reject_explicit_nulls(&mut value);
+    pin_versioned_binary_schema(&mut value, schema_id);
+    let json = serde_json::to_string_pretty(&value).expect("schema serializes");
+    let path = dir.join(format!("{name}.json"));
+    fs::write(&path, json + "\n").expect("schema file writes");
+    println!("wrote {}", path.display());
+}
+
+fn pin_versioned_binary_schema(value: &mut Value, schema_id: &str) {
+    let root = value
+        .as_object_mut()
+        .expect("versioned binary schema is an object");
+    let properties = root
+        .get_mut("properties")
+        .and_then(Value::as_object_mut)
+        .expect("versioned binary schema properties exist");
+    properties
+        .get_mut("schema")
+        .and_then(Value::as_object_mut)
+        .expect("versioned binary schema marker exists")
+        .insert("const".to_owned(), Value::String(schema_id.to_owned()));
+    pin_flat_binary_release_identity(properties);
+
+    if let Some(definitions) = root.get_mut("$defs").and_then(Value::as_object_mut) {
+        if let Some(metadata) = definitions
+            .get_mut("BinaryArtifactMetadataV1")
+            .and_then(Value::as_object_mut)
+            .and_then(|definition| definition.get_mut("properties"))
+            .and_then(Value::as_object_mut)
+        {
+            metadata
+                .get_mut("schema")
+                .and_then(Value::as_object_mut)
+                .expect("embedded metadata schema marker exists")
+                .insert(
+                    "const".to_owned(),
+                    Value::String(zed_interfaces::BINARY_ARTIFACT_METADATA_SCHEMA_V1.to_owned()),
+                );
+            pin_flat_binary_release_identity(metadata);
+        }
+        pin_binary_common_definitions(definitions);
+    }
+    pin_binary_digest_members(value);
+}
+
+fn pin_flat_binary_release_identity(properties: &mut serde_json::Map<String, Value>) {
+    if !["org", "name", "version"]
+        .into_iter()
+        .all(|field| properties.contains_key(field))
+    {
+        return;
+    }
+    for field in ["org", "name"] {
+        let property = properties
+            .get_mut(field)
+            .and_then(Value::as_object_mut)
+            .expect("flat release coordinate exists");
+        property.insert("minLength".to_owned(), Value::from(1));
+        property.insert(
+            "pattern".to_owned(),
+            Value::String(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$".to_owned()),
+        );
+    }
+    let version = properties
+        .get_mut("version")
+        .and_then(Value::as_object_mut)
+        .expect("flat release version exists");
+    version.insert("minLength".to_owned(), Value::from(1));
+    version.insert(
+        "pattern".to_owned(),
+        Value::String(r"^[^\u0000-\u0020\u007f]+$".to_owned()),
+    );
+}
+
+fn pin_binary_common_definitions(definitions: &mut serde_json::Map<String, Value>) {
+    const PLATFORM_PATTERN: &str = "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$";
+    if let Some(platform) = definitions
+        .get_mut("BinaryPlatformV1")
+        .and_then(|definition| definition.get_mut("properties"))
+        .and_then(Value::as_object_mut)
+    {
+        for field in ["target", "os", "arch", "libc", "abi"] {
+            let property = platform
+                .get_mut(field)
+                .and_then(Value::as_object_mut)
+                .expect("binary platform field exists");
+            property.insert("maxLength".to_owned(), Value::from(128));
+            property.insert("minLength".to_owned(), Value::from(1));
+            property.insert(
+                "pattern".to_owned(),
+                Value::String(PLATFORM_PATTERN.to_owned()),
+            );
+        }
+    }
+
+    if let Some(package) = definitions
+        .get_mut("BinaryPackageIdentityV1")
+        .and_then(|definition| definition.get_mut("properties"))
+        .and_then(Value::as_object_mut)
+    {
+        pin_flat_binary_release_identity(package);
+    }
+
+    if let Some(source) = definitions
+        .get_mut("BinarySourceProvenanceV1")
+        .and_then(|definition| definition.get_mut("properties"))
+        .and_then(Value::as_object_mut)
+    {
+        for field in ["repository", "vcs_tag"] {
+            source
+                .get_mut(field)
+                .and_then(Value::as_object_mut)
+                .expect("binary source field exists")
+                .insert("minLength".to_owned(), Value::from(1));
+        }
+        let commit = source
+            .get_mut("vcs_commit")
+            .and_then(Value::as_object_mut)
+            .expect("binary source commit exists");
+        commit.insert("maxLength".to_owned(), Value::from(128));
+        commit.insert("minLength".to_owned(), Value::from(7));
+        commit.insert(
+            "pattern".to_owned(),
+            Value::String(r"^[A-Za-z0-9._+:/-]+$".to_owned()),
+        );
+    }
+}
+
+fn pin_binary_digest_members(value: &mut Value) {
+    const DIGEST_PATTERN: &str = "^[0-9a-f]{64}$";
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                pin_binary_digest_members(value);
+            }
+        }
+        Value::Object(object) => {
+            if let Some(Value::Object(properties)) = object.get_mut("properties") {
+                let immutable_artifact = ["sha256", "size", "descriptor_sha256"]
+                    .into_iter()
+                    .all(|field| properties.contains_key(field));
+                let attachment = ["sha256", "size", "subject_sha256"]
+                    .into_iter()
+                    .all(|field| properties.contains_key(field));
+                if (immutable_artifact || attachment)
+                    && let Some(Value::Object(size)) = properties.get_mut("size")
+                {
+                    size.insert("minimum".to_owned(), Value::from(1));
+                }
+                for (name, property) in properties {
+                    if matches!(
+                        name.as_str(),
+                        "sha256" | "descriptor_sha256" | "subject_sha256"
+                    ) && let Value::Object(property) = property
+                    {
+                        property.insert("maxLength".to_owned(), Value::from(64));
+                        property.insert("minLength".to_owned(), Value::from(64));
+                        property.insert(
+                            "pattern".to_owned(),
+                            Value::String(DIGEST_PATTERN.to_owned()),
+                        );
+                    }
+                }
+            }
+            for value in object.values_mut() {
+                pin_binary_digest_members(value);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn pin_binary_artifact_contract(value: &mut Value) {
+    const DIGEST_PATTERN: &str = "^[0-9a-f]{64}$";
+    const PLATFORM_PATTERN: &str = "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$";
+    // JSON Schema patterns count Unicode code points rather than UTF-8 bytes,
+    // so this mirrors the component grammar and catches the 255-character
+    // ASCII case. The Rust validator remains authoritative for the stricter
+    // 255-byte ceiling on non-ASCII paths and for cross-entry lowercase-key
+    // collision detection.
+    const PATH_PATTERN: &str = r#"^(?!\.{1,2}(?:/|$))(?!.*\/\.{1,2}(?:/|$))(?!.*[. ](?:/|$))(?!.*(?:^|/)(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Ll][Oo][Cc][Kk]\$|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.|/|$))[^/\\:<>"|?*\u0000-\u001f\u007f]{1,255}(?:/[^/\\:<>"|?*\u0000-\u001f\u007f]{1,255})*$"#;
+    const COMMAND_PATTERN: &str = r"^(?!\.)[A-Za-z0-9._+\-]{1,128}$";
+    const VERSION_PATTERN: &str = r"^[^\u0000-\u0020\u007f]+$";
+
+    let root = value.as_object_mut().expect("binary schema is an object");
+    let properties = root
+        .get_mut("properties")
+        .and_then(Value::as_object_mut)
+        .expect("binary schema has properties");
+    properties
+        .get_mut("schema")
+        .and_then(Value::as_object_mut)
+        .expect("binary schema marker exists")
+        .insert(
+            "const".to_owned(),
+            Value::String(zed_interfaces::BINARY_ARTIFACT_SCHEMA_V1.to_owned()),
+        );
+    properties
+        .get_mut("package_manifest")
+        .and_then(Value::as_object_mut)
+        .expect("binary package_manifest exists")
+        .insert(
+            "const".to_owned(),
+            Value::String(zed_interfaces::BINARY_PACKAGE_MANIFEST_PATH.to_owned()),
+        );
+    properties
+        .get_mut("files")
+        .and_then(Value::as_object_mut)
+        .expect("binary files exists")
+        .insert("minItems".to_owned(), Value::from(2));
+    let entrypoints = properties
+        .get_mut("entrypoints")
+        .and_then(Value::as_object_mut)
+        .expect("binary entrypoints exists");
+    entrypoints.insert("minProperties".to_owned(), Value::from(1));
+    entrypoints.insert(
+        "propertyNames".to_owned(),
+        serde_json::json!({ "pattern": COMMAND_PATTERN }),
+    );
+    let entrypoint_path = entrypoints
+        .get_mut("additionalProperties")
+        .and_then(Value::as_object_mut)
+        .expect("entrypoint values have a schema");
+    entrypoint_path.insert("maxLength".to_owned(), Value::from(4096));
+    entrypoint_path.insert("minLength".to_owned(), Value::from(1));
+    entrypoint_path.insert("pattern".to_owned(), Value::String(PATH_PATTERN.to_owned()));
+
+    let definitions = root
+        .get_mut("$defs")
+        .and_then(Value::as_object_mut)
+        .expect("binary schema has definitions");
+    let file_properties = definitions
+        .get_mut("BinaryFileV1")
+        .and_then(|value| value.get_mut("properties"))
+        .and_then(Value::as_object_mut)
+        .expect("BinaryFileV1 properties exist");
+    let file_path = file_properties
+        .get_mut("path")
+        .and_then(Value::as_object_mut)
+        .expect("BinaryFileV1.path exists");
+    file_path.insert("maxLength".to_owned(), Value::from(4096));
+    file_path.insert("minLength".to_owned(), Value::from(1));
+    file_path.insert("pattern".to_owned(), Value::String(PATH_PATTERN.to_owned()));
+    let file_digest = file_properties
+        .get_mut("sha256")
+        .and_then(Value::as_object_mut)
+        .expect("BinaryFileV1.sha256 exists");
+    file_digest.insert("maxLength".to_owned(), Value::from(64));
+    file_digest.insert("minLength".to_owned(), Value::from(64));
+    file_digest.insert(
+        "pattern".to_owned(),
+        Value::String(DIGEST_PATTERN.to_owned()),
+    );
+
+    let package_properties = definitions
+        .get_mut("BinaryPackageIdentityV1")
+        .and_then(|value| value.get_mut("properties"))
+        .and_then(Value::as_object_mut)
+        .expect("BinaryPackageIdentityV1 properties exist");
+    for field in ["org", "name"] {
+        let property = package_properties
+            .get_mut(field)
+            .and_then(Value::as_object_mut)
+            .expect("package coordinate exists");
+        property.insert("minLength".to_owned(), Value::from(1));
+        property.insert(
+            "pattern".to_owned(),
+            Value::String(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$".to_owned()),
+        );
+    }
+    let version = package_properties
+        .get_mut("version")
+        .and_then(Value::as_object_mut)
+        .expect("package version exists");
+    version.insert("minLength".to_owned(), Value::from(1));
+    version.insert(
+        "pattern".to_owned(),
+        Value::String(VERSION_PATTERN.to_owned()),
+    );
+
+    let platform_properties = definitions
+        .get_mut("BinaryPlatformV1")
+        .and_then(|value| value.get_mut("properties"))
+        .and_then(Value::as_object_mut)
+        .expect("BinaryPlatformV1 properties exist");
+    for field in ["target", "os", "arch", "libc", "abi"] {
+        let property = platform_properties
+            .get_mut(field)
+            .and_then(Value::as_object_mut)
+            .expect("platform property exists");
+        property.insert("maxLength".to_owned(), Value::from(128));
+        property.insert("minLength".to_owned(), Value::from(1));
+        property.insert(
+            "pattern".to_owned(),
+            Value::String(PLATFORM_PATTERN.to_owned()),
+        );
+    }
+
+    let source_properties = definitions
+        .get_mut("BinarySourceProvenanceV1")
+        .and_then(|value| value.get_mut("properties"))
+        .and_then(Value::as_object_mut)
+        .expect("BinarySourceProvenanceV1 properties exist");
+    for field in ["repository", "vcs_tag"] {
+        source_properties
+            .get_mut(field)
+            .and_then(Value::as_object_mut)
+            .expect("source property exists")
+            .insert("minLength".to_owned(), Value::from(1));
+    }
+    let vcs_commit = source_properties
+        .get_mut("vcs_commit")
+        .and_then(Value::as_object_mut)
+        .expect("source vcs_commit exists");
+    vcs_commit.insert("maxLength".to_owned(), Value::from(128));
+    vcs_commit.insert("minLength".to_owned(), Value::from(7));
+    vcs_commit.insert(
+        "pattern".to_owned(),
+        Value::String(r"^[A-Za-z0-9._+:/-]+$".to_owned()),
+    );
+}
+
 /// The dependency-graph wire contract omits absent optional members. Explicit
 /// JSON `null` is not a second spelling for absence, because accepting it would
 /// make canonical JSON, YAML, and TOML projections disagree. Schemars models a
@@ -152,6 +496,27 @@ fn main() {
     write_dependency_graph_fixtures();
     write::<zed_interfaces::Manifest>(dir, "manifest");
     write::<zed_interfaces::Lockfile>(dir, "lockfile");
+    write_binary_artifact_schema(dir);
+    write_versioned_binary_schema::<zed_interfaces::BinaryArtifactMetadataV1>(
+        dir,
+        "binary-artifact-metadata-v1",
+        zed_interfaces::BINARY_ARTIFACT_METADATA_SCHEMA_V1,
+    );
+    write_versioned_binary_schema::<zed_interfaces::BinaryArtifactListResponseV1>(
+        dir,
+        "binary-artifact-list-v1",
+        zed_interfaces::BINARY_ARTIFACT_LIST_SCHEMA_V1,
+    );
+    write_versioned_binary_schema::<zed_interfaces::BinaryArtifactPublishMetaV1>(
+        dir,
+        "binary-artifact-publish-meta-v1",
+        zed_interfaces::BINARY_ARTIFACT_PUBLISH_META_SCHEMA_V1,
+    );
+    write_versioned_binary_schema::<zed_interfaces::BinaryArtifactLockV1>(
+        dir,
+        "binary-artifact-lock-v1",
+        zed_interfaces::BINARY_ARTIFACT_LOCK_SCHEMA_V1,
+    );
     write::<zed_interfaces::EnvironmentPlan>(dir, "environment-plan-v1");
     write::<zed_interfaces::EnvironmentPlanV2>(dir, "environment-plan");
     write::<zed_interfaces::EnvironmentLock>(dir, "environment-lock-v1");
