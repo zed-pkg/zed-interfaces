@@ -33,7 +33,7 @@
       "why": "Org governance screen renders the audit trail."
     },
     {
-      "file": "binary-artifact-v1.schema.json",
+      "file": "binary-artifact-v1.json",
       "targets": [],
       "why": "Secure in-archive native-binary integrity descriptor consumed by zed-cli and registry verification only."
     },

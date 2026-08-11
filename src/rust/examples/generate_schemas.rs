@@ -152,7 +152,7 @@ fn main() {
     write_dependency_graph_fixtures();
     write::<zed_interfaces::Manifest>(dir, "manifest");
     write::<zed_interfaces::Lockfile>(dir, "lockfile");
-    write::<zed_interfaces::BinaryArtifactManifestV1>(dir, "binary-artifact-v1.schema");
+    write::<zed_interfaces::BinaryArtifactManifestV1>(dir, "binary-artifact-v1");
     write::<zed_interfaces::EnvironmentPlan>(dir, "environment-plan-v1");
     write::<zed_interfaces::EnvironmentPlanV2>(dir, "environment-plan");
     write::<zed_interfaces::EnvironmentLock>(dir, "environment-lock-v1");
