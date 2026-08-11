@@ -1,98 +1,175 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://zpkg.net/schemas/binary-artifact-v1.schema.json",
-  "title": "Zed binary artifact manifest v1",
+  "title": "BinaryArtifactManifestV1",
+  "description": "Canonical integrity descriptor stored at `pkg/.zpkg-binary.json`.\n\n`files` contains every regular file except this descriptor itself. It must\ninclude `.zpkg.toml`. `entrypoints` must exactly mirror the package\nmanifest's `[bin]` table and each referenced file must be marked executable.",
   "type": "object",
+  "properties": {
+    "entrypoints": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "expanded_size": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BinaryFileV1"
+      }
+    },
+    "format": {
+      "$ref": "#/$defs/BinaryArchiveFormatV1",
+      "default": "zip"
+    },
+    "package": {
+      "$ref": "#/$defs/BinaryPackageIdentityV1"
+    },
+    "package_manifest": {
+      "type": "string"
+    },
+    "platform": {
+      "$ref": "#/$defs/BinaryPlatformV1"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BinarySourceProvenanceV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
   "additionalProperties": false,
   "required": [
     "schema",
     "package",
     "platform",
-    "format",
     "package_manifest",
     "expanded_size",
     "files",
     "entrypoints"
   ],
-  "properties": {
-    "schema": { "const": "zpkg.binary-artifact/v1" },
-    "package": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["org", "name", "version"],
-      "properties": {
-        "org": { "$ref": "#/$defs/slug" },
-        "name": { "$ref": "#/$defs/slug" },
-        "version": { "type": "string", "minLength": 1, "maxLength": 256 }
-      }
-    },
-    "platform": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["target", "os", "arch"],
-      "properties": {
-        "target": { "$ref": "#/$defs/platformToken" },
-        "os": { "$ref": "#/$defs/platformToken" },
-        "arch": { "$ref": "#/$defs/platformToken" },
-        "libc": { "$ref": "#/$defs/platformToken" },
-        "abi": { "$ref": "#/$defs/platformToken" }
-      }
-    },
-    "format": { "const": "zip" },
-    "package_manifest": { "const": ".zpkg.toml" },
-    "expanded_size": { "type": "integer", "minimum": 0 },
-    "files": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["path", "sha256", "size", "executable"],
-        "properties": {
-          "path": { "$ref": "#/$defs/safePath" },
-          "sha256": { "$ref": "#/$defs/sha256" },
-          "size": { "type": "integer", "minimum": 0 },
-          "executable": { "type": "boolean" }
-        }
-      }
-    },
-    "entrypoints": {
-      "type": "object",
-      "minProperties": 1,
-      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$" },
-      "additionalProperties": { "$ref": "#/$defs/safePath" }
-    },
-    "source": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["repository", "vcs_tag"],
-      "properties": {
-        "repository": { "type": "string", "minLength": 1 },
-        "vcs_tag": { "type": "string", "minLength": 1 },
-        "vcs_commit": { "type": "string", "minLength": 1 }
-      }
-    }
-  },
   "$defs": {
-    "slug": {
+    "BinaryArchiveFormatV1": {
+      "description": "Binary artifacts use ZIP exclusively in v1. ZIP is portable to Windows,\npreserves POSIX executable bits when present, and supports safe central-\ndirectory inspection before extraction.",
       "type": "string",
-      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+      "enum": [
+        "zip"
+      ]
     },
-    "platformToken": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128,
-      "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$"
+    "BinaryFileV1": {
+      "description": "One regular payload file, addressed relative to `pkg/`.",
+      "type": "object",
+      "properties": {
+        "executable": {
+          "description": "Portable executable intent. Installers use this in addition to any ZIP\nUnix mode because Windows ZIP producers may not emit POSIX metadata.",
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "size",
+        "executable"
+      ]
     },
-    "sha256": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+    "BinaryPackageIdentityV1": {
+      "description": "Release identity stays independent from artifact/platform identity.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "org",
+        "name",
+        "version"
+      ]
     },
-    "safePath": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 4096,
-      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?/)(?!.*(?:^|/)\\.\\.?$)(?!.*[\\\\:\\u0000-\\u001f])[^/]+(?:/[^/]+)*$"
+    "BinaryPlatformV1": {
+      "description": "Normalized native platform selected for this one artifact.\n\n`target` is normally a Rust-style target triple such as\n`x86_64-unknown-linux-gnu`, but Zed treats it as an opaque normalized token\nso non-Rust toolchains can use their canonical spelling. `os`, `arch`,\n`libc`, and `abi` remain structured for resolver filtering.",
+      "type": "object",
+      "properties": {
+        "abi": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "arch": {
+          "type": "string"
+        },
+        "libc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "os": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "os",
+        "arch"
+      ]
+    },
+    "BinarySourceProvenanceV1": {
+      "description": "Optional source/VCS provenance carried inside the archive. The registry's\nsigned publication metadata remains the trust anchor; this is an inspectable\ncopy bound by the archive digest.",
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "vcs_commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vcs_tag": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "vcs_tag"
+      ]
     }
   }
 }

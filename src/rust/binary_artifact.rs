@@ -141,7 +141,10 @@ impl BinarySourceProvenanceV1 {
         validate_nonempty("source.vcs_tag", &self.vcs_tag)?;
         if let Some(commit) = &self.vcs_commit {
             validate_nonempty("source.vcs_commit", commit)?;
-            if commit.bytes().any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control()) {
+            if commit
+                .bytes()
+                .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+            {
                 return Err(BinaryArtifactError::InvalidValue {
                     field: "source.vcs_commit".to_owned(),
                     value: commit.clone(),
@@ -336,7 +339,10 @@ fn validate_nonempty(field: &str, value: &str) -> Result<(), BinaryArtifactError
 
 fn validate_release_version(field: &str, value: &str) -> Result<(), BinaryArtifactError> {
     validate_nonempty(field, value)?;
-    if value.bytes().any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control()) {
+    if value
+        .bytes()
+        .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+    {
         return Err(BinaryArtifactError::InvalidValue {
             field: field.to_owned(),
             value: value.to_owned(),
@@ -349,9 +355,7 @@ fn validate_platform_token(field: &str, value: &str) -> Result<(), BinaryArtifac
     if value.is_empty()
         || value.len() > 128
         || !value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'-' | b'_' | b'.')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')
         })
         || !value
             .as_bytes()
@@ -377,8 +381,12 @@ pub fn validate_safe_relative_path(field: &str, path: &str) -> Result<(), Binary
         || path.ends_with('/')
         || path.contains('\\')
         || path.contains(':')
-        || path.bytes().any(|byte| byte == 0 || byte.is_ascii_control())
-        || path.split('/').any(|part| part.is_empty() || matches!(part, "." | ".."))
+        || path
+            .bytes()
+            .any(|byte| byte == 0 || byte.is_ascii_control())
+        || path
+            .split('/')
+            .any(|part| part.is_empty() || matches!(part, "." | ".."))
     {
         return Err(BinaryArtifactError::InvalidValue {
             field: field.to_owned(),
@@ -395,9 +403,9 @@ fn validate_command(command: &str) -> Result<(), BinaryArtifactError> {
         || command.contains('/')
         || command.contains('\\')
         || command.contains(':')
-        || !command.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'+')
-        })
+        || !command
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'+'))
     {
         return Err(BinaryArtifactError::InvalidValue {
             field: "entrypoints command".to_owned(),
@@ -451,10 +459,7 @@ mod tests {
                     executable: true,
                 },
             ],
-            entrypoints: BTreeMap::from([(
-                "zed-tool".to_owned(),
-                "bin/zed-tool".to_owned(),
-            )]),
+            entrypoints: BTreeMap::from([("zed-tool".to_owned(), "bin/zed-tool".to_owned())]),
             source: Some(BinarySourceProvenanceV1 {
                 repository: "https://github.com/acme/zed-tool".to_owned(),
                 vcs_tag: "v1.2.3".to_owned(),
@@ -490,7 +495,9 @@ mod tests {
     fn descriptor_rejects_traversal_reserved_and_portable_collisions() {
         let mut traversal = valid_manifest();
         traversal.files[1].path = "../zed-tool".to_owned();
-        traversal.entrypoints.insert("zed-tool".to_owned(), "../zed-tool".to_owned());
+        traversal
+            .entrypoints
+            .insert("zed-tool".to_owned(), "../zed-tool".to_owned());
         assert!(matches!(
             traversal.validate(),
             Err(BinaryArtifactError::InvalidValue { .. })
@@ -498,10 +505,9 @@ mod tests {
 
         let mut reserved = valid_manifest();
         reserved.files[1].path = BINARY_DESCRIPTOR_PATH.to_owned();
-        reserved.entrypoints.insert(
-            "zed-tool".to_owned(),
-            BINARY_DESCRIPTOR_PATH.to_owned(),
-        );
+        reserved
+            .entrypoints
+            .insert("zed-tool".to_owned(), BINARY_DESCRIPTOR_PATH.to_owned());
         assert!(matches!(
             reserved.validate(),
             Err(BinaryArtifactError::ReservedPath { .. })
