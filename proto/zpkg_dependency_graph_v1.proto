@@ -3,6 +3,8 @@ syntax = "proto3";
 package zpkg.dependency_graph.v1;
 
 // Typed binary projection of zpkg/dependency-graph/v1.
+// graph_digest is the semantic SHA-256 digest from the canonical graph contract;
+// it is not the HTTP ETag of these encoded bytes.
 message DependencyGraphDocument {
   string schema = 1;
   string graph_digest = 2;

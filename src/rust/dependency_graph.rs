@@ -59,13 +59,51 @@ fn dependency_graph_schema_v1() -> String {
 #[serde(rename_all = "snake_case")]
 pub enum DependencyGraphFormat {
     Json,
+    #[serde(alias = "yml")]
     Yaml,
     Toml,
+    #[serde(alias = "graphviz")]
     Dot,
+    #[serde(alias = "mmd")]
     Mermaid,
 }
 
 impl DependencyGraphFormat {
+    pub const ALL: [Self; 5] = [Self::Json, Self::Yaml, Self::Toml, Self::Dot, Self::Mermaid];
+
+    /// Canonical spelling used by query parameters and download controls.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Json => "json",
+            Self::Yaml => "yaml",
+            Self::Toml => "toml",
+            Self::Dot => "dot",
+            Self::Mermaid => "mermaid",
+        }
+    }
+
+    /// Parse canonical spellings plus common filename/tool aliases.
+    pub fn parse_name(value: &str) -> Option<Self> {
+        Some(match value.to_ascii_lowercase().as_str() {
+            "json" => Self::Json,
+            "yaml" | "yml" => Self::Yaml,
+            "toml" => Self::Toml,
+            "dot" | "graphviz" => Self::Dot,
+            "mermaid" | "mmd" => Self::Mermaid,
+            _ => return None,
+        })
+    }
+
+    /// Non-canonical spellings accepted by URL and CLI parsers.
+    pub const fn aliases(self) -> &'static [&'static str] {
+        match self {
+            Self::Yaml => &["yml"],
+            Self::Dot => &["graphviz"],
+            Self::Mermaid => &["mmd"],
+            Self::Json | Self::Toml => &[],
+        }
+    }
+
     pub const fn extension(self) -> &'static str {
         match self {
             Self::Json => "json",
@@ -923,6 +961,29 @@ mod tests {
 
     fn digest(byte: char) -> String {
         format!("sha256:{}", byte.to_string().repeat(64))
+    }
+
+    #[test]
+    fn graph_format_names_and_aliases_are_stable() {
+        for format in DependencyGraphFormat::ALL {
+            assert_eq!(
+                DependencyGraphFormat::parse_name(format.name()),
+                Some(format)
+            );
+        }
+        assert_eq!(
+            DependencyGraphFormat::parse_name("yml"),
+            Some(DependencyGraphFormat::Yaml)
+        );
+        assert_eq!(
+            DependencyGraphFormat::parse_name("graphviz"),
+            Some(DependencyGraphFormat::Dot)
+        );
+        assert_eq!(
+            DependencyGraphFormat::parse_name("MMD"),
+            Some(DependencyGraphFormat::Mermaid)
+        );
+        assert!(DependencyGraphFormat::parse_name("pickle").is_none());
     }
 
     fn package(name: &str, version: &str) -> PackageVersionIdentity {

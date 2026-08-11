@@ -6,6 +6,9 @@
 //! add another graph model and it never authorizes a server to re-resolve an
 //! immutable package version.
 
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
 /// Response header that distinguishes lossless interchange formats from
 /// convenience projections such as CSV.
 pub const DEPENDENCY_GRAPH_AUTHORITATIVE_HEADER: &str = "x-zpkg-graph-authoritative";
@@ -25,12 +28,17 @@ pub const DEPENDENCY_GRAPH_EXPORT_ROUTE_TEMPLATE: &str =
     "/v1/packages/{org}/{name}/versions/{version}/dependency-graph/export/{format}";
 
 /// Additional dependency-graph download representations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum DependencyGraphExportFormat {
     Json5,
     Xml,
     Csv,
+    #[serde(rename = "msgpack", alias = "messagepack", alias = "mpk")]
     MessagePack,
+    #[serde(alias = "proto", alias = "pb")]
     Protobuf,
 }
 
@@ -64,6 +72,15 @@ impl DependencyGraphExportFormat {
             "protobuf" | "proto" | "pb" => Self::Protobuf,
             _ => return None,
         })
+    }
+
+    /// Non-canonical spellings accepted by the export route and CLI parsers.
+    pub const fn aliases(self) -> &'static [&'static str] {
+        match self {
+            Self::MessagePack => &["messagepack", "mpk"],
+            Self::Protobuf => &["proto", "pb"],
+            Self::Json5 | Self::Xml | Self::Csv => &[],
+        }
     }
 
     pub const fn extension(self) -> &'static str {
@@ -115,6 +132,7 @@ pub fn declared_dependency_graph_export_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::DependencyGraphFormat;
 
     #[test]
     fn canonical_names_round_trip() {
@@ -157,6 +175,22 @@ mod tests {
     }
 
     #[test]
+    fn serde_uses_canonical_names_and_accepts_documented_aliases() {
+        assert_eq!(
+            serde_json::to_string(&DependencyGraphExportFormat::MessagePack).unwrap(),
+            "\"msgpack\""
+        );
+        assert_eq!(
+            serde_json::from_str::<DependencyGraphExportFormat>("\"mpk\"").unwrap(),
+            DependencyGraphExportFormat::MessagePack
+        );
+        assert_eq!(
+            serde_json::from_str::<DependencyGraphExportFormat>("\"pb\"").unwrap(),
+            DependencyGraphExportFormat::Protobuf
+        );
+    }
+
+    #[test]
     fn path_uses_canonical_format_name() {
         assert_eq!(
             declared_dependency_graph_export_path(
@@ -167,5 +201,43 @@ mod tests {
             ),
             "/v1/packages/acme/widget/versions/1.2.0-beta.1/dependency-graph/export/protobuf"
         );
+    }
+
+    #[test]
+    fn versioned_format_descriptor_matches_both_public_enums() {
+        let mut formats = DependencyGraphFormat::ALL
+            .into_iter()
+            .map(|format| {
+                serde_json::json!({
+                    "name": format.name(),
+                    "aliases": format.aliases(),
+                    "route_kind": "canonical_query",
+                    "extension": format.extension(),
+                    "media_type": format.media_type(),
+                    "authoritative": format.is_authoritative(),
+                    "binary": false
+                })
+            })
+            .collect::<Vec<_>>();
+        formats.extend(DependencyGraphExportFormat::ALL.into_iter().map(|format| {
+            serde_json::json!({
+                "name": format.name(),
+                "aliases": format.aliases(),
+                "route_kind": "export_path",
+                "extension": format.extension(),
+                "media_type": format.media_type(),
+                "authoritative": format.is_authoritative(),
+                "binary": format.is_binary()
+            })
+        }));
+        let expected = serde_json::json!({
+            "schema": "zpkg/dependency-graph-formats/v1",
+            "formats": formats
+        });
+        let descriptor: serde_json::Value = serde_json::from_str(include_str!(
+            "../../fixtures/dependency-graph-formats-v1.json"
+        ))
+        .unwrap();
+        assert_eq!(descriptor, expected);
     }
 }

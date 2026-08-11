@@ -42,6 +42,8 @@ paths:
           $ref: '#/components/responses/NotAcceptable'
         '413':
           $ref: '#/components/responses/RepresentationTooLarge'
+        '422':
+          $ref: '#/components/responses/GraphLimitExceeded'
     head:
       operationId: headDeclaredDependencyGraph
       summary: Inspect declared graph metadata without a response body
@@ -61,6 +63,53 @@ paths:
           $ref: '#/components/responses/NotAcceptable'
         '413':
           $ref: '#/components/responses/RepresentationTooLarge'
+        '422':
+          $ref: '#/components/responses/GraphLimitExceeded'
+  /v1/packages/{org}/{name}/versions/{version}/dependency-graph/export/{format}:
+    parameters:
+      - $ref: '#/components/parameters/Org'
+      - $ref: '#/components/parameters/Name'
+      - $ref: '#/components/parameters/Version'
+      - $ref: '#/components/parameters/ExportFormat'
+      - $ref: '#/components/parameters/IfNoneMatch'
+    get:
+      operationId: exportDeclaredDependencyGraph
+      summary: Download an additional declared-graph representation
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/DependencyGraphExport'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/RepresentationTooLarge'
+        '422':
+          $ref: '#/components/responses/ExportUnprocessable'
+    head:
+      operationId: headDeclaredDependencyGraphExport
+      summary: Inspect additional export metadata without a response body
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/DependencyGraphExportHead'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '413':
+          $ref: '#/components/responses/RepresentationTooLarge'
+        '422':
+          $ref: '#/components/responses/ExportUnprocessable'
   /v1/resolutions/{resolution_digest}/dependency-graph:
     parameters:
       - name: resolution_digest
@@ -146,7 +195,12 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
+      bearerFormat: delegated JWT or zpkg registry token
+      description: >-
+        Required only for private package graphs. Browser callers present the
+        audience-bound product delegation; CLI callers present a live token
+        scoped to the package organization. Authorization failures are
+        concealed as the same 404 as an unknown graph.
   parameters:
     Org:
       name: org
@@ -175,10 +229,21 @@ components:
       required: false
       schema:
         type: string
-        enum: [json, yaml, toml, dot, mermaid]
+        enum: [json, yaml, yml, toml, dot, graphviz, mermaid, mmd]
       description: >-
         Optional download-format override. If it conflicts with Accept, the
         server returns 406 rather than silently choosing one representation.
+        yml, graphviz, and mmd are aliases for yaml, dot, and mermaid.
+    ExportFormat:
+      name: format
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [json5, xml, csv, msgpack, messagepack, mpk, protobuf, proto, pb]
+      description: >-
+        Additional representation selected by path. Aliases produce the same
+        canonical media type and filename extension as their primary spelling.
     IfNoneMatch:
       name: If-None-Match
       in: header
@@ -186,9 +251,11 @@ components:
       schema:
         type: string
       description: >-
-        Strong representation-specific validator from a previous response.
-        A match returns 304 with no body for the same representation only;
-        a JSON validator never matches a YAML or TOML request.
+        Representation-specific validator from a previous response. The
+        emitted ETag is strong, while RFC 9110 requires If-None-Match to use
+        weak comparison for GET and HEAD. A match returns 304 with no body for
+        the same representation only; a JSON validator never matches a YAML
+        or TOML request.
   schemas:
     DependencyGraphDocument:
       $ref: ../schemas/dependency-graph-v1.json
@@ -234,7 +301,7 @@ components:
       required: true
       schema:
         type: string
-        pattern: '^attachment; filename="[A-Za-z0-9._+-]+\.(json|yaml|toml|dot|mmd)"$'
+        pattern: '^attachment; filename="[A-Za-z0-9._+-]+\.(json|yaml|toml|dot|mmd|json5|xml|csv|msgpack|pb)"$'
       example: 'attachment; filename="acme_app_1.0.0.dependency-graph.json"'
     CacheControl:
       description: >-
@@ -243,6 +310,28 @@ components:
       required: true
       schema:
         type: string
+    GraphAuthoritative:
+      description: >-
+        True for reversible interchange representations; false for the flat
+        CSV analytics projection.
+      required: true
+      schema:
+        type: boolean
+    ContentLength:
+      description: Exact byte length of the selected GET representation.
+      required: true
+      schema:
+        type: integer
+        format: uint64
+        minimum: 0
+    VaryGraphRequest:
+      description: >-
+        The selected graph representation varies on Accept. Authorized private
+        responses additionally vary on Authorization and are never stored.
+      required: true
+      schema:
+        type: string
+        enum: [Accept, 'Accept, Authorization']
   responses:
     DependencyGraph:
       description: >-
@@ -259,6 +348,8 @@ components:
           $ref: '#/components/headers/CacheControl'
         Content-Disposition:
           $ref: '#/components/headers/ContentDisposition'
+        Vary:
+          $ref: '#/components/headers/VaryGraphRequest'
       content:
         application/vnd.zpkg.dependency-graph.v1+json:
           schema:
@@ -369,11 +460,70 @@ components:
           $ref: '#/components/headers/CacheControl'
         Content-Disposition:
           $ref: '#/components/headers/ContentDisposition'
+        Vary:
+          $ref: '#/components/headers/VaryGraphRequest'
+    DependencyGraphExport:
+      description: >-
+        Additional projection of the same finalized dependency-graph document.
+        CSV is spreadsheet-safe and non-authoritative; the other formats are
+        reversible interchange representations.
+      headers:
+        x-zpkg-graph-digest:
+          $ref: '#/components/headers/GraphDigest'
+        x-zpkg-graph-authoritative:
+          $ref: '#/components/headers/GraphAuthoritative'
+        ETag:
+          $ref: '#/components/headers/ETag'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Content-Disposition:
+          $ref: '#/components/headers/ContentDisposition'
+        Content-Length:
+          $ref: '#/components/headers/ContentLength'
+        Vary:
+          $ref: '#/components/headers/VaryGraphRequest'
+      content:
+        application/vnd.zpkg.dependency-graph.v1+json5:
+          schema:
+            type: string
+            description: Comments followed by the canonical JSON document.
+        application/vnd.zpkg.dependency-graph.v1+xml:
+          schema:
+            type: string
+        text/csv:
+          schema:
+            type: string
+        application/vnd.zpkg.dependency-graph.v1+msgpack:
+          schema:
+            type: string
+            format: binary
+        application/vnd.zpkg.dependency-graph.v1+protobuf:
+          schema:
+            type: string
+            format: binary
+    DependencyGraphExportHead:
+      description: Same status and export metadata headers as GET, with no response body.
+      headers:
+        x-zpkg-graph-digest:
+          $ref: '#/components/headers/GraphDigest'
+        x-zpkg-graph-authoritative:
+          $ref: '#/components/headers/GraphAuthoritative'
+        ETag:
+          $ref: '#/components/headers/ETag'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Content-Disposition:
+          $ref: '#/components/headers/ContentDisposition'
+        Content-Length:
+          $ref: '#/components/headers/ContentLength'
+        Vary:
+          $ref: '#/components/headers/VaryGraphRequest'
     NotModified:
       description: >-
         Representation unchanged for the presented If-None-Match validator.
-        Metadata headers match the 200 response; there is no body. Only the
-        representation whose strong ETag matched can produce this status.
+        Metadata headers match the 200 response; there is no body. Weak
+        comparison is used as RFC 9110 requires for GET and HEAD, but the
+        opaque tag still identifies only one byte representation.
       headers:
         x-zpkg-graph-digest:
           $ref: '#/components/headers/GraphDigest'
@@ -381,6 +531,8 @@ components:
           $ref: '#/components/headers/ETag'
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
+        Vary:
+          $ref: '#/components/headers/VaryGraphRequest'
     UnsupportedView:
       description: >-
         Missing or non-declared view selection on the package-version route.
@@ -433,3 +585,21 @@ components:
           example:
             code: graph_limit_exceeded
             message: dependency graph exceeds the server limit
+    ExportUnprocessable:
+      description: >-
+        The graph exceeds a structural limit, or the selected text
+        representation cannot preserve one of its characters. The server
+        refuses to replace or truncate data.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            graphLimit:
+              value:
+                code: graph_limit_exceeded
+                message: dependency graph exceeds the server node or edge limit
+            xmlCharacter:
+              value:
+                code: graph_not_representable
+                message: dependency graph contains a character XML 1.0 cannot represent

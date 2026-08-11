@@ -1,0 +1,95 @@
+{
+  "schema": "zpkg/dependency-graph-formats/v1",
+  "formats": [
+    {
+      "name": "json",
+      "aliases": [],
+      "route_kind": "canonical_query",
+      "extension": "json",
+      "media_type": "application/vnd.zpkg.dependency-graph.v1+json",
+      "authoritative": true,
+      "binary": false
+    },
+    {
+      "name": "yaml",
+      "aliases": ["yml"],
+      "route_kind": "canonical_query",
+      "extension": "yaml",
+      "media_type": "application/vnd.zpkg.dependency-graph.v1+yaml",
+      "authoritative": true,
+      "binary": false
+    },
+    {
+      "name": "toml",
+      "aliases": [],
+      "route_kind": "canonical_query",
+      "extension": "toml",
+      "media_type": "application/vnd.zpkg.dependency-graph.v1+toml",
+      "authoritative": true,
+      "binary": false
+    },
+    {
+      "name": "dot",
+      "aliases": ["graphviz"],
+      "route_kind": "canonical_query",
+      "extension": "dot",
+      "media_type": "text/vnd.graphviz; charset=utf-8",
+      "authoritative": false,
+      "binary": false
+    },
+    {
+      "name": "mermaid",
+      "aliases": ["mmd"],
+      "route_kind": "canonical_query",
+      "extension": "mmd",
+      "media_type": "text/vnd.mermaid; charset=utf-8",
+      "authoritative": false,
+      "binary": false
+    },
+    {
+      "name": "json5",
+      "aliases": [],
+      "route_kind": "export_path",
+      "extension": "json5",
+      "media_type": "application/vnd.zpkg.dependency-graph.v1+json5",
+      "authoritative": true,
+      "binary": false
+    },
+    {
+      "name": "xml",
+      "aliases": [],
+      "route_kind": "export_path",
+      "extension": "xml",
+      "media_type": "application/vnd.zpkg.dependency-graph.v1+xml",
+      "authoritative": true,
+      "binary": false
+    },
+    {
+      "name": "csv",
+      "aliases": [],
+      "route_kind": "export_path",
+      "extension": "csv",
+      "media_type": "text/csv; charset=utf-8",
+      "authoritative": false,
+      "binary": false
+    },
+    {
+      "name": "msgpack",
+      "aliases": ["messagepack", "mpk"],
+      "route_kind": "export_path",
+      "extension": "msgpack",
+      "media_type": "application/vnd.zpkg.dependency-graph.v1+msgpack",
+      "authoritative": true,
+      "binary": true
+    },
+    {
+      "name": "protobuf",
+      "aliases": ["proto", "pb"],
+      "route_kind": "export_path",
+      "extension": "pb",
+      "media_type": "application/vnd.zpkg.dependency-graph.v1+protobuf",
+      "authoritative": true,
+      "binary": true
+    }
+  ]
+}
