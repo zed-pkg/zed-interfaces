@@ -12,8 +12,7 @@ pub const DEPENDENCY_GRAPH_AUTHORITATIVE_HEADER: &str = "x-zpkg-graph-authoritat
 
 pub const DEPENDENCY_GRAPH_JSON5_MEDIA_TYPE: &str =
     "application/vnd.zpkg.dependency-graph.v1+json5";
-pub const DEPENDENCY_GRAPH_XML_MEDIA_TYPE: &str =
-    "application/vnd.zpkg.dependency-graph.v1+xml";
+pub const DEPENDENCY_GRAPH_XML_MEDIA_TYPE: &str = "application/vnd.zpkg.dependency-graph.v1+xml";
 pub const DEPENDENCY_GRAPH_CSV_MEDIA_TYPE: &str = "text/csv; charset=utf-8";
 pub const DEPENDENCY_GRAPH_MESSAGEPACK_MEDIA_TYPE: &str =
     "application/vnd.zpkg.dependency-graph.v1+msgpack";
