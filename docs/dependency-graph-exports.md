@@ -33,7 +33,8 @@ Every successful response carries:
   `false` for CSV.
 - `Content-Disposition`: an immutable-version download filename.
 - `Cache-Control: public, max-age=31536000, immutable` for a public package, or
-  `private, no-store` for an authorized private graph.
+  `private, no-store` for an authorized protected (`internal` or `private`)
+  graph.
 - `Content-Length`: the exact encoded GET length, including on HEAD.
 
 The path fixes the representation, while `Accept` can still reject it. Per RFC
@@ -44,14 +45,14 @@ immutable cache cannot reuse an accepted response for a request that excludes
 its media type. Private successes carry `Vary: Accept, Authorization` together
 with `private, no-store`.
 
-Public package graphs are anonymous. Private package graphs require a bearer
-credential with read authority for the organization or owning project. Missing,
-invalid, cross-tenant, unknown-package, and unknown-version reads all use the
-same no-store not-found response. A BFF that has already authorized a private
-page must still forward the delegated bearer to the graph API. Base Shared Auth
-tokens are not graph credentials; browser callers use an audience-bound product
-delegation and CLI callers use an organization-scoped registry token until a
-CLI delegation flow is specified.
+Public package graphs are anonymous. Protected `internal` and `private` package
+graphs require a bearer credential with read authority for the organization or
+owning project. Missing, invalid, cross-tenant, unknown-package, and
+unknown-version reads all use the same no-store not-found response. A BFF that
+has already authorized a protected page must still forward the delegated bearer
+to the graph API. Base Shared Auth tokens are not graph credentials; browser
+callers use an audience-bound product delegation and CLI callers use an
+organization-scoped registry token until a CLI delegation flow is specified.
 
 ## Representation rules
 

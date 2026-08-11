@@ -197,10 +197,10 @@ components:
       scheme: bearer
       bearerFormat: delegated JWT or zpkg registry token
       description: >-
-        Required only for private package graphs. Browser callers present the
-        audience-bound product delegation; CLI callers present a live token
-        scoped to the package organization. Authorization failures are
-        concealed as the same 404 as an unknown graph.
+        Required only for protected internal or private package graphs. Browser
+        callers present the audience-bound product delegation; CLI callers
+        present a live token scoped to the package organization. Authorization
+        failures are concealed as the same 404 as an unknown graph.
   parameters:
     Org:
       name: org
@@ -305,8 +305,8 @@ components:
       example: 'attachment; filename="acme_app_1.0.0.dependency-graph.json"'
     CacheControl:
       description: >-
-        Public immutable artifacts may be cached; private and indistinguishable
-        denied responses use private, no-store.
+        Public immutable artifacts may be cached; protected internal/private
+        artifacts and indistinguishable denied responses use private, no-store.
       required: true
       schema:
         type: string
@@ -561,7 +561,7 @@ components:
             code: unsupported_view
             message: package-version dependency graphs are declared-view only
     NotFound:
-      description: Missing or unauthorized private graph; responses are intentionally indistinguishable.
+      description: Missing or unauthorized internal/private graph; responses are intentionally indistinguishable.
       headers:
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
