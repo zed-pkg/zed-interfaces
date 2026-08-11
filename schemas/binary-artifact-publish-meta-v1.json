@@ -1,0 +1,802 @@
+{
+  "$defs": {
+    "BinaryArchiveFormatV1": {
+      "description": "Binary artifacts use ZIP exclusively in v1. ZIP is portable to Windows,\npreserves POSIX executable bits when present, and supports safe central-\ndirectory inspection before extraction.",
+      "enum": [
+        "zip"
+      ],
+      "type": "string"
+    },
+    "BinaryArtifactAttachmentKindV1": {
+      "description": "Digest-addressed evidence associated with an immutable binary archive.\n\nThe attachment digest identifies the evidence bytes. `subject_sha256`\nprevents a valid signature, SBOM, or provenance statement for one archive\nfrom being replayed as evidence for another archive. Cryptographic\nverification of the attachment contents remains implementation behavior.",
+      "enum": [
+        "signature",
+        "attestation",
+        "provenance",
+        "sbom"
+      ],
+      "type": "string"
+    },
+    "BinaryArtifactAttachmentV1": {
+      "additionalProperties": false,
+      "description": "One immutable signature, attestation, provenance, or SBOM object.",
+      "properties": {
+        "download_url": {
+          "description": "Absolute or registry-relative immutable download URL.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/BinaryArtifactAttachmentKindV1"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of the exact attachment bytes.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "subject_sha256": {
+          "description": "SHA-256 of the exact binary ZIP bytes described by this attachment.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "media_type",
+        "sha256",
+        "size",
+        "subject_sha256",
+        "download_url"
+      ],
+      "type": "object"
+    },
+    "BinaryPlatformV1": {
+      "additionalProperties": false,
+      "description": "Normalized native platform selected for this one artifact.\n\n`target` is normally a Rust-style target triple such as\n`x86_64-unknown-linux-gnu`, but Zed treats it as an opaque normalized token\nso non-Rust toolchains can use their canonical spelling. `os`, `arch`,\n`libc`, and `abi` remain structured for resolver filtering.",
+      "properties": {
+        "abi": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$",
+          "type": "string"
+        },
+        "arch": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$",
+          "type": "string"
+        },
+        "libc": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$",
+          "type": "string"
+        },
+        "os": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$",
+          "type": "string"
+        },
+        "target": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "os",
+        "arch"
+      ],
+      "type": "object"
+    },
+    "BuildSection": {
+      "description": "A post-extract build step. Because compiled output is OS/arch-specific,\nzed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the\nsource and caches the result in a build cache keyed by\n`(source sha256, target triple, command)` — separate from the universal,\nplatform-independent source store (zed-docs issue #5).",
+      "properties": {
+        "command": {
+          "description": "Command executed after extraction, e.g. `make` or `cargo build --release`.",
+          "type": "string"
+        },
+        "outputs": {
+          "description": "Paths (relative to the package root) to keep from the staging build.\nEmpty means keep everything.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "Ecosystem": {
+      "description": "How a consumer's build system takes a dependency in: the resolution\nmechanism, not the language. Drives the install guard and which toolchain\nwiring file `zed install` writes.",
+      "oneOf": [
+        {
+          "enum": [
+            "cargo",
+            "cmake",
+            "composer",
+            "cran",
+            "gem",
+            "gomod",
+            "hackage",
+            "julia",
+            "luarocks",
+            "matlab",
+            "nimble",
+            "npm",
+            "nuget",
+            "opam",
+            "psgallery",
+            "pypi",
+            "shards",
+            "shell",
+            "swiftpm",
+            "zig"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "universal",
+          "description": "No ecosystem constraint. Installs into any project; never gated.",
+          "type": "string"
+        },
+        {
+          "const": "hex",
+          "description": "Elixir, Erlang and Gleam share Hex and the BEAM.",
+          "type": "string"
+        },
+        {
+          "const": "jvm",
+          "description": "Anything consumed off a JVM classpath: Java, Kotlin, Scala, Clojure.",
+          "type": "string"
+        },
+        {
+          "const": "pub",
+          "description": "Dart and Flutter (`pub`).",
+          "type": "string"
+        }
+      ]
+    },
+    "ForgeRegistry": {
+      "description": "A multi-format registry that re-serves a canonical registry's wire protocol\nat its own base URL: a source forge's package registry, or an enterprise\nbinary repository that proxies public registries and hosts private ones.\n\nThese add no protocol of their own, which is why they are a separate axis\nfrom [`NativeRegistry`] — an org proxying npm through Artifactory needs a\ndifferent URL and credential, not a different client.",
+      "enum": [
+        "github-packages",
+        "gitlab-packages",
+        "bitbucket-packages",
+        "artifactory",
+        "nexus",
+        "aws-codeartifact",
+        "cloudsmith",
+        "azure-artifacts"
+      ],
+      "type": "string"
+    },
+    "InstallHooksSection": {
+      "description": "Package-local lifecycle hooks. Commands are author-controlled shell code,\nbut execution is separately consented by the installer and occurs only in\na writable staging tree.",
+      "properties": {
+        "post-install": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pre-install": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "InstallSection": {
+      "description": "Install-layout controls: where zed's dependency tree lands and which\necosystem adapter to emit so those deps are visible to the native toolchain.",
+      "properties": {
+        "adapter": {
+          "description": "Force the ecosystem adapter: `node`, `java`, or `none`. Omitted =\nauto-detect (or the CLI `--adapter`). Mirrors the CLI's values.",
+          "type": "string"
+        },
+        "dir": {
+          "description": "Project-relative directory for the installed tree (`<dir>/<org>/<name>`).\nDefaults to `zed_modules`. Common overrides: `.vendor/.zed`, `.deps/.zed`.\nMust be a safe relative path (no leading `/`, no `..`).",
+          "type": "string"
+        },
+        "target": {
+          "description": "Which language subtree to take from **polyglot** dependencies (see\n[`TargetSection`]). Omitted = infer from the project (`package.json` →\n`node`, `go.mod` → `go`, `pyproject.toml` → `python`, …). Naming a\ntarget a dependency does not publish is an error rather than a silent\nfallback: the consumer asked for something specific.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Language": {
+      "description": "The language a package's code is written for. Names the published package\n(`<repo>-<language>`), and implies an [`Ecosystem`] via\n[`Language::ecosystem`].\n\nCanonical tokens are the colloquial names people search for — `nodejs`, not\n`node`; `golang`, not `go` — because that is what ends up in a package name\na human has to recall. The shorter spellings, and near-synonyms like\n`typescript`, are accepted by [`Language::from_token`] and by umbrella\nvariant aliases, so both spellings resolve.",
+      "oneOf": [
+        {
+          "enum": [
+            "c",
+            "clojure",
+            "cpp",
+            "crystal",
+            "csharp",
+            "dart",
+            "elixir",
+            "erlang",
+            "fsharp",
+            "gleam",
+            "golang",
+            "haskell",
+            "java",
+            "julia",
+            "kotlin",
+            "lua",
+            "matlab",
+            "nim",
+            "ocaml",
+            "php",
+            "powershell",
+            "python",
+            "r",
+            "ruby",
+            "rust",
+            "scala",
+            "shell",
+            "swift",
+            "zig"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "universal",
+          "description": "Not language-specific: protocol schemas, docs, `.proto` files, an\numbrella package. Never subject to the install ecosystem guard.",
+          "type": "string"
+        },
+        {
+          "const": "flutter",
+          "description": "Flutter is a framework rather than a language, but a Flutter client is a\nseparate package from a plain Dart one (different `pubspec.yaml`,\ndifferent deps), so it gets its own token.",
+          "type": "string"
+        },
+        {
+          "const": "nodejs",
+          "description": "Covers JavaScript and TypeScript alike: for a client library they are\none artifact published to one ecosystem, so `typescript`, `javascript`,\n`ts`, `js` and `node` all resolve here rather than splitting the package.",
+          "type": "string"
+        },
+        {
+          "const": "rust-wasm",
+          "description": "Rust compiled to WebAssembly. Distinct from [`Language::Rust`] because\nthe artifact is consumed by a JS bundler, not by Cargo.",
+          "type": "string"
+        }
+      ]
+    },
+    "Manifest": {
+      "description": "The `.zpkg.toml` manifest at the root of every package repository.\nTOML only — never YAML or JSON.\n\n```toml\n[package]\norg = \"acme\"\nname = \"http-kit\"\nversion = \"1.2.0\"\ndescription = \"Tiny HTTP helpers\"\nlicense = \"MIT\"\n\n[package.repository]\nvcs = \"git\"\nurl = \"https://github.com/acme/http-kit\"\n\n[dependencies]\n\"acme/logkit\" = \"^0.3\"\n\n[publish]\nexclude = [\"benches/**\"]\nsmoke_test = \"sh scripts/smoke.sh\"\n```",
+      "properties": {
+        "bin": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Executables this package exposes, keyed by command name, valued by a\npath relative to the package root. On install they are hoisted into\n`zed_modules/.bin/` and runnable via `zed run <name>` (zed-docs\nissue #7).",
+          "type": "object"
+        },
+        "build": {
+          "$ref": "#/$defs/BuildSection",
+          "description": "This package's own post-extract build step (compiled extensions,\ncodegen), run when the package ships source that needs compiling.\nBuilds run in an isolated staging copy — never inside the immutable\nsource store — and results are cached per (sha256, target, command)."
+        },
+        "build-dependencies": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Tools needed only while running this package's `[build]` command\n(compilers, codegen). They are made available in the build sandbox and\nnever linked into a consumer's `zed_modules/`. See [`BuildSection`]\nand zed-docs issue #5. Canonical TOML key is Cargo-style\n`[build-dependencies]`; the snake_case spelling is accepted on read.",
+          "type": "object"
+        },
+        "dependencies": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Dependencies keyed by `org/name`, valued by a semver requirement.",
+          "type": "object"
+        },
+        "hooks": {
+          "$ref": "#/$defs/InstallHooksSection",
+          "description": "Package-local lifecycle hooks. They run in a writable staging copy,\nnever in the immutable source store and never in the consumer project.\n`pre-install` runs before `[build]`; `post-install` runs after it and\nbefore the finalized artifact is promoted to the platform cache."
+        },
+        "install": {
+          "$ref": "#/$defs/InstallSection",
+          "description": "Where zed materializes the (few, hand-picked) dependencies it sources —\nzed complements npm/maven/etc. rather than replacing them, so this dir\nsits alongside the native one and the ecosystem adapter wires it into\nthe toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`\ndefaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or\n`.deps/.zed`."
+        },
+        "native-dependencies": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Host-native packages required before this package's install hooks or\nbuild step can run. Keys are supported package-manager names (`apt`,\n`apk`, `brew`, `nix`, ...); values are package specs passed as argv,\nnever interpolated into a shell command. Installing these prerequisites\nis an explicitly consented zed operation, separate from build-hook\nconsent.",
+          "type": "object"
+        },
+        "overrides": {
+          "$ref": "#/$defs/OverridesSection",
+          "description": "Consumer-side patches for dependencies (e.g. fixing a dependency's\nbroken or missing `[build]` step without waiting on upstream)."
+        },
+        "package": {
+          "$ref": "#/$defs/PackageSection"
+        },
+        "publish": {
+          "$ref": "#/$defs/PublishSection",
+          "default": {
+            "exclude": [],
+            "include_readme": false,
+            "smoke_test": null,
+            "tag_format": "v{version}"
+          }
+        },
+        "scripts": {
+          "$ref": "#/$defs/ScriptsSection",
+          "default": {
+            "test": null
+          }
+        },
+        "targets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TargetSection"
+          },
+          "description": "Language subtrees for a **polyglot package** — one repo shipping the\nsame library for several ecosystems (e.g. `node/`, `python/`, `go/`).\nKeyed by ecosystem name; the value says which subdirectory is that\necosystem's package root. On install the consumer resolves one target\nand only that subtree is materialized, so a Python project gets the\nPython source at its import root rather than a tree it has to reach\ninto. Absent (the common case) = single-language package, whole tree.",
+          "type": "object"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceSection",
+          "description": "Monorepo workspace declaration (zed-docs issue #7); only meaningful in\na workspace root manifest. When present, `zed install` at this root\nresolves every member against one store and writes one `.zpkg.lock`;\nmember→member dependencies link by path instead of going through the\nregistry."
+        }
+      },
+      "required": [
+        "package"
+      ],
+      "type": "object"
+    },
+    "NativeRegistry": {
+      "description": "The ecosystem registry a target is mirrored into.\n\nOne variant per registry zed can route to, including the three that store\nno artifact — Zig, plain VCS, and Go's proxy — because a release plan still\nhas to name where those packages come from.\n\nThis enum is the *manifest token*. Everything else about a registry — its\nURLs, wire protocol, auth scheme, and how it spells a release candidate —\nlives on [`crate::native_host::NativeHost`], reached through\n[`NativeRegistry::host`]. Keeping the token separate from the host facts is\nwhat lets the manifest spelling stay frozen while endpoints move.",
+      "oneOf": [
+        {
+          "enum": [
+            "npm",
+            "crates-io",
+            "pub.dev",
+            "pypi",
+            "maven-central",
+            "rubygems",
+            "nuget",
+            "packagist",
+            "go-modules",
+            "hex",
+            "hackage",
+            "clojars",
+            "luarocks",
+            "cpan",
+            "cran",
+            "conan-center",
+            "swift-package-index",
+            "cocoapods",
+            "julia-general",
+            "opam",
+            "dub",
+            "nimble",
+            "shards",
+            "racket",
+            "powershell-gallery"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "test-pypi",
+          "description": "test.pypi.org, a full mirror used as a rehearsal track.",
+          "type": "string"
+        },
+        {
+          "const": "stackage",
+          "description": "Curated Hackage snapshots. Resolve-only: nothing publishes here.",
+          "type": "string"
+        },
+        {
+          "const": "zig",
+          "description": "Zig, which has no registry: dependencies are URLs pinned by hash.",
+          "type": "string"
+        },
+        {
+          "const": "vcs",
+          "description": "A plain Git or Mercurial remote on GitHub, GitLab, or Bitbucket —\nfirst-class in zed, and a complete route on its own.",
+          "type": "string"
+        }
+      ]
+    },
+    "NativeReleaseSection": {
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/ReleaseChannel",
+          "description": "Default release track for this route. Overridden per release by\n`zed release --channel`; declared here when a target is *only* ever\npublished to a pre-release track — a client generated from an unstable\nAPI surface, say.\n\nThe version is not spelled here. How a channel becomes a version string\nis the host's business and differs per ecosystem, so it is resolved by\n[`crate::native_host::NativeHost::channel_route`] at plan time."
+        },
+        "forge": {
+          "description": "Optional copies in package registries run by source forges or\nenterprise binary repositories. The native registry remains the\ncanonical ecosystem destination; these mirrors use the same native\npackage format and version.",
+          "items": {
+            "$ref": "#/$defs/ForgeRegistry"
+          },
+          "type": "array"
+        },
+        "package": {
+          "type": "string"
+        },
+        "registry": {
+          "$ref": "#/$defs/NativeRegistry"
+        },
+        "tag_format": {
+          "description": "Optional VCS tag template for native ecosystems whose package is\nresolved from a tag rather than uploaded. It must contain `{version}`.\nGo modules below a repository subdirectory need the directory prefix,\nfor example `clients/go/v{version}`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "registry",
+        "package"
+      ],
+      "type": "object"
+    },
+    "NixExportMode": {
+      "oneOf": [
+        {
+          "const": "artifact",
+          "description": "Export the exact immutable Zed artifact. Source-builder translation is\nintentionally not inferred from native manifests in contract v1.",
+          "type": "string"
+        }
+      ]
+    },
+    "NixExportSection": {
+      "description": "Author intent for exporting a package or target to Nix.\n\nThis structure contains no realized store paths, hashes, commands,\ncredentials, cache keys, or service deployment policy. Those belong in a\nversioned adapter record after planning/realization.",
+      "properties": {
+        "attribute": {
+          "description": "Optional Nix package attribute. Omit it to use the Zed package name.",
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/NixExportMode",
+          "default": "artifact"
+        },
+        "outputs": {
+          "description": "Explicit derivation outputs. Contract v1 never silently selects the\nfirst output of a multi-output derivation.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "systems": {
+          "description": "Explicit Nix systems this package claims to support.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "OverridesSection": {
+      "description": "Consumer-side dependency patches, keyed by `org/name`.",
+      "properties": {
+        "build": {
+          "additionalProperties": {
+            "$ref": "#/$defs/BuildSection"
+          },
+          "description": "Replace or provide a dependency's `[build]` step.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "PackageSection": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "ecosystem": {
+          "$ref": "#/$defs/Ecosystem",
+          "description": "How consumers take this package in: `jvm`, `npm`, `gomod`, … Drives the\ninstall-time guard that refuses to drop a Java client into a Node\nproject, and picks the toolchain wiring `zed install` writes.\n\nOmit it and it is derived from `language` (see\n[`Language::ecosystem`]) — declare it only when the language does not\ndetermine consumption. Read through [`PackageSection::ecosystem`]\nrather than touching this field, so the fallback always applies."
+        },
+        "keywords": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "language": {
+          "$ref": "#/$defs/Language",
+          "description": "The language this package's code targets. A multi-language repository\npublishes one package per language, all at one version, and each names\nits own — `acme-clients-java`, `acme-clients-nodejs`. Defaults to\n`universal` (language-agnostic), which is never subject to the install\necosystem guard."
+        },
+        "license": {
+          "type": "string"
+        },
+        "name": {
+          "description": "Package name, unique within the org. Lowercase slug.",
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+          "type": "string"
+        },
+        "org": {
+          "description": "Namespace the package is published under. Lowercase slug.",
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
+          "type": "string"
+        },
+        "repository": {
+          "$ref": "#/$defs/RepositorySection"
+        },
+        "version": {
+          "description": "Version of this package, interpreted according to `version_scheme`\n(semver by default).",
+          "type": "string"
+        },
+        "version_scheme": {
+          "$ref": "#/$defs/VersionScheme",
+          "description": "How `version` (and published tags) should be interpreted. Semver by\ndefault; `calver` for calendar versions, `opaque` for arbitrary tags."
+        }
+      },
+      "required": [
+        "org",
+        "name",
+        "version",
+        "repository"
+      ],
+      "type": "object"
+    },
+    "PublishSection": {
+      "properties": {
+        "exclude": {
+          "default": [],
+          "description": "Extra glob patterns to exclude on top of the built-in defaults.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "include_readme": {
+          "default": false,
+          "description": "Keep README files in the published artifact (stripped by default).",
+          "type": "boolean"
+        },
+        "native": {
+          "$ref": "#/$defs/NativeReleaseSection",
+          "description": "Optional native-registry route for a single-language package whose\npackage-manager manifest lives at the repository root. Polyglot\npackages declare this metadata on each `[targets.*.native]` section\ninstead."
+        },
+        "nix": {
+          "$ref": "#/$defs/NixExportSection",
+          "description": "Optional deterministic export of this single-language package as a\nstandalone Nix flake. Nix is a typed interop adapter, not a native\nregistry destination, so its intent remains separate from `native`."
+        },
+        "smoke_test": {
+          "default": null,
+          "description": "Command run by `zed r2g` (alias `zed test-local`) inside a throwaway\nconsumer project that has this package installed the same way a real\nconsumer would.",
+          "type": "string"
+        },
+        "tag_format": {
+          "default": "v{version}",
+          "description": "VCS tag template that must exist and point at the published commit.\n`{version}` is substituted with `package.version`.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ReleaseChannel": {
+      "description": "A release track. `Stable` is the default everywhere; the rest are the\npre-release tracks a language ecosystem exposes, in descending maturity.",
+      "oneOf": [
+        {
+          "enum": [
+            "stable",
+            "beta",
+            "alpha"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "rc",
+          "description": "Release candidate: feature-complete, expected to become the release.",
+          "type": "string"
+        },
+        {
+          "const": "nightly",
+          "description": "Built from the tip of a branch on a schedule. Immutable per build.",
+          "type": "string"
+        },
+        {
+          "const": "snapshot",
+          "description": "Deliberately **mutable**: one coordinate, republished repeatedly.\nMaven `-SNAPSHOT`, Packagist `dev-*`, LuaRocks `dev`. The release\ninvariant that rejects same-version/different-content output has to be\nrelaxed here — see [`ReleaseChannel::is_mutable`].",
+          "type": "string"
+        }
+      ]
+    },
+    "RepositorySection": {
+      "description": "Where the package's source of truth lives. Any Git or Mercurial host\nworks: GitHub, GitLab, Bitbucket, or a self-hosted server.",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "vcs": {
+          "$ref": "#/$defs/Vcs",
+          "default": "git"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "ScriptsSection": {
+      "properties": {
+        "test": {
+          "default": null,
+          "description": "Test command run from the repository (not from published artifacts;\ntests are stripped at publish time).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TargetSection": {
+      "description": "One ecosystem's slice of a polyglot package — and, on publish, its own\nindependently installable package.\n\nA repo like `fiducia-clients` carrying `clients/ts`, `clients/java`, and\n`clients/go` declares one target each. `zed publish` then emits **one\nartifact per target**, named `<name>-<target>` by default:\n\n```text\nfiducia/fiducia-clients-nodejs@1.1.2   <- clients/ts only\nfiducia/fiducia-clients-java@1.1.2     <- clients/java only\nfiducia/fiducia-clients-golang@1.1.2   <- clients/go only\n```\n\nOne source of truth and one version in the repo; N packages on the wire.\nA Java consumer downloads only Java bytes — the decisive advantage over\nshipping one fat artifact and slicing it at install time.",
+      "properties": {
+        "adapter": {
+          "description": "Ecosystem adapter consumers of THIS target should use (`node`, `java`,\n`none`). Recorded in the published per-target manifest so a consumer\ngets the right wiring without configuring it.",
+          "type": "string"
+        },
+        "dir": {
+          "description": "Package-relative directory that is this ecosystem's package root, e.g.\n`python` or `clients/go`. Must be a safe relative path (no leading `/`,\nno `..`) so a target can never escape the package.",
+          "type": "string"
+        },
+        "ecosystem": {
+          "$ref": "#/$defs/Ecosystem",
+          "description": "Override the ecosystem this target publishes into. Omit it (the normal\ncase) and it is derived from the target key via [`Language::ecosystem`].\nDeclare it when the key does not determine consumption — a `rust-wasm`\ntarget is consumed by a JS bundler, not by Cargo."
+        },
+        "hooks": {
+          "$ref": "#/$defs/InstallHooksSection",
+          "description": "Target-specific lifecycle hooks, appended after package-level hooks in\neach phase when the target is selected."
+        },
+        "name": {
+          "description": "Published package name for this target. Non-root targets default to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may\noverride that convention here. A whole-repository target (`dir = \".\"`)\nalways publishes as the root `package.name`; omit `name` there or repeat\nthe canonical root name. A different root-target name is invalid.",
+          "type": "string"
+        },
+        "native": {
+          "$ref": "#/$defs/NativeReleaseSection",
+          "description": "Optional routing to this target's native ecosystem registry. This is\ndeclarative metadata only: the native manifest remains authoritative,\nand arbitrary commands are intentionally not representable here.\n\nNote the difference from [`TargetSection::ecosystem`]: `native` is\n**outbound** (where this slice is mirrored to — npm, crates.io), while\n`ecosystem` is **inbound** (what toolchain a consumer must have to\ninstall it from zed). They describe the same ecosystem from two sides,\nso when both are set they must agree — see\n[`NativeRegistry::ecosystem`] and the check in [`Manifest::validate`]."
+        },
+        "native-dependencies": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Native prerequisites added by this target. Entries merge with the\npackage-level `[native-dependencies]` table when this target is selected.",
+          "type": "object"
+        },
+        "nix": {
+          "$ref": "#/$defs/NixExportSection",
+          "description": "Optional deterministic Nix export intent for this isolated target."
+        }
+      },
+      "required": [
+        "dir"
+      ],
+      "type": "object"
+    },
+    "Vcs": {
+      "description": "Version-control systems a package's source repository can live on.\n\nzed-pkg is VCS-agnostic by design: what gets installed is always a\nregistry artifact, and the VCS is where provenance (tags) is anchored.\nAuthors must create a matching tag on their declared backing repo\n(GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo, Gitea, Azure\nDevOps, CodeCommit, Radicle, or self-hosted) before publishing.\n\n`jj` and Sapling are git-compatible and push to git remotes, so their\nprovenance is verified through git tags.",
+      "enum": [
+        "git",
+        "hg",
+        "jj",
+        "sapling",
+        "fossil",
+        "pijul"
+      ],
+      "type": "string"
+    },
+    "VersionScheme": {
+      "description": "How a package's `version` string (and its published tags) should be\ninterpreted. Defaults to [`VersionScheme::Semver`], which covers the vast\nmajority of modern ecosystems.",
+      "oneOf": [
+        {
+          "const": "semver",
+          "description": "Semantic Versioning. `package.version` must be valid semver; ranges\n(`^1.2`, `>=0.2 <0.5`) resolve to the max satisfying stable version.",
+          "type": "string"
+        },
+        {
+          "const": "calver",
+          "description": "Calendar Versioning (`2026.07.24`, `2026.07`). Normalized to a semver\ntotal order (leading zeros dropped, padded to major.minor.patch) so the\nsame range algebra applies. See [`normalize_calver`].",
+          "type": "string"
+        },
+        {
+          "const": "opaque",
+          "description": "Arbitrary tags (`release-candidate-1`, `legacy-api`). No range algebra:\na requirement must match a published version **exactly**.",
+          "type": "string"
+        }
+      ]
+    },
+    "WorkspaceSection": {
+      "description": "Monorepo workspace membership. `members` are glob patterns (relative to\nthe workspace root) selecting directories that each contain a `.zpkg.toml`,\ne.g. `[\"packages/*\", \"apps/*\"]`. Dependencies that resolve to a member are\nlinked straight to the member's source directory instead of going through\nthe registry.",
+      "properties": {
+        "members": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "JSON metadata submitted beside one binary ZIP multipart body.",
+  "properties": {
+    "attachments": {
+      "items": {
+        "$ref": "#/$defs/BinaryArtifactAttachmentV1"
+      },
+      "type": "array"
+    },
+    "descriptor_sha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "format": {
+      "$ref": "#/$defs/BinaryArchiveFormatV1",
+      "default": "zip"
+    },
+    "manifest": {
+      "$ref": "#/$defs/Manifest",
+      "description": "The exact ordinary manifest shipped as `pkg/.zpkg.toml`."
+    },
+    "platform": {
+      "$ref": "#/$defs/BinaryPlatformV1"
+    },
+    "schema": {
+      "const": "zpkg.binary-artifact-publish-meta/v1",
+      "type": "string"
+    },
+    "sha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "size": {
+      "format": "uint64",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "vcs_commit": {
+      "type": "string"
+    },
+    "vcs_tag": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "manifest",
+    "platform",
+    "sha256",
+    "size",
+    "descriptor_sha256",
+    "vcs_tag"
+  ],
+  "title": "BinaryArtifactPublishMetaV1",
+  "type": "object"
+}

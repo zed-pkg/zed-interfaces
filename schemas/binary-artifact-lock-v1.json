@@ -7,21 +7,32 @@
       ],
       "type": "string"
     },
-    "BinaryFileV1": {
+    "BinaryArtifactAttachmentKindV1": {
+      "description": "Digest-addressed evidence associated with an immutable binary archive.\n\nThe attachment digest identifies the evidence bytes. `subject_sha256`\nprevents a valid signature, SBOM, or provenance statement for one archive\nfrom being replayed as evidence for another archive. Cryptographic\nverification of the attachment contents remains implementation behavior.",
+      "enum": [
+        "signature",
+        "attestation",
+        "provenance",
+        "sbom"
+      ],
+      "type": "string"
+    },
+    "BinaryArtifactAttachmentV1": {
       "additionalProperties": false,
-      "description": "One regular payload file, addressed relative to `pkg/`.",
+      "description": "One immutable signature, attestation, provenance, or SBOM object.",
       "properties": {
-        "executable": {
-          "description": "Portable executable intent. Installers use this in addition to any ZIP\nUnix mode because Windows ZIP producers may not emit POSIX metadata.",
-          "type": "boolean"
+        "download_url": {
+          "description": "Absolute or registry-relative immutable download URL.",
+          "type": "string"
         },
-        "path": {
-          "maxLength": 4096,
-          "minLength": 1,
-          "pattern": "^(?!\\.{1,2}(?:/|$))(?!.*\\/\\.{1,2}(?:/|$))[^/\\\\:\\u0000-\\u001f\\u007f]+(?:/[^/\\\\:\\u0000-\\u001f\\u007f]+)*$",
+        "kind": {
+          "$ref": "#/$defs/BinaryArtifactAttachmentKindV1"
+        },
+        "media_type": {
           "type": "string"
         },
         "sha256": {
+          "description": "SHA-256 of the exact attachment bytes.",
           "maxLength": 64,
           "minLength": 64,
           "pattern": "^[0-9a-f]{64}$",
@@ -29,15 +40,24 @@
         },
         "size": {
           "format": "uint64",
-          "minimum": 0,
+          "minimum": 1,
           "type": "integer"
+        },
+        "subject_sha256": {
+          "description": "SHA-256 of the exact binary ZIP bytes described by this attachment.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
         }
       },
       "required": [
-        "path",
+        "kind",
+        "media_type",
         "sha256",
         "size",
-        "executable"
+        "subject_sha256",
+        "download_url"
       ],
       "type": "object"
     },
@@ -138,32 +158,22 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Canonical integrity descriptor stored at `pkg/.zpkg-binary.json`.\n\n`files` contains every regular file except this descriptor itself. It must\ninclude `.zpkg.toml`. `entrypoints` must exactly mirror the package\nmanifest's `[bin]` table and each referenced file must be marked executable.",
+  "description": "Frozen provenance for one artifact-qualified binary resolution.\n\nThis is intentionally a standalone versioned record rather than an\nunversioned optional field on `LockedPackage`: old lockfile-v1 readers\nwould otherwise deserialize and silently discard target/evidence fields on\nrewrite. A future lockfile envelope may embed this record only with an\nexplicit version bump and fail-closed older-client behavior.",
   "properties": {
-    "entrypoints": {
-      "additionalProperties": {
-        "maxLength": 4096,
-        "minLength": 1,
-        "pattern": "^(?!\\.{1,2}(?:/|$))(?!.*\\/\\.{1,2}(?:/|$))[^/\\\\:\\u0000-\\u001f\\u007f]+(?:/[^/\\\\:\\u0000-\\u001f\\u007f]+)*$",
-        "type": "string"
-      },
-      "minProperties": 1,
-      "propertyNames": {
-        "pattern": "^(?!\\.)[A-Za-z0-9._+\\-]{1,128}$"
-      },
-      "type": "object"
-    },
-    "expanded_size": {
-      "format": "uint64",
-      "minimum": 0,
-      "type": "integer"
-    },
-    "files": {
+    "attachments": {
       "items": {
-        "$ref": "#/$defs/BinaryFileV1"
+        "$ref": "#/$defs/BinaryArtifactAttachmentV1"
       },
-      "minItems": 2,
       "type": "array"
+    },
+    "descriptor_sha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "download_url": {
+      "type": "string"
     },
     "format": {
       "$ref": "#/$defs/BinaryArchiveFormatV1",
@@ -172,16 +182,27 @@
     "package": {
       "$ref": "#/$defs/BinaryPackageIdentityV1"
     },
-    "package_manifest": {
-      "const": ".zpkg.toml",
-      "type": "string"
-    },
     "platform": {
       "$ref": "#/$defs/BinaryPlatformV1"
     },
-    "schema": {
-      "const": "zpkg.binary-artifact/v1",
+    "registry": {
+      "description": "Canonical registry origin, not an expiring object-store URL.",
       "type": "string"
+    },
+    "schema": {
+      "const": "zpkg.binary-artifact-lock/v1",
+      "type": "string"
+    },
+    "sha256": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "size": {
+      "format": "uint64",
+      "minimum": 1,
+      "type": "integer"
     },
     "source": {
       "$ref": "#/$defs/BinarySourceProvenanceV1"
@@ -191,11 +212,11 @@
     "schema",
     "package",
     "platform",
-    "package_manifest",
-    "expanded_size",
-    "files",
-    "entrypoints"
+    "sha256",
+    "size",
+    "descriptor_sha256",
+    "registry"
   ],
-  "title": "BinaryArtifactManifestV1",
+  "title": "BinaryArtifactLockV1",
   "type": "object"
 }

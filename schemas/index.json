@@ -33,6 +33,32 @@
       "why": "Org governance screen renders the audit trail."
     },
     {
+      "file": "binary-artifact-list-v1.json",
+      "targets": [
+        "dart",
+        "ts"
+      ],
+      "why": "Registry release pages list the target-qualified binary artifacts available to browser and Flutter clients."
+    },
+    {
+      "file": "binary-artifact-lock-v1.json",
+      "targets": [],
+      "why": "Versioned frozen binary resolution provenance; toolchain and on-disk lock integration only."
+    },
+    {
+      "file": "binary-artifact-metadata-v1.json",
+      "targets": [
+        "dart",
+        "ts"
+      ],
+      "why": "Exact target-qualified binary artifact metadata returned by registry HTTP APIs."
+    },
+    {
+      "file": "binary-artifact-publish-meta-v1.json",
+      "targets": [],
+      "why": "Multipart publication metadata assembled and verified by the CLI and registry server."
+    },
+    {
       "file": "binary-artifact-v1.json",
       "targets": [],
       "why": "Secure in-archive native-binary integrity descriptor consumed by zed-cli and registry verification only."

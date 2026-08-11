@@ -8,6 +8,8 @@ library zed_interfaces;
 export 'api_error.dart';
 export 'audit_integrity_response.dart';
 export 'audit_log_response.dart';
+export 'binary_artifact_list_v1.dart';
+export 'binary_artifact_metadata_v1.dart';
 export 'claim_org_request.dart';
 export 'claim_org_response.dart';
 export 'common.dart';

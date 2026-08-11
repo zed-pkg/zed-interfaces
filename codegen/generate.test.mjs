@@ -179,6 +179,30 @@ test("generated TS imports carry a .ts extension", () => {
   assert.match(emitted["ts/package-list-response.ts"], /from "\.\/common\.ts";/);
 });
 
+test("a root type moved to common leaves an importable schema module", () => {
+  // BinaryArtifactMetadataV1 is both an endpoint root and embedded by the list
+  // response, so type de-duplication owns it in common. A banner-only endpoint
+  // module made `export *` in the TS barrel fail with TS2306.
+  const emitted = build();
+  assert.match(
+    emitted["ts/binary-artifact-metadata-v1.ts"],
+    /export type \{ BinaryArtifactMetadataV1 \} from "\.\/common\.ts";/,
+  );
+  assert.match(
+    emitted["dart/lib/binary_artifact_metadata_v1.dart"],
+    /export 'common\.dart' show BinaryArtifactMetadataV1;/,
+  );
+});
+
+test("Dart omits optional non-null canonical members instead of writing null", () => {
+  const emitted = build()["dart/lib/common.dart"];
+  assert.match(emitted, /if \(source != null\) 'source': source\?\.toJson\(\),/);
+  assert.match(
+    emitted,
+    /if \(attachments != null\) 'attachments': attachments\?\.map\(\(e\) => e\.toJson\(\)\)\.toList\(\),/,
+  );
+});
+
 test("cleanup only claims files this generator wrote", () => {
   // The slice directories hold hand-written files too — tests, tsconfig. An
   // "unrecognized .ts file is stale" rule deleted `wire-format.test.ts` on the
@@ -257,6 +281,46 @@ test("index.json rejects unknown targets, missing files, and duplicates", () => 
 });
 
 // --- properties of the real repository ---------------------------------------
+
+test("binary artifact schema pins security-critical wire refinements", () => {
+  const schema = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dirname, "..", "schemas", "binary-artifact-v1.json"), "utf8"),
+  );
+  assert.equal(schema.properties.schema.const, "zpkg.binary-artifact/v1");
+  assert.equal(schema.properties.package_manifest.const, ".zpkg.toml");
+  assert.equal(schema.properties.files.minItems, 2);
+  assert.equal(schema.properties.entrypoints.minProperties, 1);
+  assert.match(schema.properties.entrypoints.propertyNames.pattern, /A-Za-z0-9/);
+  assert.equal(schema.$defs.BinaryFileV1.properties.sha256.pattern, "^[0-9a-f]{64}$");
+  assert.match(schema.$defs.BinaryFileV1.properties.path.pattern, /u0000/);
+  assert.equal(schema.$defs.BinaryPlatformV1.properties.target.maxLength, 128);
+  assert.equal(schema.properties.source.anyOf, undefined, "canonical optional members reject explicit null");
+  assert.equal(schema.$defs.BinaryPlatformV1.properties.libc.type, "string");
+
+  const metadata = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dirname, "..", "schemas", "binary-artifact-metadata-v1.json"), "utf8"),
+  );
+  assert.equal(metadata.properties.schema.const, "zpkg.binary-artifact-metadata/v1");
+  assert.equal(metadata.properties.descriptor_sha256.pattern, "^[0-9a-f]{64}$");
+  assert.equal(metadata.properties.size.minimum, 1);
+  assert.equal(metadata.properties.source.anyOf, undefined);
+  assert.equal(metadata.$defs.BinaryPlatformV1.properties.abi.type, "string");
+
+  const list = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dirname, "..", "schemas", "binary-artifact-list-v1.json"), "utf8"),
+  );
+  assert.equal(
+    list.$defs.BinaryArtifactMetadataV1.properties.schema.const,
+    "zpkg.binary-artifact-metadata/v1",
+  );
+  assert.equal(list.$defs.BinaryArtifactMetadataV1.properties.size.minimum, 1);
+
+  const lock = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dirname, "..", "schemas", "binary-artifact-lock-v1.json"), "utf8"),
+  );
+  assert.equal(lock.properties.schema.const, "zpkg.binary-artifact-lock/v1");
+  assert.equal(lock.properties.download_url.anyOf, undefined);
+});
 
 test("every schema in the repository is classified", () => {
   const entries = loadIndex();

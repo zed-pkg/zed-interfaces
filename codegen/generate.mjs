@@ -536,10 +536,19 @@ function dartClass(type, kinds) {
     .map((p) => `${dartDoc(p.description, "  ")}  final ${dartType(dartFieldRef(p), kinds)} ${p.dart};`)
     .join("\n\n");
 
-  // Every key is written, with an explicit null for absent optionals: serde
-  // decodes null into None, so the round-trip back into Rust is lossless.
+  // An optional-but-non-null schema has exactly one spelling for absence: omit
+  // the key. Nullable schemas retain an explicit null because that is a real
+  // wire value distinct from absence. Binary v1 is the first family to require
+  // this canonical behavior; keep older generated DTO encoders byte-compatible
+  // until their schemas opt into the same versioned rule.
+  const canonicalOmitNull = type.sourceFile.startsWith("binary-artifact-");
   const encode = type.props
-    .map((p) => `    ${dartStr(p.wire)}: ${dartEncode(dartFieldRef(p), p.dart, kinds)},`)
+    .map((p) => {
+      const entry = `${dartStr(p.wire)}: ${dartEncode(dartFieldRef(p), p.dart, kinds)},`;
+      return canonicalOmitNull && !p.required && !p.hasDefault && !p.type.nullable
+        ? `    if (${p.dart} != null) ${entry}`
+        : `    ${entry}`;
+    })
     .join("\n");
 
   return `${dartDoc(type.description)}class ${type.name} {
@@ -583,8 +592,15 @@ function emitDart(built) {
     const body = module.types
       .map((type) => (type.kind === "enum" ? dartEnum(type) : dartClass(type, kinds)))
       .join("\n\n");
+    // A root type can move to `common` when another schema embeds it. Keep the
+    // schema-named module importable instead of emitting a banner-only file,
+    // which is not a Dart library and also breaks the equivalent TS barrel.
+    const rootOwner = module.root ? home.get(module.root) : null;
+    const redirect = !body && module.root && rootOwner && rootOwner !== moduleName
+      ? `export '${dartFileName(rootOwner)}' show ${module.root};`
+      : "";
     const file = dartFileName(moduleName);
-    files[`dart/lib/${file}`] = `${header}${importBlock ? `\n${importBlock}\n` : ""}\n${body}\n`;
+    files[`dart/lib/${file}`] = `${header}${importBlock ? `\n${importBlock}\n` : ""}\n${redirect || body}\n`;
     libFiles.push(file);
   }
 
@@ -688,7 +704,14 @@ function emitTs(built) {
     const body = module.types
       .map((type) => (type.kind === "enum" ? tsEnum(type) : tsInterface(type, kinds)))
       .join("\n\n");
-    files[`ts/${moduleName}.ts`] = `${header}${importBlock ? `\n${importBlock}\n` : ""}\n${body}\n`;
+    const rootOwner = module.root ? home.get(module.root) : null;
+    const rootType = module.root ? built.byName.get(module.root)?.type : null;
+    const redirect = !body && module.root && rootOwner && rootOwner !== moduleName
+      ? rootType?.kind === "enum"
+        ? `export { ${snake(module.root).toUpperCase()}_VALUES } from "./${rootOwner}.ts";\nexport type { ${module.root} } from "./${rootOwner}.ts";`
+        : `export type { ${module.root} } from "./${rootOwner}.ts";`
+      : "";
+    files[`ts/${moduleName}.ts`] = `${header}${importBlock ? `\n${importBlock}\n` : ""}\n${redirect || body}\n`;
     moduleFiles.push(moduleName);
   }
 

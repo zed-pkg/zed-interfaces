@@ -1,6 +1,8 @@
 {
   "artifact_format": "zip",
   "audit_action": "org_claim",
+  "binary_archive_format": "zip",
+  "binary_attachment_kind": "sbom",
   "conflict_resolution": "server_wins",
   "error_policy": "emit_only",
   "vcs": "sapling",

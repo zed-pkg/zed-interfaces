@@ -23,10 +23,10 @@ Map<String, dynamic> caseOf(String name, String key) =>
     fixture(name)[key] as Map<String, dynamic>;
 
 /// Every key the server sent must survive a decode/encode round trip with an
-/// equal value, at every depth. The reverse does not hold — Dart writes an
-/// explicit null where serde omits the key entirely — so this is a one-way
-/// containment check by design, and it has to recurse: a nested `AuditEntry`
-/// gains those explicit nulls too, which a shallow `equals` would reject.
+/// equal value, at every depth. The reverse does not hold — legacy DTOs may
+/// write an explicit null where serde omitted a key, while versioned canonical
+/// DTOs omit it — so this is a one-way containment check by design. It has to
+/// recurse because nested DTOs can also add defaulted wire members.
 void expectContains(Object? original, Object? encoded, [String path = r'$']) {
   if (original is Map) {
     expect(encoded, isA<Map<String, dynamic>>(), reason: '$path should still be an object');
@@ -88,6 +88,21 @@ void main() {
     expect(decoded.yanked, isFalse);
     expect(decoded.vcsCommit, isNotNull);
     expectRoundTrip(json, decoded.toJson());
+  });
+
+  test('target-qualified binary metadata and list responses share one wire type', () {
+    final exactJson = caseOf('binary-artifact-metadata-v1', 'exact');
+    final exact = BinaryArtifactMetadataV1.fromJson(exactJson);
+    expect(exact.platform.target, 'x86_64-unknown-linux-gnu');
+    expect(exact.format, BinaryArchiveFormatV1.zip);
+    expect(exact.attachments?.single.kind, BinaryArtifactAttachmentKindV1.sbom);
+    expect(exact.attachments?.single.subjectSha256, exact.sha256);
+    expectRoundTrip(exactJson, exact.toJson());
+
+    final listJson = caseOf('binary-artifact-list-v1', 'release');
+    final list = BinaryArtifactListResponseV1.fromJson(listJson);
+    expect(list.artifacts.single.sha256, exact.sha256);
+    expectRoundTrip(listJson, list.toJson());
   });
 
   test('ApiError decodes the error envelope', () {
