@@ -312,8 +312,8 @@ components:
         type: string
     GraphAuthoritative:
       description: >-
-        True for reversible interchange representations; false for the flat
-        CSV analytics projection.
+        True for reversible interchange representations; false for Graphviz,
+        Mermaid, and the flat CSV analytics projection.
       required: true
       schema:
         type: boolean
@@ -342,12 +342,16 @@ components:
       headers:
         x-zpkg-graph-digest:
           $ref: '#/components/headers/GraphDigest'
+        x-zpkg-graph-authoritative:
+          $ref: '#/components/headers/GraphAuthoritative'
         ETag:
           $ref: '#/components/headers/ETag'
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
         Content-Disposition:
           $ref: '#/components/headers/ContentDisposition'
+        Content-Length:
+          $ref: '#/components/headers/ContentLength'
         Vary:
           $ref: '#/components/headers/VaryGraphRequest'
       content:
@@ -454,12 +458,16 @@ components:
       headers:
         x-zpkg-graph-digest:
           $ref: '#/components/headers/GraphDigest'
+        x-zpkg-graph-authoritative:
+          $ref: '#/components/headers/GraphAuthoritative'
         ETag:
           $ref: '#/components/headers/ETag'
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
         Content-Disposition:
           $ref: '#/components/headers/ContentDisposition'
+        Content-Length:
+          $ref: '#/components/headers/ContentLength'
         Vary:
           $ref: '#/components/headers/VaryGraphRequest'
     DependencyGraphExport:
@@ -527,10 +535,16 @@ components:
       headers:
         x-zpkg-graph-digest:
           $ref: '#/components/headers/GraphDigest'
+        x-zpkg-graph-authoritative:
+          $ref: '#/components/headers/GraphAuthoritative'
         ETag:
           $ref: '#/components/headers/ETag'
         Cache-Control:
           $ref: '#/components/headers/CacheControl'
+        Content-Disposition:
+          $ref: '#/components/headers/ContentDisposition'
+        Content-Length:
+          $ref: '#/components/headers/ContentLength'
         Vary:
           $ref: '#/components/headers/VaryGraphRequest'
     UnsupportedView:
