@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zpkg.net/schemas/binary-artifact-v1.schema.json",
+  "title": "Zed binary artifact manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "package",
+    "platform",
+    "format",
+    "package_manifest",
+    "expanded_size",
+    "files",
+    "entrypoints"
+  ],
+  "properties": {
+    "schema": { "const": "zpkg.binary-artifact/v1" },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["org", "name", "version"],
+      "properties": {
+        "org": { "$ref": "#/$defs/slug" },
+        "name": { "$ref": "#/$defs/slug" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "os", "arch"],
+      "properties": {
+        "target": { "$ref": "#/$defs/platformToken" },
+        "os": { "$ref": "#/$defs/platformToken" },
+        "arch": { "$ref": "#/$defs/platformToken" },
+        "libc": { "$ref": "#/$defs/platformToken" },
+        "abi": { "$ref": "#/$defs/platformToken" }
+      }
+    },
+    "format": { "const": "zip" },
+    "package_manifest": { "const": ".zpkg.toml" },
+    "expanded_size": { "type": "integer", "minimum": 0 },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "size", "executable"],
+        "properties": {
+          "path": { "$ref": "#/$defs/safePath" },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "size": { "type": "integer", "minimum": 0 },
+          "executable": { "type": "boolean" }
+        }
+      }
+    },
+    "entrypoints": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$" },
+      "additionalProperties": { "$ref": "#/$defs/safePath" }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "vcs_tag"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "vcs_tag": { "type": "string", "minLength": 1 },
+        "vcs_commit": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+    },
+    "platformToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "safePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?/)(?!.*(?:^|/)\\.\\.?$)(?!.*[\\\\:\\u0000-\\u001f])[^/]+(?:/[^/]+)*$"
+    }
+  }
+}
