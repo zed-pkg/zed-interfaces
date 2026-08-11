@@ -217,7 +217,12 @@ fn pin_binary_digest_members(value: &mut Value) {
 fn pin_binary_artifact_contract(value: &mut Value) {
     const DIGEST_PATTERN: &str = "^[0-9a-f]{64}$";
     const PLATFORM_PATTERN: &str = "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$";
-    const PATH_PATTERN: &str = r"^(?!\.{1,2}(?:/|$))(?!.*\/\.{1,2}(?:/|$))[^/\\:\u0000-\u001f\u007f]+(?:/[^/\\:\u0000-\u001f\u007f]+)*$";
+    // JSON Schema patterns count Unicode code points rather than UTF-8 bytes,
+    // so this mirrors the component grammar and catches the 255-character
+    // ASCII case. The Rust validator remains authoritative for the stricter
+    // 255-byte ceiling on non-ASCII paths and for cross-entry lowercase-key
+    // collision detection.
+    const PATH_PATTERN: &str = r#"^(?!\.{1,2}(?:/|$))(?!.*\/\.{1,2}(?:/|$))(?!.*[. ](?:/|$))(?!.*(?:^|/)(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Ll][Oo][Cc][Kk]\$|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.|/|$))[^/\\:<>"|?*\u0000-\u001f\u007f]{1,255}(?:/[^/\\:<>"|?*\u0000-\u001f\u007f]{1,255})*$"#;
     const COMMAND_PATTERN: &str = r"^(?!\.)[A-Za-z0-9._+\-]{1,128}$";
     const VERSION_PATTERN: &str = r"^[^\u0000-\u0020\u007f]+$";
 

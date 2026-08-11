@@ -666,7 +666,9 @@ pub enum BinaryArtifactError {
     ReservedPath { path: String },
     #[error("duplicate archive path `{path}`")]
     DuplicatePath { path: String },
-    #[error("archive path `{path}` collides under portable case/separator rules")]
+    #[error(
+        "archive path `{path}` collides after portable separator normalization and Unicode lowercasing"
+    )]
     PortablePathCollision { path: String },
     #[error("entrypoint command `{command}` collides under portable case rules")]
     PortableCommandCollision { command: String },
@@ -926,9 +928,16 @@ pub fn validate_safe_relative_path(field: &str, path: &str) -> Result<(), Binary
         || path
             .bytes()
             .any(|byte| byte == 0 || byte.is_ascii_control())
-        || path
-            .split('/')
-            .any(|part| part.is_empty() || matches!(part, "." | ".."))
+        || path.split('/').any(|part| {
+            part.is_empty()
+                || matches!(part, "." | "..")
+                || part.len() > 255
+                || part.ends_with(['.', ' '])
+                || part
+                    .chars()
+                    .any(|character| matches!(character, '<' | '>' | '"' | '|' | '?' | '*'))
+                || is_windows_reserved_component(part)
+        })
     {
         return Err(BinaryArtifactError::InvalidValue {
             field: field.to_owned(),
@@ -936,6 +945,21 @@ pub fn validate_safe_relative_path(field: &str, path: &str) -> Result<(), Binary
         });
     }
     Ok(())
+}
+
+fn is_windows_reserved_component(component: &str) -> bool {
+    // Win32 reserves these names even when they have an extension and compares
+    // them case-insensitively. This is deliberately the same portable subset
+    // used by archive producers/verifiers; it is not a filesystem probe.
+    let stem = component
+        .split_once('.')
+        .map_or(component, |(stem, _)| stem)
+        .to_ascii_uppercase();
+    let numbered_device = stem
+        .strip_prefix("COM")
+        .or_else(|| stem.strip_prefix("LPT"))
+        .is_some_and(|suffix| suffix.len() == 1 && matches!(suffix.as_bytes()[0], b'1'..=b'9'));
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CLOCK$") || numbered_device
 }
 
 fn validate_command(command: &str) -> Result<(), BinaryArtifactError> {
@@ -958,7 +982,10 @@ fn validate_command(command: &str) -> Result<(), BinaryArtifactError> {
 }
 
 fn portable_path_key(path: &str) -> String {
-    path.replace('\\', "/").to_ascii_lowercase()
+    // Rust Unicode lowercasing is intentionally used without normalization or
+    // full Unicode case folding. Every implementation must use this exact key
+    // so an archive accepted by one platform is not rejected by another.
+    path.replace('\\', "/").to_lowercase()
 }
 
 #[cfg(test)]
@@ -1149,6 +1176,68 @@ zed-tool = "bin/zed-tool"
             collision.validate(),
             Err(BinaryArtifactError::PortablePathCollision { .. })
                 | Err(BinaryArtifactError::NonCanonicalOrder { .. })
+        ));
+    }
+
+    #[test]
+    fn portable_paths_reject_windows_hazards_and_oversized_components() {
+        for path in [
+            "share/CON.txt",
+            "share/prn",
+            "share/Aux.log",
+            "share/nul",
+            "share/CLOCK$.txt",
+            "share/com1.exe",
+            "share/LPT9",
+            "share/trailing.",
+            "share/trailing ",
+            "share/name?.txt",
+            "share/name*.txt",
+            "share/name<.txt",
+            "share/name>.txt",
+            "share/name\".txt",
+            "share/name|.txt",
+            "share/name:stream",
+        ] {
+            assert!(
+                matches!(
+                    validate_safe_relative_path("test path", path),
+                    Err(BinaryArtifactError::InvalidValue { .. })
+                ),
+                "portable path unexpectedly accepted `{path}`"
+            );
+        }
+
+        let oversized_ascii = format!("share/{}", "a".repeat(256));
+        assert!(validate_safe_relative_path("test path", &oversized_ascii).is_err());
+        let oversized_utf8 = format!("share/{}", "é".repeat(128));
+        assert!(validate_safe_relative_path("test path", &oversized_utf8).is_err());
+
+        validate_safe_relative_path("test path", "share/console.txt").unwrap();
+        validate_safe_relative_path("test path", &format!("share/{}", "é".repeat(127))).unwrap();
+    }
+
+    #[test]
+    fn descriptor_rejects_unicode_lowercase_path_collisions() {
+        let mut descriptor = valid_manifest();
+        descriptor.files.extend([
+            BinaryFileV1 {
+                path: "share/Ä.txt".to_owned(),
+                sha256: digest('d'),
+                size: 1,
+                executable: false,
+            },
+            BinaryFileV1 {
+                path: "share/ä.txt".to_owned(),
+                sha256: digest('e'),
+                size: 1,
+                executable: false,
+            },
+        ]);
+        descriptor.expanded_size += 2;
+        assert!(matches!(
+            descriptor.validate(),
+            Err(BinaryArtifactError::PortablePathCollision { .. })
         ));
     }
 

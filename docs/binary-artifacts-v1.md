@@ -68,7 +68,7 @@ The path tokens are literal normalized tokens; clients do not put platform data 
 - `binary_artifacts_path(org, name, version)` for the collection; and
 - `binary_artifact_path(org, name, version, target, format)` for exact `GET`/`PUT`.
 
-An exact response uses `BinaryArtifactMetadataV1`. It carries `org`, `name`, `version`, the full normalized platform (`target`, `os`, `arch`, optional `libc`/`abi`), `format`, ZIP SHA-256/size, descriptor SHA-256, immutable download URL, publication time, lifecycle state, optional source provenance, and digest-addressed evidence. `BinaryArtifactListResponseV1` is strictly ordered by `(platform.target, format)` and rejects duplicate identities.
+An exact item `GET` or successful `PUT` response uses `BinaryArtifactMetadataV1`. It carries `org`, `name`, `version`, the full normalized platform (`target`, `os`, `arch`, optional `libc`/`abi`), `format`, ZIP SHA-256/size, descriptor SHA-256, immutable download URL, publication time, lifecycle state, optional source provenance, and digest-addressed evidence. `BinaryArtifactListResponseV1` is strictly ordered by `(platform.target, format)` and rejects duplicate identities.
 
 ## ZIP profile
 
@@ -79,8 +79,8 @@ Required rules:
 1. Every entry is beneath `pkg/`.
 2. Exactly one `pkg/.zpkg.toml` and one `pkg/.zpkg-binary.json` exist.
 3. All payload entries are regular files or directories. Symlinks, hard links, devices, sockets, and FIFOs are rejected.
-4. Paths are UTF-8, relative, slash-separated, and contain no empty, `.`, `..`, drive-prefix, backslash, NUL, or control component.
-5. Duplicate names and portable case-fold collisions are rejected before extraction.
+4. Paths are UTF-8, relative, slash-separated, at most 4,096 bytes overall, and at most 255 UTF-8 bytes per component. Empty, `.`, `..`, drive-prefix, backslash, NUL/control, trailing dot/space, Win32-reserved character, and Win32 device-name components are rejected.
+5. Duplicate names and collisions after slash normalization plus Unicode lowercase conversion are rejected before extraction. This key uses Rust-style Unicode `to_lowercase()` only; it does not perform Unicode normalization or full Unicode case folding.
 6. The descriptor's file paths are relative to `pkg/`; it lists every regular file except itself and no extras are allowed.
 7. Every `[bin]` path exists, is listed in the descriptor, and has `executable: true`.
 8. Canonical packers emit regular files only (no directory entries), ordered by the UTF-8 bytes of their complete archive paths. All local and central-directory timestamps are the DOS epoch `1980-01-01T00:00:00`; modes are exactly `0644` or `0755` from descriptor executable intent; and UID/GID, archive comments, file comments, and nonessential extra fields are absent.
@@ -206,5 +206,5 @@ Code signing and notarization are payload properties. Zed must not rewrite signe
 - Existing source `tar.gz` packages are unchanged.
 - Existing ZIP extraction remains magic-byte based and can consume v1 binary archives.
 - Older clients that do not understand `.zpkg-binary.json` can still see `.zpkg.toml`, but registries should advertise a binary-artifact capability so old resolvers do not select a platform-specific artifact accidentally.
-- Older clients never receive a qualified binary artifact through the legacy version route unless an operator explicitly configured that compatibility mode. They must preserve an unsupported newer lock byte-for-byte or refuse to write it.
+- During the transition, the deployed legacy version route explicitly supports one self-describing binary ZIP per release. It remains fail-closed and one-artifact-only: it never selects among targets, never encodes target data in SemVer, and rejects different immutable bytes for an existing release. Qualified publication begins only when artifact-variant persistence and routes are deployed. Older clients must preserve an unsupported newer lock byte-for-byte or refuse to write it.
 - Nix/Flox/Devbox/mise/asdf integrations consume the exact archive SHA-256 and selected target; Nix may additionally record its NAR hash without replacing the Zed digest.

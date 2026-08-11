@@ -293,6 +293,19 @@ test("binary artifact schema pins security-critical wire refinements", () => {
   assert.match(schema.properties.entrypoints.propertyNames.pattern, /A-Za-z0-9/);
   assert.equal(schema.$defs.BinaryFileV1.properties.sha256.pattern, "^[0-9a-f]{64}$");
   assert.match(schema.$defs.BinaryFileV1.properties.path.pattern, /u0000/);
+  const binaryPath = new RegExp(schema.$defs.BinaryFileV1.properties.path.pattern, "u");
+  assert.equal(binaryPath.test("share/portable file.txt"), true);
+  for (const path of [
+    "share/CON.txt",
+    "share/com1.exe",
+    "share/name.",
+    "share/name ",
+    "share/name?.txt",
+    "share/name:stream",
+    `share/${"a".repeat(256)}`,
+  ]) {
+    assert.equal(binaryPath.test(path), false, `schema unexpectedly accepts ${path}`);
+  }
   assert.equal(schema.$defs.BinaryPlatformV1.properties.target.maxLength, 128);
   assert.equal(schema.properties.source.anyOf, undefined, "canonical optional members reject explicit null");
   assert.equal(schema.$defs.BinaryPlatformV1.properties.libc.type, "string");
