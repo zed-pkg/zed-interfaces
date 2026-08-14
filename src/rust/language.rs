@@ -28,7 +28,7 @@
 use std::collections::BTreeSet;
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// The language a package's code is written for. Names the published package
 /// (`<repo>-<language>`), and implies an [`Ecosystem`] via
@@ -37,21 +37,10 @@ use serde::{Deserialize, Serialize};
 /// Canonical tokens are the colloquial names people search for — `nodejs`, not
 /// `node`; `golang`, not `go` — because that is what ends up in a package name
 /// a human has to recall. The shorter spellings, and near-synonyms like
-/// `typescript`, are accepted by [`Language::from_token`] and by umbrella
-/// variant aliases, so both spellings resolve.
+/// `typescript`, are accepted by [`Language::from_token`] and by manifest
+/// decoding, so both spellings resolve.
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    Default,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
-    JsonSchema,
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, JsonSchema,
 )]
 #[serde(rename_all = "lowercase")]
 pub enum Language {
@@ -248,7 +237,10 @@ impl Language {
             .map(|c| if c == '_' || c == ' ' { '-' } else { c })
             .collect();
         Some(match normalized.as_str() {
-            "universal" | "any" | "none" => Universal,
+            // `polyglot` was the pre-target-layout umbrella marker. It never
+            // named a language-specific artifact, so its compatible current
+            // meaning is the ungated `universal` package language.
+            "universal" | "any" | "none" | "polyglot" => Universal,
             "c" => C,
             "clojure" | "clj" => Clojure,
             "cpp" | "c++" | "cxx" => Cpp,
@@ -290,6 +282,20 @@ impl Language {
     /// a value written by a newer zed must never wedge an older one.
     pub fn from_str_lenient(s: &str) -> Language {
         Language::from_token(s).unwrap_or(Language::Universal)
+    }
+}
+
+impl<'de> Deserialize<'de> for Language {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let token = String::deserialize(deserializer)?;
+        Language::from_token(&token).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "unknown language `{token}`; expected a canonical language or documented alias"
+            ))
+        })
     }
 }
 
@@ -563,6 +569,7 @@ mod tests {
         for token in ["node", "nodejs", "js", "javascript", "ts", "typescript"] {
             assert_eq!(Language::from_token(token), Some(Language::Nodejs));
         }
+        assert_eq!(Language::from_token("polyglot"), Some(Language::Universal));
         assert_eq!(Language::from_token("rust_wasm"), Some(Language::RustWasm));
         assert_eq!(Language::from_token("  Python  "), Some(Language::Python));
         assert_eq!(Language::from_token("cobol"), None);

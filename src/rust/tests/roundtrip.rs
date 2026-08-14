@@ -45,6 +45,47 @@ fn manifest_roundtrip() {
 }
 
 #[test]
+fn manifest_language_accepts_documented_and_legacy_aliases_canonically() {
+    for (alias, expected, canonical) in [
+        ("javascript", Language::Nodejs, "nodejs"),
+        ("typescript", Language::Nodejs, "nodejs"),
+        ("js", Language::Nodejs, "nodejs"),
+        ("ts", Language::Nodejs, "nodejs"),
+        ("go", Language::Golang, "golang"),
+        ("polyglot", Language::Universal, "universal"),
+    ] {
+        let source = SAMPLE.replace(
+            "license = \"MIT\"",
+            &format!("license = \"MIT\"\nlanguage = \"{alias}\""),
+        );
+        let manifest = Manifest::parse(&source).unwrap_or_else(|error| {
+            panic!("manifest language alias `{alias}` should parse: {error}")
+        });
+        assert_eq!(manifest.package.language, expected);
+
+        let serialized = manifest.to_toml_string().unwrap();
+        if expected.is_default() {
+            assert!(!serialized.contains("language ="), "{serialized}");
+        } else {
+            assert!(
+                serialized.contains(&format!("language = \"{canonical}\"")),
+                "{serialized}"
+            );
+        }
+    }
+}
+
+#[test]
+fn manifest_language_rejects_unknown_aliases() {
+    let source = SAMPLE.replace(
+        "license = \"MIT\"",
+        "license = \"MIT\"\nlanguage = \"cobol\"",
+    );
+    let error = Manifest::parse(&source).unwrap_err().to_string();
+    assert!(error.contains("unknown language `cobol`"), "{error}");
+}
+
+#[test]
 fn install_dir_defaults_and_overrides() {
     // No [install] section -> the default dep dir.
     assert_eq!(
