@@ -36,9 +36,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 ///
 /// Canonical tokens are the colloquial names people search for — `nodejs`, not
 /// `node`; `golang`, not `go` — because that is what ends up in a package name
-/// a human has to recall. The shorter spellings, and near-synonyms like
-/// `typescript`, are accepted by [`Language::from_token`] and by manifest
-/// decoding, so both spellings resolve.
+/// a human has to recall. Short spellings and ecosystem-specific source labels
+/// are accepted by [`Language::from_token`] and manifest decoding. For example,
+/// `typescript` and `astro` route to the Node.js package ecosystem, while a
+/// YAML-only data or infrastructure package remains ungated as `universal`.
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, JsonSchema,
 )]
@@ -240,7 +241,7 @@ impl Language {
             // `polyglot` was the pre-target-layout umbrella marker. It never
             // named a language-specific artifact, so its compatible current
             // meaning is the ungated `universal` package language.
-            "universal" | "any" | "none" | "polyglot" => Universal,
+            "universal" | "any" | "none" | "polyglot" | "yaml" | "yml" => Universal,
             "c" => C,
             "clojure" | "clj" => Clojure,
             "cpp" | "c++" | "cxx" => Cpp,
@@ -260,7 +261,7 @@ impl Language {
             "lua" => Lua,
             "matlab" => Matlab,
             "nim" => Nim,
-            "nodejs" | "node" | "javascript" | "js" | "typescript" | "ts" => Nodejs,
+            "nodejs" | "node" | "javascript" | "js" | "typescript" | "ts" | "astro" => Nodejs,
             "ocaml" | "ml" => Ocaml,
             "php" => Php,
             "powershell" | "pwsh" | "ps1" => Powershell,
@@ -566,10 +567,21 @@ mod tests {
         for token in ["go", "golang", "GoLang"] {
             assert_eq!(Language::from_token(token), Some(Language::Golang));
         }
-        for token in ["node", "nodejs", "js", "javascript", "ts", "typescript"] {
+        for token in [
+            "node",
+            "nodejs",
+            "js",
+            "javascript",
+            "ts",
+            "typescript",
+            "astro",
+        ] {
             assert_eq!(Language::from_token(token), Some(Language::Nodejs));
         }
         assert_eq!(Language::from_token("polyglot"), Some(Language::Universal));
+        for token in ["yaml", "yml"] {
+            assert_eq!(Language::from_token(token), Some(Language::Universal));
+        }
         assert_eq!(Language::from_token("rust_wasm"), Some(Language::RustWasm));
         assert_eq!(Language::from_token("  Python  "), Some(Language::Python));
         assert_eq!(Language::from_token("cobol"), None);

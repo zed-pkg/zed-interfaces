@@ -51,8 +51,11 @@ fn manifest_language_accepts_documented_and_legacy_aliases_canonically() {
         ("typescript", Language::Nodejs, "nodejs"),
         ("js", Language::Nodejs, "nodejs"),
         ("ts", Language::Nodejs, "nodejs"),
+        ("astro", Language::Nodejs, "nodejs"),
         ("go", Language::Golang, "golang"),
         ("polyglot", Language::Universal, "universal"),
+        ("yaml", Language::Universal, "universal"),
+        ("yml", Language::Universal, "universal"),
     ] {
         let source = SAMPLE.replace(
             "license = \"MIT\"",
