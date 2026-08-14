@@ -78,5 +78,3 @@ dir = ".vendor/.zed"
 
 [scripts]
 test = "cargo test --all-targets --locked && npm test"
-codegen = "cargo run --locked --example generate_schemas && npm run codegen"
-codegen-check = "npm run codegen:check"
