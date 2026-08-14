@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ZedInterfacesSchemaIndex",
-  "description": "Demarcates which JSON Schemas are code-generated into the front-end language slices. Rust is deliberately absent: src/rust is the hand-written source of truth that schemas/*.json are generated FROM (cargo run --example generate_schemas), so every schema is already a Rust type. Dart and TypeScript are generated the other way round, from these schemas into src/dart and src/ts, and only for the subset a browser or Flutter client actually parses.",
-  "rule": "A schema is front-end-facing if and only if a non-Rust client decodes it directly off the registry HTTP API or the sync stream. Toolchain and on-disk formats (manifest, lockfile, environment plans, nix/oci/native adapter records, publish metadata) stay Rust-only: they are consumed by zed-cli and the servers, and generating them would put 20+ transitive types into every front-end bundle for no consumer.",
+  "description": "Demarcates which JSON Schemas are code-generated into the front-end language slices. Rust is deliberately absent: src/rust is the hand-written source of truth that schemas/*.json are generated FROM (cargo run --example generate_schemas), so every schema is already a Rust type. Dart and TypeScript are generated the other way round, from these schemas into src/dart and src/ts, and only for the subset a browser, Flutter app, or editor integration actually parses.",
+  "rule": "A schema is front-end-facing if and only if a non-Rust client decodes it directly from a public registry, sync, or inspection wire contract. Toolchain and on-disk formats (manifest, lockfile, environment plans, nix/oci/native adapter records, publish metadata) stay Rust-only: they are consumed by zed-cli and the servers, and generating them would put 20+ transitive types into every front-end bundle for no consumer.",
   "targets": [
     "dart",
     "ts"
@@ -108,6 +108,14 @@
       "file": "environment-plan.json",
       "targets": [],
       "why": "Toolchain/environment planning — CLI only."
+    },
+    {
+      "file": "inspection-report.json",
+      "targets": [
+        "dart",
+        "ts"
+      ],
+      "why": "Versioned diagnostics and safe recommended actions decoded by editor integrations."
     },
     {
       "file": "lockfile.json",

@@ -187,6 +187,16 @@
       ],
       "type": "string"
     },
+    "GitInteropSection": {
+      "description": "Explicit permission for Zed to consume metadata committed for Git.",
+      "properties": {
+        "consume_gitmodules": {
+          "description": "Whether Zed may synchronize and initialize dependencies declared by the\nowning checkout's committed `.gitmodules` file.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "InstallHooksSection": {
       "description": "Package-local lifecycle hooks. Commands are author-controlled shell code,\nbut execution is separately consented by the installer and occurs only in\na writable staging tree.",
       "properties": {
@@ -219,6 +229,15 @@
         "target": {
           "description": "Which language subtree to take from **polyglot** dependencies (see\n[`TargetSection`]). Omitted = infer from the project (`package.json` →\n`node`, `go.mod` → `go`, `pyproject.toml` → `python`, …). Naming a\ntarget a dependency does not publish is an error rather than a silent\nfallback: the consumer asked for something specific.",
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "InteropSection": {
+      "description": "Opt-in interoperability with repository-local metadata owned by other tools.",
+      "properties": {
+        "git": {
+          "$ref": "#/$defs/GitInteropSection"
         }
       },
       "type": "object"
@@ -317,6 +336,10 @@
         "install": {
           "$ref": "#/$defs/InstallSection",
           "description": "Where zed materializes the (few, hand-picked) dependencies it sources —\nzed complements npm/maven/etc. rather than replacing them, so this dir\nsits alongside the native one and the ecosystem adapter wires it into\nthe toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`\ndefaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or\n`.deps/.zed`."
+        },
+        "interop": {
+          "$ref": "#/$defs/InteropSection",
+          "description": "Explicit interoperability intent for external package and environment\nmanagers. Detection alone never grants Zed permission to consume\nanother tool's metadata."
         },
         "native-dependencies": {
           "additionalProperties": {

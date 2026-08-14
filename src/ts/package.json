@@ -22,7 +22,7 @@
   "sideEffects": false,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --test wire-format.test.ts"
+    "test": "node --experimental-strip-types --test wire-format.test.ts"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

@@ -11,9 +11,10 @@ One contract, three language slices, each published as its own zed-package:
 | Dart       | `src/dart` | generated front-end types (`package:zed_interfaces`)  |
 | TypeScript | `src/ts`   | generated front-end types (`@zed-pkg/zed-interfaces`) |
 
-Rust covers the whole contract. Dart and TypeScript cover only the part a
-browser or Flutter client decodes — the registry API and the sync stream — as
-demarcated in [`schemas/index.json`](schemas/index.json). See
+Rust covers the whole contract. Dart and TypeScript cover the parts a browser,
+Flutter app, or editor integration decodes — the registry API, sync stream, and
+versioned inspection report — as demarcated in
+[`schemas/index.json`](schemas/index.json). See
 [docs/multi-language-layout.md](docs/multi-language-layout.md) for the layout,
 the generation pipeline, and why the crate manifest lives in `src/rust/`.
 
@@ -24,11 +25,16 @@ and validation.
 The Rust crate is the contract everything else builds against:
 
 - **`.zpkg.toml`** — the package manifest at the repo root, TOML only (`manifest` module)
+- **Interop intent** — typed `[interop.git].consume_gitmodules` ownership in the
+  manifest, so consumers do not infer authority from file detection alone
 - **`.zpkg.lock`** — the lockfile with artifact hashes and VCS provenance (`lockfile`)
 - **Environment plans** — manager-neutral runtime/tool pins, environment
   values, task DAGs, system packages, platform selectors, and immutable
   provenance used by native Zed environments and mise/asdf/Devbox/Flox/Nix
   adapters (`environment`)
+- **Static inspection protocol** — schema-versioned diagnostics, safe action
+  metadata, interop status, and update recommendations shared by `zed-lib`,
+  `zed-cli`, and editor integrations (`inspection`)
 - **Registry REST API** — URL scheme and JSON DTOs shared by `zed-api-server`,
   `zed-cli`, `zed-web-server`, and the SDKs in `zed-clients` (`registry`)
 - **Publish excludes** — the default rules that strip tests, CI config,
@@ -144,9 +150,9 @@ npm run codegen:check                           # what CI runs; fails on drift
 `schemas/index.json` decides which schemas cross the language boundary. Every
 file in `schemas/` must be listed there — the generator errors on an unlisted
 schema rather than skipping it — with `"targets": ["dart", "ts"]` for the
-registry/sync DTOs a front end decodes, or `"targets": []` for the toolchain
-formats (`manifest`, `lockfile`, environment plans, nix/oci/native records)
-that only `zed-cli` and the servers read.
+registry/sync DTOs and inspection report a non-Rust integration decodes, or
+`"targets": []` for the toolchain formats (`manifest`, `lockfile`, environment
+plans, nix/oci/native records) that only `zed-cli` and the servers read.
 
 Generated files are never hand-edited: change the Rust type, regenerate both
 hops, commit the result.
@@ -162,6 +168,7 @@ zed-interfaces = { path = "../zed-interfaces/src/rust" }
 
 ```sh
 git clone https://github.com/zed-pkg/zed-interfaces
+git clone https://github.com/zed-pkg/zed-lib
 git clone https://github.com/zed-pkg/zed-cli
 # ... siblings in the same parent directory
 ```

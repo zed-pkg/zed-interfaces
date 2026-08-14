@@ -48,12 +48,13 @@ Not all of them, and that is the point. `schemas/index.json` classifies every
 file; the generator refuses to run when a schema is missing from it, so a new
 type cannot be silently skipped or silently shipped.
 
-The rule: **a schema is front-end-facing if and only if a browser or Flutter
-client decodes it directly off the registry HTTP API or the sync stream.**
+The rule: **a schema is front-end-facing if and only if a browser, Flutter app,
+or editor integration decodes it directly from a public wire contract.**
 
 * Front-end (`"targets": ["dart", "ts"]`) — the registry read/write DTOs
   (`package-metadata`, `version-metadata`, search, publish, yank, org claim,
-  audit) and the sync envelope and its policy enums.
+  audit), the sync envelope and its policy enums, and the versioned inspection
+  report emitted for editor integrations.
 * Rust-only (`"targets": []`) — the toolchain and on-disk formats: `manifest`,
   `lockfile`, environment plans and locks, the nix/oci/native adapter records,
   `publish-meta`. These are consumed by `zed-cli` and the servers. Generating

@@ -13,6 +13,7 @@ export 'binary_artifact_metadata_v1.dart';
 export 'claim_org_request.dart';
 export 'claim_org_response.dart';
 export 'common.dart';
+export 'inspection_report.dart';
 export 'package_list_response.dart';
 export 'package_metadata.dart';
 export 'publish_response.dart';

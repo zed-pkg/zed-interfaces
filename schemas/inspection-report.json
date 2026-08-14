@@ -1,0 +1,395 @@
+{
+  "$defs": {
+    "InspectedLockedPackage": {
+      "properties": {
+        "materialized": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "store_present": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "org",
+        "name",
+        "version",
+        "sha256",
+        "materialized",
+        "store_present"
+      ],
+      "type": "object"
+    },
+    "InspectedPackageIdentity": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "org",
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "InspectedPackageState": {
+      "properties": {
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectedPackageIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lockfile": {
+          "type": "string"
+        },
+        "manifest": {
+          "type": "string"
+        },
+        "materialization_dir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest",
+        "lockfile",
+        "materialization_dir",
+        "identity"
+      ],
+      "type": "object"
+    },
+    "InspectionActionKind": {
+      "enum": [
+        "zed-command"
+      ],
+      "type": "string"
+    },
+    "InspectionAdapterOutput": {
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "present": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "present"
+      ],
+      "type": "object"
+    },
+    "InspectionCliIdentity": {
+      "properties": {
+        "command": {
+          "const": "inspect",
+          "type": "string"
+        },
+        "implementation": {
+          "const": "zed-pkg",
+          "type": "string"
+        },
+        "loads_credentials": {
+          "const": false,
+          "type": "boolean"
+        },
+        "mutates_project": {
+          "const": false,
+          "type": "boolean"
+        },
+        "offline": {
+          "const": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "implementation",
+        "command",
+        "offline",
+        "mutates_project",
+        "loads_credentials"
+      ],
+      "type": "object"
+    },
+    "InspectionDiagnostic": {
+      "properties": {
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/InspectionRecommendedAction"
+          },
+          "type": "array"
+        },
+        "code": {
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/InspectionLocation"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/InspectionSeverity"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "message",
+        "location"
+      ],
+      "type": "object"
+    },
+    "InspectionHealth": {
+      "enum": [
+        "healthy",
+        "warning",
+        "error"
+      ],
+      "type": "string"
+    },
+    "InspectionLocation": {
+      "properties": {
+        "column": {
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "line": {
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "InspectionRecommendedAction": {
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "executes_package_code": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/InspectionActionKind"
+        },
+        "mutates_project": {
+          "type": "boolean"
+        },
+        "requires_network": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "argv",
+        "cwd",
+        "mutates_project",
+        "requires_network",
+        "executes_package_code"
+      ],
+      "type": "object"
+    },
+    "InspectionSeverity": {
+      "enum": [
+        "error",
+        "warning",
+        "info"
+      ],
+      "type": "string"
+    },
+    "InspectionSummary": {
+      "properties": {
+        "errors": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frozen_ready": {
+          "type": "boolean"
+        },
+        "health": {
+          "$ref": "#/$defs/InspectionHealth"
+        },
+        "recovery_pending": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "health",
+        "errors",
+        "warnings",
+        "frozen_ready",
+        "recovery_pending"
+      ],
+      "type": "object"
+    },
+    "InteropInspection": {
+      "properties": {
+        "git_submodules": {
+          "$ref": "#/$defs/InteropStatus"
+        },
+        "mise": {
+          "$ref": "#/$defs/InteropStatus"
+        },
+        "nix_develop": {
+          "$ref": "#/$defs/InteropStatus"
+        }
+      },
+      "required": [
+        "git_submodules",
+        "mise",
+        "nix_develop"
+      ],
+      "type": "object"
+    },
+    "InteropStatus": {
+      "properties": {
+        "declared": {
+          "type": "boolean"
+        },
+        "detected": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "detected",
+        "declared",
+        "verified",
+        "source"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://zpkg.net/schemas/inspect-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "adapter_outputs": {
+      "items": {
+        "$ref": "#/$defs/InspectionAdapterOutput"
+      },
+      "type": "array"
+    },
+    "cli": {
+      "$ref": "#/$defs/InspectionCliIdentity"
+    },
+    "diagnostics": {
+      "items": {
+        "$ref": "#/$defs/InspectionDiagnostic"
+      },
+      "type": "array"
+    },
+    "interop": {
+      "$ref": "#/$defs/InteropInspection"
+    },
+    "locked_packages": {
+      "items": {
+        "$ref": "#/$defs/InspectedLockedPackage"
+      },
+      "type": "array"
+    },
+    "package": {
+      "$ref": "#/$defs/InspectedPackageState"
+    },
+    "root": {
+      "type": "string"
+    },
+    "schema_version": {
+      "pattern": "^1\\.[0-9]+$",
+      "type": "string"
+    },
+    "summary": {
+      "$ref": "#/$defs/InspectionSummary"
+    },
+    "workspace_members": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "root",
+    "cli",
+    "package",
+    "workspace_members",
+    "adapter_outputs",
+    "locked_packages",
+    "interop",
+    "summary",
+    "diagnostics"
+  ],
+  "title": "InspectionReport",
+  "type": "object"
+}

@@ -335,6 +335,32 @@ test("binary artifact schema pins security-critical wire refinements", () => {
   assert.equal(lock.properties.download_url.anyOf, undefined);
 });
 
+test("inspection schema pins the offline CLI v1 safety contract", () => {
+  const schema = JSON.parse(
+    fs.readFileSync(path.join(import.meta.dirname, "..", "schemas", "inspection-report.json"), "utf8"),
+  );
+  assert.equal(schema.$id, "https://zpkg.net/schemas/inspect-v1.schema.json");
+  assert.equal(schema.title, "InspectionReport");
+  assert.match(schema.properties.schema_version.pattern, /^\^1/);
+  assert.equal(schema.$defs.InspectionCliIdentity.properties.implementation.const, "zed-pkg");
+  assert.equal(schema.$defs.InspectionCliIdentity.properties.command.const, "inspect");
+  assert.equal(schema.$defs.InspectionCliIdentity.properties.offline.const, true);
+  assert.equal(schema.$defs.InspectionCliIdentity.properties.mutates_project.const, false);
+  assert.equal(schema.$defs.InspectionCliIdentity.properties.loads_credentials.const, false);
+  assert.ok(schema.$defs.InspectedPackageState.required.includes("identity"));
+  assert.ok(schema.$defs.InspectedLockedPackage.required.includes("store_present"));
+  assert.ok(schema.$defs.InteropStatus.required.includes("source"));
+  assert.equal(schema.$defs.InspectionDiagnostic.properties.detail.type, "string");
+  assert.equal(schema.$defs.InspectionLocation.properties.line.minimum, 1);
+  assert.equal(schema.$defs.InspectionLocation.properties.column.minimum, 1);
+  assert.equal(
+    schema.$defs.InspectionRecommendedAction.properties.kind.$ref,
+    "#/$defs/InspectionActionKind",
+  );
+  assert.deepEqual(schema.$defs.InspectionActionKind.enum, ["zed-command"]);
+  assert.equal(schema.$defs.InspectionRecommendedAction.properties.argv.minItems, 1);
+});
+
 test("every schema in the repository is classified", () => {
   const entries = loadIndex();
   const files = fs.readdirSync(path.join(import.meta.dirname, "..", "schemas")).filter((f) => f.endsWith(".json") && f !== "index.json");

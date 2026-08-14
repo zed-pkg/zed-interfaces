@@ -380,6 +380,93 @@ fn write_dependency_graph_schema(dir: &Path) {
     println!("wrote {}", path.display());
 }
 
+/// Keep the shared interface schema byte-semantically aligned with the
+/// canonical offline `zed inspect` v1 contract. Schemars cannot infer constant
+/// safety markers, and it treats every `Option<T>` as both nullable and
+/// optional even when the wire contract requires an explicit `null` value.
+fn write_inspection_schema(dir: &Path) {
+    let schema = schema_for!(zed_interfaces::inspection::InspectionReport);
+    let mut value = serde_json::to_value(schema).expect("schema serializes");
+    let root = value
+        .as_object_mut()
+        .expect("inspection schema is an object");
+    root.insert(
+        "$id".to_owned(),
+        Value::String("https://zpkg.net/schemas/inspect-v1.schema.json".to_owned()),
+    );
+
+    let definitions = root
+        .get_mut("$defs")
+        .and_then(Value::as_object_mut)
+        .expect("inspection schema has definitions");
+
+    let cli_properties = definitions
+        .get_mut("InspectionCliIdentity")
+        .and_then(|definition| definition.get_mut("properties"))
+        .and_then(Value::as_object_mut)
+        .expect("inspection CLI identity properties exist");
+    for (field, property_schema) in [
+        (
+            "implementation",
+            serde_json::json!({"type": "string", "const": "zed-pkg"}),
+        ),
+        (
+            "command",
+            serde_json::json!({"type": "string", "const": "inspect"}),
+        ),
+        (
+            "offline",
+            serde_json::json!({"type": "boolean", "const": true}),
+        ),
+        (
+            "mutates_project",
+            serde_json::json!({"type": "boolean", "const": false}),
+        ),
+        (
+            "loads_credentials",
+            serde_json::json!({"type": "boolean", "const": false}),
+        ),
+    ] {
+        cli_properties.insert(field.to_owned(), property_schema);
+    }
+
+    for (definition, property) in [
+        ("InspectedPackageState", "identity"),
+        ("InspectedLockedPackage", "store_present"),
+        ("InteropStatus", "source"),
+    ] {
+        let required = definitions
+            .get_mut(definition)
+            .and_then(|value| value.get_mut("required"))
+            .and_then(Value::as_array_mut)
+            .expect("inspection object has required members");
+        if !required
+            .iter()
+            .any(|member| member.as_str() == Some(property))
+        {
+            required.push(Value::String(property.to_owned()));
+        }
+    }
+
+    for (definition, property) in [
+        ("InspectionDiagnostic", "detail"),
+        ("InspectionLocation", "line"),
+        ("InspectionLocation", "column"),
+    ] {
+        let property_schema = definitions
+            .get_mut(definition)
+            .and_then(|value| value.get_mut("properties"))
+            .and_then(|value| value.get_mut(property))
+            .expect("optional inspection property exists");
+        reject_explicit_nulls(property_schema);
+    }
+
+    let json = serde_json::to_string_pretty(&value).expect("schema serializes");
+    let path = dir.join("inspection-report.json");
+    fs::write(&path, json + "\n").expect("schema file writes");
+    println!("wrote {}", path.display());
+}
+
 /// Schemars leaves `schema` a free string with only a default and digest
 /// members as bare strings, so a `v99` document or a malformed digest would
 /// still validate. Wire documents pin both: the schema id is the exact v1
@@ -496,6 +583,7 @@ fn main() {
     write_dependency_graph_fixtures();
     write::<zed_interfaces::Manifest>(dir, "manifest");
     write::<zed_interfaces::Lockfile>(dir, "lockfile");
+    write_inspection_schema(dir);
     write_binary_artifact_schema(dir);
     write_versioned_binary_schema::<zed_interfaces::BinaryArtifactMetadataV1>(
         dir,

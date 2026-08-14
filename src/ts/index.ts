@@ -9,6 +9,7 @@ export * from "./binary-artifact-metadata-v1.ts";
 export * from "./claim-org-request.ts";
 export * from "./claim-org-response.ts";
 export * from "./common.ts";
+export * from "./inspection-report.ts";
 export * from "./package-list-response.ts";
 export * from "./package-metadata.ts";
 export * from "./publish-response.ts";
