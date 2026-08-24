@@ -79,6 +79,10 @@ mode = "append"
     assert_eq!(pre_build.mode, ProjectLifecycleMode::Prepend);
     assert_eq!(pre_build.shell.as_deref(), Some("bash -eu"));
     assert_eq!(pre_build.env["ZED_CONTRACT_MODE"], "strict");
+    assert_eq!(
+        pre_build.normalized_commands(),
+        ["cargo fmt --check", "cargo clippy -- -D warnings"]
+    );
     let ProjectLifecycleHook::Config(post_pack) =
         parsed.lifecycle.post_pack.as_ref().expect("post-pack")
     else {
@@ -91,6 +95,12 @@ mode = "append"
         panic!("pre-publish must use the full configuration")
     };
     assert_eq!(pre_publish.mode, ProjectLifecycleMode::Replace);
+    assert!(parsed.lifecycle.get("pre-build").is_some());
+    assert!(parsed.lifecycle.get("pre-buid").is_none());
+    assert_eq!(
+        ProjectLifecycleHook::Enabled(false).into_config().mode,
+        ProjectLifecycleMode::Disable
+    );
 
     let encoded = parsed.to_toml_string().unwrap();
     for phase in [

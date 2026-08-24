@@ -940,6 +940,21 @@ pub struct ProjectLifecycleHookConfig {
     pub env: BTreeMap<String, String>,
 }
 
+impl ProjectLifecycleHookConfig {
+    /// Canonical explicit command order. The singular command runs first,
+    /// followed by the array, and empty strings are omitted only after the
+    /// manifest validator has rejected them.
+    pub fn normalized_commands(&self) -> Vec<String> {
+        self.command
+            .iter()
+            .chain(self.commands.iter())
+            .map(|command| command.trim())
+            .filter(|command| !command.is_empty())
+            .map(str::to_owned)
+            .collect()
+    }
+}
+
 /// One lifecycle phase accepts a full configuration or the documented string,
 /// string-array, and boolean shorthands.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -949,6 +964,29 @@ pub enum ProjectLifecycleHook {
     Commands(Vec<String>),
     Command(String),
     Enabled(bool),
+}
+
+impl ProjectLifecycleHook {
+    /// Expand a shorthand into the one configuration shape runtime consumers
+    /// execute. `false` is the boolean spelling of `mode = "disable"`.
+    pub fn into_config(self) -> ProjectLifecycleHookConfig {
+        match self {
+            Self::Config(config) => config,
+            Self::Commands(commands) => ProjectLifecycleHookConfig {
+                commands,
+                ..ProjectLifecycleHookConfig::default()
+            },
+            Self::Command(command) => ProjectLifecycleHookConfig {
+                command: Some(command),
+                ..ProjectLifecycleHookConfig::default()
+            },
+            Self::Enabled(true) => ProjectLifecycleHookConfig::default(),
+            Self::Enabled(false) => ProjectLifecycleHookConfig {
+                mode: ProjectLifecycleMode::Disable,
+                ..ProjectLifecycleHookConfig::default()
+            },
+        }
+    }
 }
 
 /// Typed vocabulary for every root-project lifecycle phase recognized by Zed.
@@ -1052,6 +1090,26 @@ impl ProjectLifecycleSection {
             ("post-uninstall", &self.post_uninstall),
         ]
         .into_iter()
+    }
+
+    /// Look up a canonical kebab-case phase without reopening the phase
+    /// vocabulary as an arbitrary string map.
+    pub fn get(&self, phase: &str) -> Option<&ProjectLifecycleHook> {
+        match phase {
+            "pre-install" => self.pre_install.as_ref(),
+            "post-install" => self.post_install.as_ref(),
+            "pre-build" => self.pre_build.as_ref(),
+            "post-build" => self.post_build.as_ref(),
+            "pre-test" => self.pre_test.as_ref(),
+            "post-test" => self.post_test.as_ref(),
+            "pre-pack" => self.pre_pack.as_ref(),
+            "post-pack" => self.post_pack.as_ref(),
+            "pre-publish" => self.pre_publish.as_ref(),
+            "post-publish" => self.post_publish.as_ref(),
+            "pre-uninstall" => self.pre_uninstall.as_ref(),
+            "post-uninstall" => self.post_uninstall.as_ref(),
+            _ => None,
+        }
     }
 }
 
