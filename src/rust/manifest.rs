@@ -1111,6 +1111,13 @@ impl ProjectLifecycleSection {
             _ => None,
         }
     }
+
+    /// Apply the semantic checks that JSON Schema cannot express, including
+    /// command bounds, mode conflicts, shell-prefix safety, and non-secret
+    /// environment policy.
+    pub fn validate(&self) -> Result<(), ManifestError> {
+        validate_project_lifecycle(self)
+    }
 }
 
 /// Package-local lifecycle hooks. Commands are author-controlled shell code,
@@ -1743,7 +1750,7 @@ impl Manifest {
         }
         validate_native_dependencies(&self.native_dependencies, "package")?;
         validate_install_hooks(&self.hooks, "package")?;
-        validate_project_lifecycle(&self.lifecycle)?;
+        self.lifecycle.validate()?;
         for (name, target) in &self.targets {
             if !is_target_name(name) {
                 return Err(ManifestError::InvalidTarget(
