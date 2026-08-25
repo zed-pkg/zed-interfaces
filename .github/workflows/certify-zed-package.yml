@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   validate:
-    uses: zed-pkg/zed-interfaces/.github/workflows/validate-zed-package.yml@0552aba4de947457dc9affa433adf86d929b7b16
+    uses: zed-pkg/zed-interfaces/.github/workflows/validate-zed-package.yml@b0f7d88bd97551f001e394bb8d3629485b24022e
 
   publish:
     name: Pack and publish certified artifacts
@@ -65,7 +65,7 @@ jobs:
 
           [dependencies]
           serde_json = "1"
-          zed-cli = { git = "https://github.com/zed-pkg/zed-cli.git", rev = "deabba783de5e3ff3aebbc0f668df4db1c97441d" }
+          zed-cli = { git = "https://github.com/zed-pkg/zed-cli.git", rev = "825e90128575209122e0e5b118ca8965d983bfcb" }
           zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "e4feac2ce5ee15a20fba9847197fd03306f56a94" }
           TOML
 
