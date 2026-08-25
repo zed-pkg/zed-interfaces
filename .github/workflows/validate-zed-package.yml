@@ -60,7 +60,7 @@ jobs:
           tar = "0.4"
           tempfile = "3"
           zed-cli = { git = "https://github.com/zed-pkg/zed-cli.git", rev = "0c1931bcdc2065279aea06abe9d66a0eb9e03315" }
-          zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "c2e049006453c26ca8ca291783f681fce75cb01f" }
+          zed-interfaces = { git = "https://github.com/zed-pkg/zed-interfaces.git", rev = "1f77011287e8d7449da7dab6a23f2b71118a5137" }
           TOML
           cat > "$validator/src/main.rs" <<'RUST'
           use std::{
