@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   validate:
-    uses: zed-pkg/zed-interfaces/.github/workflows/validate-zed-package.yml@933155fc41dc6443424d06b618137b23dc434835
+    uses: zed-pkg/zed-interfaces/.github/workflows/validate-zed-package.yml@1f77011287e8d7449da7dab6a23f2b71118a5137
 
   publish:
     name: Pack and publish certified artifacts
