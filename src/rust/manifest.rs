@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::language::{Ecosystem, Language};
 use crate::native_host::{NativeHost, ReleaseChannel, UniversalHost};
 use crate::nix::NixExportSection;
+use crate::source::{ArtifactsSection, validate_artifacts_section};
 use crate::vcs::Vcs;
 use crate::version::{Requirement, VersionScheme};
 
@@ -161,6 +162,11 @@ pub struct PackageSection {
     /// rather than touching this field, so the fallback always applies.
     #[serde(default, skip_serializing_if = "Ecosystem::is_default")]
     pub ecosystem: Ecosystem,
+    /// Public artifact locations used when `registry.zpkg.net` is unreachable.
+    /// Omit the table and clients guess GitHub Release / R2 / GHCR paths from
+    /// `[package.repository]` and `org`/`name`.
+    #[serde(default, skip_serializing_if = "ArtifactsSection::is_empty")]
+    pub artifacts: ArtifactsSection,
 }
 
 impl PackageSection {
@@ -1073,6 +1079,8 @@ pub enum ManifestError {
     InvalidDependencyReq(String, String, String),
     #[error("invalid repository url `{0}`: {1}")]
     InvalidRepositoryUrl(String, String),
+    #[error("invalid [package.artifacts]: {0}")]
+    InvalidArtifacts(String),
     #[error("invalid bin entry `{0}`: {1}")]
     InvalidBin(String, String),
     #[error("invalid build section: {0}")]
@@ -1306,6 +1314,9 @@ impl Manifest {
                 self.package.repository.url.clone(),
                 "expected an https/http/ssh/git URL or scp-like git syntax".to_string(),
             ));
+        }
+        if let Err(reason) = validate_artifacts_section(&self.package.artifacts) {
+            return Err(ManifestError::InvalidArtifacts(reason));
         }
         for (key, req) in self.dependencies.iter().chain(&self.build_dependencies) {
             if !is_dependency_key(key) {

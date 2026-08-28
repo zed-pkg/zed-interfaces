@@ -1,5 +1,31 @@
 {
   "$defs": {
+    "ArtifactsSection": {
+      "description": "Optional `[package.artifacts]` table. Omit the whole table and clients\nguess GitHub + R2 paths from `[package.repository]` and `org`/`name`.",
+      "properties": {
+        "github_packages": {
+          "description": "Push (and later fetch) a packed OCI artifact on GitHub Packages / GHCR.\nDefaults to true when `repository.url` is a github.com repo. This is\nwhat makes a Zed package show up on github.com/orgs/{org}/packages\nuntil GitHub hosts a native Zed registry there.",
+          "type": "boolean"
+        },
+        "github_release": {
+          "description": "Attach (and later fetch) a packed GitHub Release asset. Defaults to\ntrue when `repository.url` is a github.com repo.",
+          "type": "boolean"
+        },
+        "r2_key": {
+          "description": "Full object key, possibly with `{org}`, `{name}`, `{version}`, `{tag}`,\n`{sha256}`, `{ext}`, `{github_owner}`, `{github_repo}` placeholders.\nUse this when the artifact is not at a standard guessed path.",
+          "type": "string"
+        },
+        "r2_prefix": {
+          "description": "Directory prefix in the bucket; the file name\n`{name}-{version}.{ext}` is appended. Ignored when `r2_key` is set.",
+          "type": "string"
+        },
+        "r2_public_base": {
+          "description": "Public HTTPS origin for this package's R2/CDN objects. When omitted,\nclients use `ZED_PKG_R2_PUBLIC_BASE`, then `ZED_PKG_R2_PUBLIC_KEY`,\nthen [`DEFAULT_R2_PUBLIC_BASE`].",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "BinaryArchiveFormatV1": {
       "description": "Binary artifacts use ZIP exclusively in v1. ZIP is portable to Windows,\npreserves POSIX executable bits when present, and supports safe central-\ndirectory inspection before extraction.",
       "enum": [
@@ -527,6 +553,10 @@
     },
     "PackageSection": {
       "properties": {
+        "artifacts": {
+          "$ref": "#/$defs/ArtifactsSection",
+          "description": "Public artifact locations used when `registry.zpkg.net` is unreachable.\nOmit the table and clients guess GitHub Release / R2 / GHCR paths from\n`[package.repository]` and `org`/`name`."
+        },
         "description": {
           "type": "string"
         },

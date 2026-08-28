@@ -28,6 +28,7 @@ pub mod oci;
 pub mod paths;
 pub mod registry;
 pub mod registry_protocol_v1;
+pub mod source;
 pub mod sync;
 pub mod vcs;
 pub mod version;
@@ -134,6 +135,13 @@ pub use registry_protocol_v1::{
     RegistryLimitsV1, RegistryProtocolErrorCodeV1, RegistryProtocolErrorV1,
     RegistryProtocolV1Error, RegistryPublishRequestV1, RegistryRootSignatureV1,
     RegistrySigningKeyStateV1, RegistrySigningKeyV1, RegistryVisibilityV1,
+};
+pub use source::{
+    ArtifactLocator, ArtifactQuery, ArtifactSourceKind, ArtifactsSection, DEFAULT_GHCR,
+    DEFAULT_GITHUB_API, DEFAULT_GITHUB_WEB, DEFAULT_R2_PUBLIC_BASE, GithubIdentity,
+    artifact_locators, ghcr_blob_url, ghcr_manifest_url, ghcr_reference, ghcr_repository,
+    git_tags_for_version, github_identity_for, github_packages_web_url, parse_github_identity,
+    r2_object_keys, resolve_r2_public_base, validate_artifacts_section, version_from_git_tag,
 };
 pub use vcs::Vcs;
 pub use version::{Requirement, VersionScheme};
