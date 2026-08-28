@@ -76,6 +76,38 @@ pub const GITHUB_RAW_HOST: &str = "raw.githubusercontent.com";
 /// Canonical github.com host.
 pub const GITHUB_HOST: &str = "github.com";
 
+/// GitHub's OCI registry — the container half of GitHub Packages.
+///
+/// This is the only GitHub Packages endpoint that accepts an arbitrary
+/// artifact. The others (npm, Maven, NuGet, RubyGems) each speak one
+/// ecosystem's protocol and would refuse a zed archive; there is no Cargo, no
+/// pub.dev, and no generic endpoint. So for a polyglot package this is *the*
+/// route onto `github.com/orgs/<org>/packages`, and it is also why a release
+/// asset is not a substitute: release assets live on the Releases page and
+/// never appear under Packages at all.
+pub const GHCR_HOST: &str = "ghcr.io";
+
+/// Base URL of [`GHCR_HOST`], as a mirror's `url` would spell it.
+pub const GHCR_URL: &str = "https://ghcr.io";
+
+/// OCI distribution API prefix. Every registry that implements the
+/// distribution spec serves blobs and manifests below this path.
+pub const OCI_API_PREFIX: &str = "/v2";
+
+/// Media type zed uses for the artifact layer it pushes to an OCI registry.
+/// Named so a registry UI shows something meaningful and so a puller can tell
+/// zed's layer apart from anything else in the same manifest.
+pub const OCI_ARTIFACT_LAYER_MEDIA_TYPE: &str = "application/vnd.zpkg.artifact.v1.tar+gzip";
+
+/// Annotation that links an OCI package to the repository it was built from.
+///
+/// GitHub reads exactly this key to attach a ghcr.io package to a repository,
+/// which is what makes the package inherit that repository's visibility and
+/// appear on its page. A package pushed without it is orphaned in the org's
+/// package list: still installable, but unattributed and privately owned by
+/// whoever pushed it.
+pub const OCI_SOURCE_ANNOTATION: &str = "org.opencontainers.image.source";
+
 /// Public content-addressed CDN in front of the production artifact bucket.
 pub const DEFAULT_CDN_URL: &str = "https://cdn.zpkg.net";
 /// The same CDN, reached through a hostname in a different DNS zone.
@@ -191,6 +223,19 @@ pub enum MirrorKindV1 {
     /// A local directory in `file://` registry layout — an air-gapped mirror,
     /// a warmed CI cache, or a Nix store input.
     Directory,
+    /// An OCI distribution registry holding the artifact as a blob
+    /// (`ghcr.io`, and any other registry implementing the distribution spec).
+    ///
+    /// Appended rather than grouped with the other forge kinds so the derived
+    /// `Ord` on this enum keeps the meaning it had before; the wire format is
+    /// the kebab-case name, so ordinal position is not observable anyway.
+    ///
+    /// Unlike every other kind, a blob fetch needs a bearer token even when the
+    /// package is public: the distribution spec's anonymous flow issues one
+    /// from the registry's token endpoint. The URL is still deterministic —
+    /// zed content-addresses its artifacts, and an OCI blob is addressed by
+    /// digest, so the two coordinate systems are the same one.
+    OciRegistry,
 }
 
 impl MirrorKindV1 {
@@ -201,6 +246,7 @@ impl MirrorKindV1 {
             MirrorKindV1::GithubRelease => "github-release",
             MirrorKindV1::GithubRaw => "github-raw",
             MirrorKindV1::Directory => "directory",
+            MirrorKindV1::OciRegistry => "oci-registry",
         }
     }
 
@@ -212,6 +258,9 @@ impl MirrorKindV1 {
             MirrorKindV1::Directory => 10,
             MirrorKindV1::ObjectStore => 20,
             MirrorKindV1::GithubRelease => 30,
+            // After a release asset, which is one redirect to a CDN, and
+            // before a raw tree: an OCI pull costs an extra token round trip.
+            MirrorKindV1::OciRegistry => 35,
             MirrorKindV1::GithubRaw => 40,
             MirrorKindV1::ZedRegistry => 50,
         }
@@ -285,6 +334,16 @@ pub struct MirrorDescriptorV1 {
     /// Absolute local path, for `directory` mirrors.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// Repository path *inside* an OCI registry, when it is not the forge
+    /// repository's own `owner/name`.
+    ///
+    /// The default is deliberate: pushing `github.com/acme/http-kit` to
+    /// `ghcr.io/acme/http-kit` is what makes GitHub attach the package to that
+    /// repository. Override it when one repository publishes several packages
+    /// (`acme/http-kit/client-rust`) or when the registry namespace simply is
+    /// not the repository name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oci_repository: Option<String>,
 }
 
 /// The coordinates a URL is derived for.
@@ -360,6 +419,22 @@ impl MirrorDescriptorV1 {
         }
     }
 
+    /// The package's own GitHub Packages entry: `ghcr.io/<owner>/<repo>`,
+    /// derived from the repository the package already declares.
+    ///
+    /// This is the zero-configuration form, matching `github_release_of`. The
+    /// two are complements rather than alternatives: a release asset is
+    /// reachable without any auth handshake, while the ghcr copy is the one
+    /// that appears on the organization's Packages page.
+    pub fn ghcr_of(repository: &str) -> Self {
+        Self {
+            kind: MirrorKindV1::OciRegistry,
+            url: Some(GHCR_URL.to_owned()),
+            repository: Some(repository.to_owned()),
+            ..Self::empty(MirrorKindV1::OciRegistry)
+        }
+    }
+
     /// A public content-addressed store, e.g. `https://cdn.zpkg.net`.
     pub fn object_store(url: &str) -> Self {
         Self {
@@ -376,14 +451,24 @@ impl MirrorDescriptorV1 {
             url: None,
             alternate_urls: Vec::new(),
             priority: None,
-            serves: if kind == MirrorKindV1::GithubRaw {
-                MirrorServesV1 {
+            serves: match kind {
+                MirrorKindV1::GithubRaw => MirrorServesV1 {
                     artifacts: false,
                     metadata: true,
                     index: true,
-                }
-            } else {
-                MirrorServesV1::default()
+                },
+                // An OCI registry holds bytes addressed by digest, which is
+                // exactly what an artifact is and exactly what signed metadata
+                // is not. Resolution needs a signed index; asserting one here
+                // by default would claim a guarantee the transport does not
+                // make. A deployment that does publish zed's signed documents
+                // as additional layers can turn these on explicitly.
+                MirrorKindV1::OciRegistry => MirrorServesV1 {
+                    artifacts: true,
+                    metadata: false,
+                    index: false,
+                },
+                _ => MirrorServesV1::default(),
             },
             repository: None,
             tag_template: None,
@@ -394,6 +479,7 @@ impl MirrorDescriptorV1 {
             version_template: None,
             index_template: None,
             path: None,
+            oci_repository: None,
         }
     }
 
@@ -410,6 +496,15 @@ impl MirrorDescriptorV1 {
                 .as_deref()
                 .and_then(|value| parse_repo_ref(value).ok())
                 .map(|repo| format!("{}/{}/{}", repo.host, repo.owner, repo.repo))
+                .or_else(|| self.url.clone()),
+            // An OCI mirror is identified by the coordinates a puller would
+            // type: registry host plus repository path. Computed without the
+            // fallible accessor on purpose — that one reports failure through
+            // a `MirrorError`, which carries an identifier, which would call
+            // straight back into here.
+            MirrorKindV1::OciRegistry => self
+                .oci_repository_path_opt()
+                .map(|path| format!("{}/{path}", host_or_value(&self.oci_base_url())))
                 .or_else(|| self.url.clone()),
         };
         match detail {
@@ -437,6 +532,15 @@ impl MirrorDescriptorV1 {
     /// Applied at publish time: what lands in the registry and in a consumer's
     /// lockfile is always the fully-resolved form.
     pub fn with_package_defaults(mut self, repository: &str, tag_format: &str) -> Self {
+        if self.kind == MirrorKindV1::OciRegistry {
+            if self.repository.is_none() {
+                self.repository = Some(repository.to_owned());
+            }
+            if self.url.is_none() {
+                self.url = Some(GHCR_URL.to_owned());
+            }
+            return self;
+        }
         if matches!(
             self.kind,
             MirrorKindV1::GithubRelease | MirrorKindV1::GithubRaw
@@ -508,7 +612,95 @@ impl MirrorDescriptorV1 {
                 let key = self.expand(template, "artifact_template", coord)?;
                 self.raw_urls(&key)
             }
+            // zed addresses artifacts by sha256 and the distribution spec
+            // addresses blobs by digest, so no template is involved: the
+            // lockfile pin *is* the object's name in the registry.
+            MirrorKindV1::OciRegistry => {
+                let path = self.oci_repository_path()?;
+                Ok(self
+                    .oci_base_urls()
+                    .into_iter()
+                    .map(|base| {
+                        format!(
+                            "{base}{OCI_API_PREFIX}/{path}/blobs/sha256:{}",
+                            coord.sha256
+                        )
+                    })
+                    .collect())
+            }
         }
+    }
+
+    /// Where an OCI puller would look for this package: registry base URL and
+    /// repository path, plus the tag that carries this version's manifest.
+    ///
+    /// A pinned install never needs the manifest — the blob digest is already
+    /// in the lockfile — but a human diagnosing a mirror, and any future
+    /// resolve-from-tags path, needs the reference this maps to.
+    pub fn oci_reference(
+        &self,
+        coord: &MirrorCoordinateV1<'_>,
+    ) -> Result<OciReferenceV1, MirrorError> {
+        Ok(OciReferenceV1 {
+            registry: self.oci_base_url(),
+            repository: self.oci_repository_path()?,
+            tag: coord.version.to_owned(),
+        })
+    }
+
+    /// Primary registry base URL for an OCI mirror, defaulting to ghcr.io.
+    fn oci_base_url(&self) -> String {
+        self.url
+            .as_deref()
+            .map(trim_base)
+            .unwrap_or_else(|| GHCR_URL.to_owned())
+    }
+
+    fn oci_base_urls(&self) -> Vec<String> {
+        let mut out = self.base_urls();
+        if out.is_empty() {
+            out.push(GHCR_URL.to_owned());
+        }
+        out
+    }
+
+    /// The repository path inside the registry: the explicit `oci_repository`,
+    /// else `<owner>/<repo>` from the forge repository.
+    ///
+    /// Lowercased because the distribution spec's name grammar admits only
+    /// lowercase, while a GitHub org may be spelled `ORESoftware`. Pushing
+    /// `ghcr.io/ORESoftware/x` is rejected by the registry, so a mirror that
+    /// derived that path would be permanently unreachable.
+    pub fn oci_repository_path(&self) -> Result<String, MirrorError> {
+        self.oci_repository_path_opt()
+            .ok_or_else(|| MirrorError::MissingField {
+                id: format!(
+                    "{}:{}",
+                    self.kind.as_str(),
+                    host_or_value(&self.oci_base_url())
+                ),
+                kind: self.kind.as_str(),
+                field: "repository",
+            })
+    }
+
+    /// The same derivation, reporting absence as `None`.
+    ///
+    /// Every caller that participates in building an identifier must use this
+    /// one: `MirrorError` embeds an identifier, and `identifier()` needs the
+    /// repository path, so raising an error from inside that derivation would
+    /// recurse forever.
+    fn oci_repository_path_opt(&self) -> Option<String> {
+        if let Some(explicit) = self
+            .oci_repository
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return Some(explicit.trim_matches('/').to_ascii_lowercase());
+        }
+        let repo = parse_repo_ref(self.repository.as_deref()?).ok()?;
+        Some(format!("{}/{}", repo.owner, repo.repo).to_ascii_lowercase())
     }
 
     /// Candidate URLs for this version's signed metadata document.
@@ -553,6 +745,13 @@ impl MirrorDescriptorV1 {
                 let key = self.expand(template, "version_template", coord)?;
                 self.raw_urls(&key)
             }
+            // Reached only if a deployment set `serves.metadata` on an OCI
+            // mirror. There is no agreed layout for a signed zed document in a
+            // container repository, so say so rather than guess a path.
+            MirrorKindV1::OciRegistry => Err(MirrorError::Unsupported {
+                id: self.identifier(),
+                what: "version metadata",
+            }),
         }
     }
 
@@ -591,6 +790,10 @@ impl MirrorDescriptorV1 {
                 let key = expand_index(template, "index_template", &self.identifier(), org, name)?;
                 self.raw_urls(&key)
             }
+            MirrorKindV1::OciRegistry => Err(MirrorError::Unsupported {
+                id: self.identifier(),
+                what: "a package index",
+            }),
         }
     }
 
@@ -761,7 +964,7 @@ impl MirrorDescriptorV1 {
 
         let uses_repository = matches!(
             self.kind,
-            MirrorKindV1::GithubRelease | MirrorKindV1::GithubRaw
+            MirrorKindV1::GithubRelease | MirrorKindV1::GithubRaw | MirrorKindV1::OciRegistry
         );
         let is_store = matches!(
             self.kind,
@@ -805,6 +1008,11 @@ impl MirrorDescriptorV1 {
                 self.path.is_some(),
                 "path",
                 self.kind == MirrorKindV1::Directory,
+            ),
+            (
+                self.oci_repository.is_some(),
+                "oci_repository",
+                self.kind == MirrorKindV1::OciRegistry,
             ),
         ] {
             if present && !allowed {
@@ -860,6 +1068,29 @@ impl MirrorDescriptorV1 {
                 }
                 if let Some(repository) = self.repository.as_deref() {
                     parse_repo_ref(repository)?;
+                }
+            }
+            MirrorKindV1::OciRegistry => {
+                // A repository path must be derivable, from either an explicit
+                // `oci_repository` or the forge repository. `url` alone is not
+                // enough: a registry base names a host, not a package.
+                if self.oci_repository.is_none() && self.repository.is_none() {
+                    return Err(MirrorError::MissingField {
+                        id: id.clone(),
+                        kind,
+                        field: "repository",
+                    });
+                }
+                if let Some(repository) = self.repository.as_deref() {
+                    parse_repo_ref(repository)?;
+                }
+                let path = self.oci_repository_path()?;
+                if !is_oci_repository_path(&path) {
+                    return Err(MirrorError::InvalidValue {
+                        id: id.clone(),
+                        field: "oci_repository",
+                        value: path,
+                    });
                 }
             }
         }
@@ -1179,4 +1410,56 @@ fn encode_path(value: &str) -> String {
         }
     }
     out
+}
+
+/// Does `path` satisfy the distribution spec's repository-name grammar?
+///
+/// One or more slash-separated components of lowercase alphanumerics, each
+/// optionally separated internally by `.`, `_`, or `-`. The check exists
+/// because the natural source of this path — a GitHub `owner/repo` — can
+/// legally contain characters the registry will reject, and finding that out
+/// at push time is far better than at install time.
+pub fn is_oci_repository_path(path: &str) -> bool {
+    if path.is_empty() || path.len() > 255 {
+        return false;
+    }
+    path.split('/').all(|component| {
+        !component.is_empty()
+            && component.bytes().all(|byte| {
+                byte.is_ascii_lowercase()
+                    || byte.is_ascii_digit()
+                    || matches!(byte, b'.' | b'_' | b'-')
+            })
+            && component
+                .bytes()
+                .next()
+                .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+            && component
+                .bytes()
+                .next_back()
+                .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+    })
+}
+
+/// Where an OCI puller would look for one published version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct OciReferenceV1 {
+    /// Registry base URL, e.g. `https://ghcr.io`.
+    pub registry: String,
+    /// Repository path inside that registry, e.g. `acme/http-kit`.
+    pub repository: String,
+    /// Tag carrying this version's manifest.
+    pub tag: String,
+}
+
+impl OciReferenceV1 {
+    /// The `docker pull`-style spelling, for diagnostics and documentation.
+    pub fn image_reference(&self) -> String {
+        let host = self
+            .registry
+            .trim_start_matches("https://")
+            .trim_start_matches("http://")
+            .trim_end_matches('/');
+        format!("{host}/{}:{}", self.repository, self.tag)
+    }
 }

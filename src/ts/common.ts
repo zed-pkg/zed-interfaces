@@ -103,6 +103,8 @@ export interface MirrorDescriptorV1 {
   /** Package-index key template; see [`DEFAULT_INDEX_TEMPLATE`]. */
   readonly index_template?: string | null;
   readonly kind: MirrorKindV1;
+  /** Repository path *inside* an OCI registry, when it is not the forge repository's own `owner/name`. The default is deliberate: pushing `github.com/acme/http-kit` to `ghcr.io/acme/http-kit` is what makes GitHub attach the package to that repository. Override it when one repository publishes several packages (`acme/http-kit/client-rust`) or when the registry namespace simply is not the repository name. */
+  readonly oci_repository?: string | null;
   /** Absolute local path, for `directory` mirrors. */
   readonly path?: string | null;
   /** Ascending try order. Ties break on `id` so ordering is total and a merged set from several sources is deterministic. */
@@ -125,11 +127,12 @@ export interface MirrorDescriptorV1 {
  * - `github-release`: Release assets on a Git forge that serves them at a public, predictable path. Named for GitHub because that is the deployment that matters, but GitHub Enterprise, Gitea, and Forgejo use the same route shape.
  * - `github-raw`: A branch or Pages site served as raw files. Cheap and cacheable, which makes it the best index transport; poor for artifact bytes, which is why `serves.artifacts` defaults off for this kind.
  * - `directory`: A local directory in `file://` registry layout — an air-gapped mirror, a warmed CI cache, or a Nix store input.
+ * - `oci-registry`: An OCI distribution registry holding the artifact as a blob (`ghcr.io`, and any other registry implementing the distribution spec). Appended rather than grouped with the other forge kinds so the derived `Ord` on this enum keeps the meaning it had before; the wire format is the kebab-case name, so ordinal position is not observable anyway. Unlike every other kind, a blob fetch needs a bearer token even when the package is public: the distribution spec's anonymous flow issues one from the registry's token endpoint. The URL is still deterministic — zed content-addresses its artifacts, and an OCI blob is addressed by digest, so the two coordinate systems are the same one.
  */
-export type MirrorKindV1 = "zed-registry" | "object-store" | "github-release" | "github-raw" | "directory";
+export type MirrorKindV1 = "zed-registry" | "object-store" | "github-release" | "github-raw" | "directory" | "oci-registry";
 
 /** Every `MirrorKindV1` value, in schema order — for validation and pickers. */
-export const MIRROR_KIND_V1_VALUES = ["zed-registry", "object-store", "github-release", "github-raw", "directory"] as const;
+export const MIRROR_KIND_V1_VALUES = ["zed-registry", "object-store", "github-release", "github-raw", "directory", "oci-registry"] as const;
 
 /** What a mirror is able to serve. Artifact bytes are self-verifying against the lockfile pin. Metadata and indexes are not, so a mirror that advertises them is asserting that it carries publisher signatures; a client that cannot verify one must treat the answer as absent rather than as trusted. */
 export interface MirrorServesV1 {

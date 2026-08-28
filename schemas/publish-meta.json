@@ -472,6 +472,13 @@
         "kind": {
           "$ref": "#/$defs/MirrorKindV1"
         },
+        "oci_repository": {
+          "description": "Repository path *inside* an OCI registry, when it is not the forge\nrepository's own `owner/name`.\n\nThe default is deliberate: pushing `github.com/acme/http-kit` to\n`ghcr.io/acme/http-kit` is what makes GitHub attach the package to that\nrepository. Override it when one repository publishes several packages\n(`acme/http-kit/client-rust`) or when the registry namespace simply is\nnot the repository name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "path": {
           "description": "Absolute local path, for `directory` mirrors.",
           "type": [
@@ -551,6 +558,11 @@
           "description": "A local directory in `file://` registry layout — an air-gapped mirror,\na warmed CI cache, or a Nix store input.",
           "type": "string",
           "const": "directory"
+        },
+        {
+          "description": "An OCI distribution registry holding the artifact as a blob\n(`ghcr.io`, and any other registry implementing the distribution spec).\n\nAppended rather than grouped with the other forge kinds so the derived\n`Ord` on this enum keeps the meaning it had before; the wire format is\nthe kebab-case name, so ordinal position is not observable anyway.\n\nUnlike every other kind, a blob fetch needs a bearer token even when the\npackage is public: the distribution spec's anonymous flow issues one\nfrom the registry's token endpoint. The URL is still deterministic —\nzed content-addresses its artifacts, and an OCI blob is addressed by\ndigest, so the two coordinate systems are the same one.",
+          "type": "string",
+          "const": "oci-registry"
         }
       ]
     },

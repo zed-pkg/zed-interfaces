@@ -332,6 +332,7 @@ class MirrorDescriptorV1 {
     this.indexTag,
     this.indexTemplate,
     required this.kind,
+    this.ociRepository,
     this.path,
     this.priority,
     this.repository,
@@ -350,6 +351,7 @@ class MirrorDescriptorV1 {
     indexTag: json['index_tag'] as String?,
     indexTemplate: json['index_template'] as String?,
     kind: MirrorKindV1.fromJson(json['kind'] as String),
+    ociRepository: json['oci_repository'] as String?,
     path: json['path'] as String?,
     priority: (json['priority'] as num?)?.toInt(),
     repository: json['repository'] as String?,
@@ -389,6 +391,13 @@ class MirrorDescriptorV1 {
 
   final MirrorKindV1 kind;
 
+  /// Repository path *inside* an OCI registry, when it is not the forge repository's own
+  /// `owner/name`. The default is deliberate: pushing `github.com/acme/http-kit` to
+  /// `ghcr.io/acme/http-kit` is what makes GitHub attach the package to that repository.
+  /// Override it when one repository publishes several packages (`acme/http-kit/client-rust`)
+  /// or when the registry namespace simply is not the repository name.
+  final String? ociRepository;
+
   /// Absolute local path, for `directory` mirrors.
   final String? path;
 
@@ -425,6 +434,7 @@ class MirrorDescriptorV1 {
     'index_tag': indexTag,
     'index_template': indexTemplate,
     'kind': kind.toJson(),
+    'oci_repository': ociRepository,
     'path': path,
     'priority': priority,
     'repository': repository,
@@ -456,7 +466,16 @@ enum MirrorKindV1 {
   githubRaw('github-raw'),
   /// A local directory in `file://` registry layout — an air-gapped mirror, a warmed CI
   /// cache, or a Nix store input.
-  directory('directory');
+  directory('directory'),
+  /// An OCI distribution registry holding the artifact as a blob (`ghcr.io`, and any other
+  /// registry implementing the distribution spec). Appended rather than grouped with the
+  /// other forge kinds so the derived `Ord` on this enum keeps the meaning it had before; the
+  /// wire format is the kebab-case name, so ordinal position is not observable anyway. Unlike
+  /// every other kind, a blob fetch needs a bearer token even when the package is public: the
+  /// distribution spec's anonymous flow issues one from the registry's token endpoint. The
+  /// URL is still deterministic — zed content-addresses its artifacts, and an OCI blob is
+  /// addressed by digest, so the two coordinate systems are the same one.
+  ociRegistry('oci-registry');
 
   const MirrorKindV1(this.wire);
 
