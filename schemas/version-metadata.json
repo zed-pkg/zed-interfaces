@@ -11,6 +11,13 @@
       "$ref": "#/$defs/ArtifactFormat",
       "default": "tar.gz"
     },
+    "mirrors": {
+      "description": "Alternate fetch locations (public R2, GitHub Release) so a client that\nalready has this metadata can retry without the registry host. Empty\nwhen the publisher did not advertise mirrors; clients still guess\nstandard GitHub/R2 paths from `org`/`name`/`vcs_tag`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ArtifactLocator"
+      }
+    },
     "name": {
       "type": "string"
     },
@@ -63,6 +70,52 @@
       "enum": [
         "tar.gz",
         "zip"
+      ]
+    },
+    "ArtifactLocator": {
+      "description": "One concrete fetch location for a published artifact.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ArtifactSourceKind"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "url"
+      ]
+    },
+    "ArtifactSourceKind": {
+      "description": "Where a published artifact can be fetched from when the primary registry\nhost is down. Order in [`artifact_locators`] is the client retry order.",
+      "oneOf": [
+        {
+          "description": "`zed-api-server` (`/v1/artifacts/<sha256>` or a presigned redirect).",
+          "type": "string",
+          "const": "registry"
+        },
+        {
+          "description": "Direct GET against the public R2/CDN origin.",
+          "type": "string",
+          "const": "r2"
+        },
+        {
+          "description": "Packed tarball attached to a GitHub Release.",
+          "type": "string",
+          "const": "github-release"
+        },
+        {
+          "description": "Packed artifact stored as an OCI artifact on GitHub Packages (GHCR).\nThis is the GitHub surface that shows on\n`https://github.com/orgs/{org}/packages`.",
+          "type": "string",
+          "const": "github-packages"
+        },
+        {
+          "description": "Source archive of the tagged commit. Last resort: the bytes are the\nVCS tree, not the pruned publish artifact, so a lockfile sha256 will\nnot match unless the client re-packs with the same rules.",
+          "type": "string",
+          "const": "github-archive"
+        }
       ]
     }
   }
