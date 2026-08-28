@@ -3,6 +3,14 @@
 // Source: types shared by more than one schema
 
 /**
+ * On-the-wire formats for published package artifacts.
+ */
+export type ArtifactFormat = "tar.gz" | "zip";
+
+/** Every `ArtifactFormat` value, in schema order — for validation and pickers. */
+export const ARTIFACT_FORMAT_VALUES = ["tar.gz", "zip"] as const;
+
+/**
  * Binary artifacts use ZIP exclusively in v1. ZIP is portable to Windows, preserves POSIX executable bits when present, and supports safe central- directory inspection before extraction.
  */
 export type BinaryArchiveFormatV1 = "zip";
@@ -70,6 +78,69 @@ export interface BinarySourceProvenanceV1 {
   readonly vcs_tag: string;
 }
 
+/** A signature over a document, carried beside it rather than inside it. Detached because the signed bytes must be reproducible: embedding the signature in the document it signs forces a "remove this field first" rule, and every such rule is a place where a signer and a verifier can disagree. */
+export interface DetachedSignatureV1 {
+  readonly algorithm: string;
+  readonly key_id: string;
+  /** Unpadded base64url of the raw 64-byte signature. */
+  readonly signature: string;
+}
+
+/** One place a package's artifacts and/or metadata can be fetched from. Authors write the shortest form that identifies the mirror and the derived defaults fill in the rest — a `github-release` mirror with no fields at all means "the release assets on my own `[package.repository]`". */
+export interface MirrorDescriptorV1 {
+  /** Additional base URLs serving byte-identical content at a different hostname. This is the field that survives a zone-level outage. `cdn.zpkg.net` and a `workers.dev` hostname front the same bucket, but they fail independently, because the second does not resolve through the `zpkg.net` zone at all. A client tries every base URL of a mirror before moving to the next mirror. */
+  readonly alternate_urls?: readonly string[];
+  /** Artifact key template. Only for a store whose layout is not [`DEFAULT_ARTIFACT_TEMPLATE`] — a sharded bucket, or one where zed's objects live under a prefix shared with other tooling. */
+  readonly artifact_template?: string | null;
+  /** Prefix on zed-owned release asset names. Defaults to [`DEFAULT_ASSET_PREFIX`]. */
+  readonly asset_prefix?: string | null;
+  /** Branch of a raw-served mirror tree. Defaults to [`DEFAULT_RAW_BRANCH`]. */
+  readonly branch?: string | null;
+  /** Stable identifier, used in diagnostics and to deduplicate a merged mirror set. Derived from the kind and host when absent. */
+  readonly id?: string | null;
+  /** Tag of the rolling release carrying package indexes. Defaults to [`DEFAULT_INDEX_TAG`]. */
+  readonly index_tag?: string | null;
+  /** Package-index key template; see [`DEFAULT_INDEX_TEMPLATE`]. */
+  readonly index_template?: string | null;
+  readonly kind: MirrorKindV1;
+  /** Absolute local path, for `directory` mirrors. */
+  readonly path?: string | null;
+  /** Ascending try order. Ties break on `id` so ordering is total and a merged set from several sources is deterministic. */
+  readonly priority?: number | null;
+  /** Source repository, for the forge kinds. Accepts the same spellings as `[package.repository].url`, including scp-style `git@host:owner/repo`. Defaults to the package's own declared repository. */
+  readonly repository?: string | null;
+  readonly serves?: MirrorServesV1;
+  /** Release tag carrying this version's assets. Defaults to the package's `[publish].tag_format`, so mirrored artifacts hang off the exact tag zed already verifies for provenance. */
+  readonly tag_template?: string | null;
+  /** Base URL. Required for `object-store` and `zed-registry`; optional for the forge kinds, where it overrides the host derived from `repository` (a Pages origin, or a CDN in front of raw content). */
+  readonly url?: string | null;
+  /** Version-metadata key template; see [`DEFAULT_VERSION_TEMPLATE`]. */
+  readonly version_template?: string | null;
+}
+
+/**
+ * Transport family of a mirror. Each kind implies a URL derivation and a set of fields that are meaningful; [`MirrorDescriptorV1::validate`] rejects fields belonging to a different kind rather than ignoring them, so a misplaced key is a loud error instead of a mirror that silently never resolves.
+ * - `zed-registry`: Another `zed-api-server`, spoken to with the ordinary registry API.
+ * - `object-store`: A content-addressed HTTP object store or CDN in front of one (R2, S3, MinIO). Public read, no credential, no presign: the sha256 in the path is both the address and the integrity check.
+ * - `github-release`: Release assets on a Git forge that serves them at a public, predictable path. Named for GitHub because that is the deployment that matters, but GitHub Enterprise, Gitea, and Forgejo use the same route shape.
+ * - `github-raw`: A branch or Pages site served as raw files. Cheap and cacheable, which makes it the best index transport; poor for artifact bytes, which is why `serves.artifacts` defaults off for this kind.
+ * - `directory`: A local directory in `file://` registry layout — an air-gapped mirror, a warmed CI cache, or a Nix store input.
+ */
+export type MirrorKindV1 = "zed-registry" | "object-store" | "github-release" | "github-raw" | "directory";
+
+/** Every `MirrorKindV1` value, in schema order — for validation and pickers. */
+export const MIRROR_KIND_V1_VALUES = ["zed-registry", "object-store", "github-release", "github-raw", "directory"] as const;
+
+/** What a mirror is able to serve. Artifact bytes are self-verifying against the lockfile pin. Metadata and indexes are not, so a mirror that advertises them is asserting that it carries publisher signatures; a client that cannot verify one must treat the answer as absent rather than as trusted. */
+export interface MirrorServesV1 {
+  /** Artifact archives, addressed by sha256. */
+  readonly artifacts?: boolean;
+  /** Signed package-level version indexes (what makes range resolution possible while the registry is unreachable). */
+  readonly index?: boolean;
+  /** Signed per-version metadata documents. */
+  readonly metadata?: boolean;
+}
+
 export interface PackageSummary {
   readonly description?: string | null;
   readonly latest?: string | null;
@@ -77,6 +148,32 @@ export interface PackageSummary {
   readonly org: string;
   /** Free-form tags for filtering/discovery. */
   readonly tags?: readonly string[];
+}
+
+/**
+ * Lifecycle of a publisher key. Rotation is additive: a new key is enrolled `active` while the old one moves to `retired`. Retired keys still verify — revoking them would break every already-signed historical version, which is the opposite of what rotation is for. Compromise is expressed by `revoked`, which invalidates past signatures too and is deliberately a separate, louder state.
+ * - `active`: Signs new publications and verifies everything.
+ * - `retired`: No longer signs; still verifies historical signatures.
+ * - `revoked`: Compromised. Verification must fail, including for versions published before the revocation.
+ */
+export type PublisherKeyStateV1 = "active" | "retired" | "revoked";
+
+/** Every `PublisherKeyStateV1` value, in schema order — for validation and pickers. */
+export const PUBLISHER_KEY_STATE_V1_VALUES = ["active", "retired", "revoked"] as const;
+
+/** One publisher signing key. */
+export interface PublisherKeyV1 {
+  /** Always `ed25519` in v1. */
+  readonly algorithm: string;
+  /** RFC 3339 timestamp the key was enrolled. */
+  readonly enrolled_at?: string | null;
+  /** Short stable label, unique within the org. Names the key in diagnostics and lets a signature say which key made it without carrying the key itself. */
+  readonly key_id: string;
+  /** Multibase base58btc, `z`-prefixed. */
+  readonly public_key_multibase: string;
+  /** Why the key was revoked. Present only for `revoked` keys, so an operator reading a failed verification learns the reason from the same document that caused the failure. */
+  readonly revoked_reason?: string | null;
+  readonly state: PublisherKeyStateV1;
 }
 
 /**

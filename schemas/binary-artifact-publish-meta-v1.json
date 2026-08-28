@@ -341,6 +341,13 @@
           "$ref": "#/$defs/InteropSection",
           "description": "Explicit interoperability intent for external package and environment\nmanagers. Detection alone never grants Zed permission to consume\nanother tool's metadata."
         },
+        "mirror": {
+          "description": "Where this package's artifacts can be fetched when the canonical\nregistry cannot answer, in try order.\n\nDeclaring nothing is the normal case and still yields a mirror: publish\nderives a `github-release` route from `[package.repository]`, because a\npackage that already anchors provenance to a tag on a forge is one\nupload away from that forge being a complete artifact source. Declare\nentries here to add a CDN, point at a dedicated artifacts repository,\nor describe a bucket whose layout is not the default.\n\nCanonical TOML spelling is repeated `[[mirror]]` tables.",
+          "items": {
+            "$ref": "#/$defs/MirrorDescriptorV1"
+          },
+          "type": "array"
+        },
         "native-dependencies": {
           "additionalProperties": {
             "items": {
@@ -373,6 +380,10 @@
             "test": null
           }
         },
+        "signing": {
+          "$ref": "#/$defs/SigningSection",
+          "description": "Publisher signing keys, so a consumer can verify metadata served by a\nmirror without the registry being reachable."
+        },
         "targets": {
           "additionalProperties": {
             "$ref": "#/$defs/TargetSection"
@@ -388,6 +399,129 @@
       "required": [
         "package"
       ],
+      "type": "object"
+    },
+    "MirrorDescriptorV1": {
+      "description": "One place a package's artifacts and/or metadata can be fetched from.\n\nAuthors write the shortest form that identifies the mirror and the derived\ndefaults fill in the rest — a `github-release` mirror with no fields at all\nmeans \"the release assets on my own `[package.repository]`\".",
+      "properties": {
+        "alternate_urls": {
+          "description": "Additional base URLs serving byte-identical content at a different\nhostname.\n\nThis is the field that survives a zone-level outage. `cdn.zpkg.net` and\na `workers.dev` hostname front the same bucket, but they fail\nindependently, because the second does not resolve through the\n`zpkg.net` zone at all. A client tries every base URL of a mirror\nbefore moving to the next mirror.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "artifact_template": {
+          "description": "Artifact key template. Only for a store whose layout is not\n[`DEFAULT_ARTIFACT_TEMPLATE`] — a sharded bucket, or one where zed's\nobjects live under a prefix shared with other tooling.",
+          "type": "string"
+        },
+        "asset_prefix": {
+          "description": "Prefix on zed-owned release asset names. Defaults to [`DEFAULT_ASSET_PREFIX`].",
+          "type": "string"
+        },
+        "branch": {
+          "description": "Branch of a raw-served mirror tree. Defaults to [`DEFAULT_RAW_BRANCH`].",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable identifier, used in diagnostics and to deduplicate a merged\nmirror set. Derived from the kind and host when absent.",
+          "type": "string"
+        },
+        "index_tag": {
+          "description": "Tag of the rolling release carrying package indexes. Defaults to\n[`DEFAULT_INDEX_TAG`].",
+          "type": "string"
+        },
+        "index_template": {
+          "description": "Package-index key template; see [`DEFAULT_INDEX_TEMPLATE`].",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/MirrorKindV1"
+        },
+        "path": {
+          "description": "Absolute local path, for `directory` mirrors.",
+          "type": "string"
+        },
+        "priority": {
+          "description": "Ascending try order. Ties break on `id` so ordering is total and a\nmerged set from several sources is deterministic.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "repository": {
+          "description": "Source repository, for the forge kinds. Accepts the same spellings as\n`[package.repository].url`, including scp-style `git@host:owner/repo`.\nDefaults to the package's own declared repository.",
+          "type": "string"
+        },
+        "serves": {
+          "$ref": "#/$defs/MirrorServesV1"
+        },
+        "tag_template": {
+          "description": "Release tag carrying this version's assets. Defaults to the package's\n`[publish].tag_format`, so mirrored artifacts hang off the exact tag\nzed already verifies for provenance.",
+          "type": "string"
+        },
+        "url": {
+          "description": "Base URL. Required for `object-store` and `zed-registry`; optional for\nthe forge kinds, where it overrides the host derived from `repository`\n(a Pages origin, or a CDN in front of raw content).",
+          "type": "string"
+        },
+        "version_template": {
+          "description": "Version-metadata key template; see [`DEFAULT_VERSION_TEMPLATE`].",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "MirrorKindV1": {
+      "description": "Transport family of a mirror. Each kind implies a URL derivation and a set\nof fields that are meaningful; [`MirrorDescriptorV1::validate`] rejects\nfields belonging to a different kind rather than ignoring them, so a\nmisplaced key is a loud error instead of a mirror that silently never\nresolves.",
+      "oneOf": [
+        {
+          "const": "zed-registry",
+          "description": "Another `zed-api-server`, spoken to with the ordinary registry API.",
+          "type": "string"
+        },
+        {
+          "const": "object-store",
+          "description": "A content-addressed HTTP object store or CDN in front of one (R2, S3,\nMinIO). Public read, no credential, no presign: the sha256 in the path\nis both the address and the integrity check.",
+          "type": "string"
+        },
+        {
+          "const": "github-release",
+          "description": "Release assets on a Git forge that serves them at a public, predictable\npath. Named for GitHub because that is the deployment that matters, but\nGitHub Enterprise, Gitea, and Forgejo use the same route shape.",
+          "type": "string"
+        },
+        {
+          "const": "github-raw",
+          "description": "A branch or Pages site served as raw files. Cheap and cacheable, which\nmakes it the best index transport; poor for artifact bytes, which is\nwhy `serves.artifacts` defaults off for this kind.",
+          "type": "string"
+        },
+        {
+          "const": "directory",
+          "description": "A local directory in `file://` registry layout — an air-gapped mirror,\na warmed CI cache, or a Nix store input.",
+          "type": "string"
+        }
+      ]
+    },
+    "MirrorServesV1": {
+      "description": "What a mirror is able to serve.\n\nArtifact bytes are self-verifying against the lockfile pin. Metadata and\nindexes are not, so a mirror that advertises them is asserting that it\ncarries publisher signatures; a client that cannot verify one must treat\nthe answer as absent rather than as trusted.",
+      "properties": {
+        "artifacts": {
+          "default": true,
+          "description": "Artifact archives, addressed by sha256.",
+          "type": "boolean"
+        },
+        "index": {
+          "default": true,
+          "description": "Signed package-level version indexes (what makes range resolution\npossible while the registry is unreachable).",
+          "type": "boolean"
+        },
+        "metadata": {
+          "default": true,
+          "description": "Signed per-version metadata documents.",
+          "type": "boolean"
+        }
+      },
       "type": "object"
     },
     "NativeRegistry": {
@@ -615,6 +749,68 @@
       },
       "type": "object"
     },
+    "PublisherKeyStateV1": {
+      "description": "Lifecycle of a publisher key.\n\nRotation is additive: a new key is enrolled `active` while the old one\nmoves to `retired`. Retired keys still verify — revoking them would break\nevery already-signed historical version, which is the opposite of what\nrotation is for. Compromise is expressed by `revoked`, which invalidates\npast signatures too and is deliberately a separate, louder state.",
+      "oneOf": [
+        {
+          "const": "active",
+          "description": "Signs new publications and verifies everything.",
+          "type": "string"
+        },
+        {
+          "const": "retired",
+          "description": "No longer signs; still verifies historical signatures.",
+          "type": "string"
+        },
+        {
+          "const": "revoked",
+          "description": "Compromised. Verification must fail, including for versions published\nbefore the revocation.",
+          "type": "string"
+        }
+      ]
+    },
+    "PublisherKeyV1": {
+      "description": "One publisher signing key.",
+      "properties": {
+        "algorithm": {
+          "description": "Always `ed25519` in v1.",
+          "pattern": "^ed25519$",
+          "type": "string"
+        },
+        "enrolled_at": {
+          "description": "RFC 3339 timestamp the key was enrolled.",
+          "type": "string"
+        },
+        "key_id": {
+          "description": "Short stable label, unique within the org. Names the key in\ndiagnostics and lets a signature say which key made it without\ncarrying the key itself.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "type": "string"
+        },
+        "public_key_multibase": {
+          "description": "Multibase base58btc, `z`-prefixed.",
+          "maxLength": 128,
+          "minLength": 8,
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "type": "string"
+        },
+        "revoked_reason": {
+          "description": "Why the key was revoked. Present only for `revoked` keys, so an\noperator reading a failed verification learns the reason from the same\ndocument that caused the failure.",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/PublisherKeyStateV1"
+        }
+      },
+      "required": [
+        "key_id",
+        "algorithm",
+        "public_key_multibase",
+        "state"
+      ],
+      "type": "object"
+    },
     "ReleaseChannel": {
       "description": "A release track. `Stable` is the default everywhere; the rest are the\npre-release tracks a language ecosystem exposes, in descending maturity.",
       "oneOf": [
@@ -664,6 +860,23 @@
         "test": {
           "default": null,
           "description": "Test command run from the repository (not from published artifacts;\ntests are stripped at publish time).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SigningSection": {
+      "description": "Publisher signing keys as declared by the package itself.\n\nThe registry also serves these keys, and a consumer pins the key that\nactually signed on first use. Three independent copies is the point: a\ntrust anchor reachable only through the service you are routing around is\nnot a trust anchor. The manifest copy is the one that travels with the\nsource, so a consumer who has only the Git repository still has everything\nneeded to verify what the mirrors serve.\n\nOnly public halves ever appear here. The private key lives outside the\nrepository and is never read by any code in this crate.",
+      "properties": {
+        "key": {
+          "description": "Enrolled public keys. Canonical TOML spelling is repeated\n`[[signing.key]]` tables.",
+          "items": {
+            "$ref": "#/$defs/PublisherKeyV1"
+          },
+          "type": "array"
+        },
+        "key_id": {
+          "description": "Which enrolled key signs this package's publications. Defaults to the\nsingle `active` key when exactly one is declared.",
           "type": "string"
         }
       },

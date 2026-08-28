@@ -1,73 +1,64 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "PackageMetadata",
+  "title": "SignedVersionV1",
+  "description": "A version-metadata document as a mirror serves it.",
   "type": "object",
   "properties": {
-    "description": {
-      "type": [
-        "string",
-        "null"
-      ]
+    "payload": {
+      "$ref": "#/$defs/VersionAttestationV1"
     },
-    "latest": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "mirrors": {
-      "description": "Where this package's artifacts and metadata can be fetched when this\nregistry cannot answer, in try order.",
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/MirrorDescriptorV1"
-      }
-    },
-    "name": {
+    "schema": {
       "type": "string"
     },
-    "org": {
-      "type": "string"
-    },
-    "repo_url": {
-      "type": "string"
-    },
-    "signing_keys": {
-      "description": "The org's publisher signing keys, inlined so a client that resolves a\npackage also learns how to verify a mirror's answer next time — without\na second round trip it may not get to make.",
+    "signatures": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/PublisherKeyV1"
-      }
-    },
-    "tags": {
-      "description": "Free-form tags for filtering/discovery (multi-tag lookup).",
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "vcs": {
-      "$ref": "#/$defs/Vcs"
-    },
-    "version_scheme": {
-      "description": "How this package's versions should be interpreted (semver by default).",
-      "$ref": "#/$defs/VersionScheme"
-    },
-    "versions": {
-      "description": "All published, non-yanked versions, newest first.",
-      "type": "array",
-      "items": {
-        "type": "string"
+        "$ref": "#/$defs/DetachedSignatureV1"
       }
     }
   },
   "required": [
-    "org",
-    "name",
-    "vcs",
-    "repo_url",
-    "versions"
+    "schema",
+    "payload",
+    "signatures"
   ],
   "$defs": {
+    "ArtifactFormat": {
+      "description": "On-the-wire formats for published package artifacts.",
+      "type": "string",
+      "enum": [
+        "tar.gz",
+        "zip"
+      ]
+    },
+    "DetachedSignatureV1": {
+      "description": "A signature over a document, carried beside it rather than inside it.\n\nDetached because the signed bytes must be reproducible: embedding the\nsignature in the document it signs forces a \"remove this field first\" rule,\nand every such rule is a place where a signer and a verifier can disagree.",
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "pattern": "^ed25519$"
+        },
+        "key_id": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "signature": {
+          "description": "Unpadded base64url of the raw 64-byte signature.",
+          "type": "string",
+          "maxLength": 88,
+          "minLength": 86,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "key_id",
+        "algorithm",
+        "signature"
+      ]
+    },
     "MirrorDescriptorV1": {
       "description": "One place a package's artifacts and/or metadata can be fetched from.\n\nAuthors write the shortest form that identifies the mirror and the derived\ndefaults fill in the rest — a `github-release` mirror with no fields at all\nmeans \"the release assets on my own `[package.repository]`\".",
       "type": "object",
@@ -227,104 +218,69 @@
         }
       }
     },
-    "PublisherKeyStateV1": {
-      "description": "Lifecycle of a publisher key.\n\nRotation is additive: a new key is enrolled `active` while the old one\nmoves to `retired`. Retired keys still verify — revoking them would break\nevery already-signed historical version, which is the opposite of what\nrotation is for. Compromise is expressed by `revoked`, which invalidates\npast signatures too and is deliberately a separate, louder state.",
-      "oneOf": [
-        {
-          "description": "Signs new publications and verifies everything.",
-          "type": "string",
-          "const": "active"
-        },
-        {
-          "description": "No longer signs; still verifies historical signatures.",
-          "type": "string",
-          "const": "retired"
-        },
-        {
-          "description": "Compromised. Verification must fail, including for versions published\nbefore the revocation.",
-          "type": "string",
-          "const": "revoked"
-        }
-      ]
-    },
-    "PublisherKeyV1": {
-      "description": "One publisher signing key.",
+    "VersionAttestationV1": {
+      "description": "What a publisher asserts about one published version.\n\nThis is a superset of what a lockfile pins, plus the mirror set — so a\nconsumer that learned about this version from a mirror learns where else to\nlook from the same signed document, and an attacker who controls one mirror\ncannot quietly delete the others from the list.",
       "type": "object",
       "properties": {
-        "algorithm": {
-          "description": "Always `ed25519` in v1.",
+        "format": {
+          "$ref": "#/$defs/ArtifactFormat"
+        },
+        "mirrors": {
+          "description": "Where these bytes can be fetched, in try order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MirrorDescriptorV1"
+          }
+        },
+        "name": {
           "type": "string",
-          "pattern": "^ed25519$"
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         },
-        "enrolled_at": {
-          "description": "RFC 3339 timestamp the key was enrolled.",
-          "type": [
-            "string",
-            "null"
-          ]
+        "org": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         },
-        "key_id": {
-          "description": "Short stable label, unique within the org. Names the key in\ndiagnostics and lets a signature say which key made it without\ncarrying the key itself.",
+        "published_at": {
+          "description": "RFC 3339 timestamp.",
+          "type": "string"
+        },
+        "sha256": {
           "type": "string",
           "maxLength": 64,
-          "minLength": 1,
-          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
         },
-        "public_key_multibase": {
-          "description": "Multibase base58btc, `z`-prefixed.",
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 1
+        },
+        "vcs_commit": {
           "type": "string",
           "maxLength": 128,
-          "minLength": 8,
-          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$"
+          "minLength": 7
         },
-        "revoked_reason": {
-          "description": "Why the key was revoked. Present only for `revoked` keys, so an\noperator reading a failed verification learns the reason from the same\ndocument that caused the failure.",
-          "type": [
-            "string",
-            "null"
-          ]
+        "vcs_tag": {
+          "type": "string",
+          "minLength": 1
         },
-        "state": {
-          "$ref": "#/$defs/PublisherKeyStateV1"
+        "version": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "key_id",
-        "algorithm",
-        "public_key_multibase",
-        "state"
-      ]
-    },
-    "Vcs": {
-      "description": "Version-control systems a package's source repository can live on.\n\nzed-pkg is VCS-agnostic by design: what gets installed is always a\nregistry artifact, and the VCS is where provenance (tags) is anchored.\nAuthors must create a matching tag on their declared backing repo\n(GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo, Gitea, Azure\nDevOps, CodeCommit, Radicle, or self-hosted) before publishing.\n\n`jj` and Sapling are git-compatible and push to git remotes, so their\nprovenance is verified through git tags.",
-      "type": "string",
-      "enum": [
-        "git",
-        "hg",
-        "jj",
-        "sapling",
-        "fossil",
-        "pijul"
-      ]
-    },
-    "VersionScheme": {
-      "description": "How a package's `version` string (and its published tags) should be\ninterpreted. Defaults to [`VersionScheme::Semver`], which covers the vast\nmajority of modern ecosystems.",
-      "oneOf": [
-        {
-          "description": "Semantic Versioning. `package.version` must be valid semver; ranges\n(`^1.2`, `>=0.2 <0.5`) resolve to the max satisfying stable version.",
-          "type": "string",
-          "const": "semver"
-        },
-        {
-          "description": "Calendar Versioning (`2026.07.24`, `2026.07`). Normalized to a semver\ntotal order (leading zeros dropped, padded to major.minor.patch) so the\nsame range algebra applies. See [`normalize_calver`].",
-          "type": "string",
-          "const": "calver"
-        },
-        {
-          "description": "Arbitrary tags (`release-candidate-1`, `legacy-api`). No range algebra:\na requirement must match a published version **exactly**.",
-          "type": "string",
-          "const": "opaque"
-        }
+        "org",
+        "name",
+        "version",
+        "sha256",
+        "size",
+        "format",
+        "vcs_tag",
+        "vcs_commit",
+        "published_at"
       ]
     }
   }

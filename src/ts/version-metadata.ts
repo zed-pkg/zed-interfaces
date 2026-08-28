@@ -2,23 +2,21 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/version-metadata.json
 
-/**
- * On-the-wire formats for published package artifacts.
- */
-export type ArtifactFormat = "tar.gz" | "zip";
-
-/** Every `ArtifactFormat` value, in schema order — for validation and pickers. */
-export const ARTIFACT_FORMAT_VALUES = ["tar.gz", "zip"] as const;
+import type { ArtifactFormat, DetachedSignatureV1, MirrorDescriptorV1 } from "./common.ts";
 
 export interface VersionMetadata {
   /** Absolute or registry-relative URL the artifact can be fetched from. */
   readonly download_url: string;
   readonly format?: ArtifactFormat;
+  /** Where these exact bytes can be fetched, in try order. */
+  readonly mirrors?: readonly MirrorDescriptorV1[];
   readonly name: string;
   readonly org: string;
-  /** RFC 3339 timestamp. */
+  /** RFC 3339 timestamp, asserted by the publisher and echoed verbatim. Verbatim matters: it is covered by [`Self::signatures`], so a registry that "helpfully" normalized it would invalidate every signature it serves. */
   readonly published_at: string;
   readonly sha256: string;
+  /** Publisher signatures over [`Self::attestation`]. Absent for versions published before signing, and for publishers who have not enrolled a key. Absence degrades cleanly: such a package still installs from any mirror against a lockfile pin, and only loses the ability to have its *ranges* resolved while the registry is down. */
+  readonly signatures?: readonly DetachedSignatureV1[];
   readonly size: number;
   readonly vcs_commit?: string | null;
   readonly vcs_tag: string;

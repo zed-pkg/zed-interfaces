@@ -18,6 +18,7 @@ pub mod inspection;
 pub mod language;
 pub mod lockfile;
 pub mod manifest;
+pub mod mirror;
 pub mod namespace_claim;
 pub mod native_dependency;
 pub mod native_host;
@@ -28,6 +29,7 @@ pub mod oci;
 pub mod paths;
 pub mod registry;
 pub mod registry_protocol_v1;
+pub mod signing;
 pub mod sync;
 pub mod vcs;
 pub mod version;
@@ -81,7 +83,15 @@ pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile, LockfileError};
 pub use manifest::{
     GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,
-    NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute,
+    NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute, SigningSection,
+};
+pub use mirror::{
+    DEFAULT_ARTIFACT_TEMPLATE, DEFAULT_ASSET_PREFIX, DEFAULT_CDN_ALTERNATE_URL, DEFAULT_CDN_URL,
+    DEFAULT_INDEX_TAG, DEFAULT_INDEX_TEMPLATE, DEFAULT_RAW_BRANCH, DEFAULT_RAW_PREFIX,
+    DEFAULT_VERSION_TEMPLATE, MAX_MIRRORS, MIRROR_BOOTSTRAP_PATH, MIRROR_BOOTSTRAP_SCHEMA_V1,
+    MIRROR_DESCRIPTOR_SCHEMA_V1, MirrorBootstrapV1, MirrorCoordinateV1, MirrorDescriptorV1,
+    MirrorError, MirrorKindV1, MirrorServesV1, RepoRefV1, default_public_mirrors,
+    normalize_mirrors, parse_repo_ref,
 };
 pub use namespace_claim::{
     REGISTRY_NAMESPACE_PLAN_SCHEMA_V1, REGISTRY_NAMESPACE_RECEIPT_SCHEMA_V1,
@@ -134,6 +144,14 @@ pub use registry_protocol_v1::{
     RegistryLimitsV1, RegistryProtocolErrorCodeV1, RegistryProtocolErrorV1,
     RegistryProtocolV1Error, RegistryPublishRequestV1, RegistryRootSignatureV1,
     RegistrySigningKeyStateV1, RegistrySigningKeyV1, RegistryVisibilityV1,
+};
+pub use signing::{
+    DetachedSignatureV1, ED25519_PUBLIC_KEY_BYTES, ED25519_SIGNATURE_BYTES, IndexAttestationV1,
+    IndexEntryV1, MAX_KEYS_PER_ORG, MAX_SIGNATURES, PUBLISHER_KEYS_SCHEMA_V1, PublisherKeySetV1,
+    PublisherKeyStateV1, PublisherKeyV1, SIGNED_INDEX_SCHEMA_V1, SIGNED_VERSION_SCHEMA_V1,
+    SIGNING_ALGORITHM, SignedIndexV1, SignedVersionV1, SigningError, VersionAttestationV1,
+    decode_base64url, decode_multibase_base58btc, encode_base64url, encode_multibase_base58btc,
+    index_attestation_preimage, version_attestation_preimage,
 };
 pub use vcs::Vcs;
 pub use version::{Requirement, VersionScheme};

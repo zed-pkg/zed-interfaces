@@ -66,7 +66,7 @@
     {
       "file": "channel-route.json",
       "targets": [],
-      "why": "Resolved native-host publish/pull destination for one release channel — release tooling only."
+      "why": "Resolved native-host publish/pull destination for one release channel \u2014 release tooling only."
     },
     {
       "file": "claim-org-request.json",
@@ -97,17 +97,17 @@
     {
       "file": "environment-lock-v1.json",
       "targets": [],
-      "why": "Toolchain/environment planning — CLI only."
+      "why": "Toolchain/environment planning \u2014 CLI only."
     },
     {
       "file": "environment-plan-v1.json",
       "targets": [],
-      "why": "Toolchain/environment planning — CLI only."
+      "why": "Toolchain/environment planning \u2014 CLI only."
     },
     {
       "file": "environment-plan.json",
       "targets": [],
-      "why": "Toolchain/environment planning — CLI only."
+      "why": "Toolchain/environment planning \u2014 CLI only."
     },
     {
       "file": "inspection-report.json",
@@ -120,42 +120,79 @@
     {
       "file": "lockfile.json",
       "targets": [],
-      "why": "On-disk .zpkg.lock model — zed-cli and the servers only."
+      "why": "On-disk .zpkg.lock model \u2014 zed-cli and the servers only."
     },
     {
       "file": "manifest.json",
       "targets": [],
-      "why": "On-disk .zpkg.toml model — zed-cli and the servers only."
+      "why": "On-disk .zpkg.toml model \u2014 zed-cli and the servers only."
+    },
+    {
+      "file": "mirror-bootstrap-v1.json",
+      "targets": [
+        "dart",
+        "ts"
+      ],
+      "why": "Served at /.well-known/zpkg-mirrors.json by every mirror, so a client that cannot reach the registry can still discover where else to look. Front-end-facing because a client is exactly who reads it during an outage."
+    },
+    {
+      "file": "mirror-descriptor-v1.json",
+      "targets": [
+        "dart",
+        "ts"
+      ],
+      "why": "Where a package's artifacts can be fetched when the registry cannot answer. A web or Flutter client that shows a package's provenance, or an editor integration that fetches an artifact directly, decodes this from the public version-metadata response."
+    },
+    {
+      "file": "mirrors-response.json",
+      "targets": [
+        "dart",
+        "ts"
+      ],
+      "why": "The registry's own advertised mirror set, read by clients before or during an outage."
     },
     {
       "file": "native-dependency-lock.json",
       "targets": [],
-      "why": "Native-registry interop record — CLI and servers only."
+      "why": "Native-registry interop record \u2014 CLI and servers only."
     },
     {
       "file": "native-registry-adapter-record.json",
       "targets": [],
-      "why": "Native-registry interop record — CLI and servers only."
+      "why": "Native-registry interop record \u2014 CLI and servers only."
     },
     {
       "file": "nix-adapter-record.json",
       "targets": [],
-      "why": "Nix interop record — CLI only."
+      "why": "Nix interop record \u2014 CLI only."
     },
     {
       "file": "nix-export-plan.json",
       "targets": [],
-      "why": "Nix interop record — CLI only."
+      "why": "Nix interop record \u2014 CLI only."
     },
     {
       "file": "nix-export-section.json",
       "targets": [],
-      "why": "Nix interop record — CLI only."
+      "why": "Nix interop record \u2014 CLI only."
     },
     {
       "file": "oci-adapter-record.json",
       "targets": [],
-      "why": "OCI interop record — CLI and servers only."
+      "why": "OCI interop record \u2014 CLI and servers only."
+    },
+    {
+      "file": "org-keys-request.json",
+      "targets": [],
+      "why": "Key enrollment body \u2014 an authenticated publisher operation issued by zed-cli, never by a browser."
+    },
+    {
+      "file": "org-keys-response.json",
+      "targets": [
+        "dart",
+        "ts"
+      ],
+      "why": "Public read of an org's signing keys; same consumers as publisher-keys-v1."
     },
     {
       "file": "package-list-response.json",
@@ -171,7 +208,7 @@
         "dart",
         "ts"
       ],
-      "why": "GET /packages/{org}/{name} — the package detail page."
+      "why": "GET /packages/{org}/{name} \u2014 the package detail page."
     },
     {
       "file": "publish-meta.json",
@@ -185,6 +222,14 @@
         "ts"
       ],
       "why": "Shown after a UI-driven or extension-driven publish."
+    },
+    {
+      "file": "publisher-keys-v1.json",
+      "targets": [
+        "dart",
+        "ts"
+      ],
+      "why": "An org's Ed25519 public keys, read from the public /v1/orgs/{org}/keys route. A client verifying mirror-served metadata needs them, and they are public by design."
     },
     {
       "file": "registry-archive-manifest-v1.json",
@@ -262,6 +307,22 @@
       "why": "Semantic search results, incl. per-hit scores the UI displays."
     },
     {
+      "file": "signed-index-v1.json",
+      "targets": [
+        "dart",
+        "ts"
+      ],
+      "why": "Publisher-signed package version index, the mirror-served equivalent of the package-metadata response."
+    },
+    {
+      "file": "signed-version-v1.json",
+      "targets": [
+        "dart",
+        "ts"
+      ],
+      "why": "Publisher-signed version metadata as a mirror serves it; any client that resolves against a mirror verifies this document itself rather than trusting the transport."
+    },
+    {
       "file": "sync-change-event.json",
       "targets": [
         "dart",
@@ -299,7 +360,7 @@
         "dart",
         "ts"
       ],
-      "why": "GET /packages/{org}/{name}/{version} — the version detail page."
+      "why": "GET /packages/{org}/{name}/{version} \u2014 the version detail page."
     },
     {
       "file": "yank-request.json",

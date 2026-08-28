@@ -634,6 +634,14 @@ fn main() {
     write::<zed_interfaces::registry::AuditLogResponse>(dir, "audit-log-response");
     write::<zed_interfaces::registry::AuditIntegrityResponse>(dir, "audit-integrity-response");
     write::<zed_interfaces::registry::ApiError>(dir, "api-error");
+    write::<zed_interfaces::MirrorDescriptorV1>(dir, "mirror-descriptor-v1");
+    write::<zed_interfaces::MirrorBootstrapV1>(dir, "mirror-bootstrap-v1");
+    write::<zed_interfaces::PublisherKeySetV1>(dir, "publisher-keys-v1");
+    write::<zed_interfaces::SignedVersionV1>(dir, "signed-version-v1");
+    write::<zed_interfaces::SignedIndexV1>(dir, "signed-index-v1");
+    write::<zed_interfaces::registry::OrgKeysRequest>(dir, "org-keys-request");
+    write::<zed_interfaces::registry::OrgKeysResponse>(dir, "org-keys-response");
+    write::<zed_interfaces::registry::MirrorsResponse>(dir, "mirrors-response");
 
     // Registry protocol v1 trust, static-read, archive, and publish contracts.
     write::<zed_interfaces::RegistryDiscoveryV1>(dir, "registry-discovery-v1");

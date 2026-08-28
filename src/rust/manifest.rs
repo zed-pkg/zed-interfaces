@@ -4,8 +4,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::language::{Ecosystem, Language};
+use crate::mirror::{MAX_MIRRORS, MirrorDescriptorV1, normalize_mirrors};
 use crate::native_host::{NativeHost, ReleaseChannel, UniversalHost};
 use crate::nix::NixExportSection;
+use crate::signing::{MAX_KEYS_PER_ORG, PublisherKeyV1};
 use crate::vcs::Vcs;
 use crate::version::{Requirement, VersionScheme};
 
@@ -93,6 +95,23 @@ pub struct Manifest {
     pub bin: BTreeMap<String, String>,
     #[serde(default)]
     pub publish: PublishSection,
+    /// Where this package's artifacts can be fetched when the canonical
+    /// registry cannot answer, in try order.
+    ///
+    /// Declaring nothing is the normal case and still yields a mirror: publish
+    /// derives a `github-release` route from `[package.repository]`, because a
+    /// package that already anchors provenance to a tag on a forge is one
+    /// upload away from that forge being a complete artifact source. Declare
+    /// entries here to add a CDN, point at a dedicated artifacts repository,
+    /// or describe a bucket whose layout is not the default.
+    ///
+    /// Canonical TOML spelling is repeated `[[mirror]]` tables.
+    #[serde(default, rename = "mirror", skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<MirrorDescriptorV1>,
+    /// Publisher signing keys, so a consumer can verify metadata served by a
+    /// mirror without the registry being reachable.
+    #[serde(default, skip_serializing_if = "SigningSection::is_empty")]
+    pub signing: SigningSection,
     #[serde(default)]
     pub scripts: ScriptsSection,
     /// Where zed materializes the (few, hand-picked) dependencies it sources —
@@ -224,6 +243,88 @@ impl Default for PublishSection {
             native: None,
             nix: None,
         }
+    }
+}
+
+/// Publisher signing keys as declared by the package itself.
+///
+/// The registry also serves these keys, and a consumer pins the key that
+/// actually signed on first use. Three independent copies is the point: a
+/// trust anchor reachable only through the service you are routing around is
+/// not a trust anchor. The manifest copy is the one that travels with the
+/// source, so a consumer who has only the Git repository still has everything
+/// needed to verify what the mirrors serve.
+///
+/// Only public halves ever appear here. The private key lives outside the
+/// repository and is never read by any code in this crate.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SigningSection {
+    /// Which enrolled key signs this package's publications. Defaults to the
+    /// single `active` key when exactly one is declared.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_id: Option<String>,
+    /// Enrolled public keys. Canonical TOML spelling is repeated
+    /// `[[signing.key]]` tables.
+    #[serde(rename = "key", skip_serializing_if = "Vec::is_empty")]
+    pub keys: Vec<PublisherKeyV1>,
+}
+
+impl SigningSection {
+    pub fn is_empty(&self) -> bool {
+        self.key_id.is_none() && self.keys.is_empty()
+    }
+
+    /// The key that should sign, resolved from `key_id` or from a unique
+    /// active key. Ambiguity is an error rather than a guess: signing with the
+    /// wrong key of two produces a document that verifies for nobody.
+    pub fn signing_key(&self) -> Result<Option<&PublisherKeyV1>, ManifestError> {
+        use crate::signing::PublisherKeyStateV1;
+        if let Some(key_id) = self.key_id.as_deref() {
+            return self
+                .keys
+                .iter()
+                .find(|key| key.key_id == key_id)
+                .map(Some)
+                .ok_or_else(|| {
+                    ManifestError::InvalidSigning(format!(
+                        "`signing.key_id = \"{key_id}\"` names no declared `[[signing.key]]`"
+                    ))
+                });
+        }
+        let mut active = self
+            .keys
+            .iter()
+            .filter(|key| key.state == PublisherKeyStateV1::Active);
+        match (active.next(), active.next()) {
+            (None, _) => Ok(None),
+            (Some(key), None) => Ok(Some(key)),
+            (Some(_), Some(_)) => Err(ManifestError::InvalidSigning(
+                "several active signing keys are declared; set `signing.key_id` to name the one that signs"
+                    .to_string(),
+            )),
+        }
+    }
+
+    fn validate(&self) -> Result<(), ManifestError> {
+        if self.keys.len() > MAX_KEYS_PER_ORG {
+            return Err(ManifestError::InvalidSigning(format!(
+                "at most {MAX_KEYS_PER_ORG} signing keys may be declared, got {}",
+                self.keys.len()
+            )));
+        }
+        let mut seen = BTreeSet::new();
+        for key in &self.keys {
+            key.validate()
+                .map_err(|error| ManifestError::InvalidSigning(error.to_string()))?;
+            if !seen.insert(key.key_id.as_str()) {
+                return Err(ManifestError::InvalidSigning(format!(
+                    "duplicate signing key id `{}`",
+                    key.key_id
+                )));
+            }
+        }
+        self.signing_key().map(|_| ())
     }
 }
 
@@ -1091,6 +1192,10 @@ pub enum ManifestError {
     InvalidNativeRoute(String, String),
     #[error("invalid Nix export route for target `{0}`: {1}")]
     InvalidNixRoute(String, String),
+    #[error("invalid mirror declaration: {0}")]
+    InvalidMirror(String),
+    #[error("invalid signing declaration: {0}")]
+    InvalidSigning(String),
     #[error("manifest toml error: {0}")]
     Toml(String),
 }
@@ -1290,6 +1395,50 @@ impl Manifest {
         toml::to_string_pretty(self).map_err(|e| ManifestError::Toml(e.to_string()))
     }
 
+    /// The mirror set as it should be published: declared entries with the
+    /// package's own repository and tag format filled in, plus the implicit
+    /// `github-release` route when the repository is on a forge that serves
+    /// release assets and the manifest has not already named one.
+    ///
+    /// Resolving here rather than at read time means what lands in the
+    /// registry, in a signed attestation, and in a consumer's lockfile is
+    /// always the complete form — a consumer never needs the publisher's
+    /// manifest to interpret a mirror.
+    pub fn resolved_mirrors(&self) -> Result<Vec<MirrorDescriptorV1>, ManifestError> {
+        let repository = self.package.repository.url.as_str();
+        let tag_format = self.publish.tag_format.as_str();
+        let mut mirrors: Vec<MirrorDescriptorV1> = self
+            .mirrors
+            .iter()
+            .cloned()
+            .map(|mirror| mirror.with_package_defaults(repository, tag_format))
+            .collect();
+
+        let declares_own_repo = mirrors.iter().any(|mirror| {
+            mirror
+                .repository
+                .as_deref()
+                .zip(Some(repository))
+                .and_then(|(declared, own)| {
+                    let declared = crate::mirror::parse_repo_ref(declared).ok()?;
+                    let own = crate::mirror::parse_repo_ref(own).ok()?;
+                    Some(declared == own)
+                })
+                .unwrap_or(false)
+        });
+        if !declares_own_repo
+            && crate::mirror::parse_repo_ref(repository).is_ok()
+            && mirrors.len() < MAX_MIRRORS
+        {
+            mirrors.push(
+                MirrorDescriptorV1::github_release_of(repository)
+                    .with_package_defaults(repository, tag_format),
+            );
+        }
+
+        normalize_mirrors(&mirrors).map_err(|error| ManifestError::InvalidMirror(error.to_string()))
+    }
+
     pub fn validate(&self) -> Result<(), ManifestError> {
         if !is_slug(&self.package.org) {
             return Err(ManifestError::InvalidOrg(self.package.org.clone()));
@@ -1307,6 +1456,9 @@ impl Manifest {
                 "expected an https/http/ssh/git URL or scp-like git syntax".to_string(),
             ));
         }
+        normalize_mirrors(&self.mirrors)
+            .map_err(|error| ManifestError::InvalidMirror(error.to_string()))?;
+        self.signing.validate()?;
         for (key, req) in self.dependencies.iter().chain(&self.build_dependencies) {
             if !is_dependency_key(key) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));

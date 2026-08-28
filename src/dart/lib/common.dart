@@ -2,6 +2,29 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: types shared by more than one schema
 
+/// On-the-wire formats for published package artifacts.
+enum ArtifactFormat {
+  tarGz('tar.gz'),
+  zip('zip');
+
+  const ArtifactFormat(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static ArtifactFormat fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown ArtifactFormat: $value'),
+  );
+
+  static ArtifactFormat? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
 /// Binary artifacts use ZIP exclusively in v1. ZIP is portable to Windows, preserves POSIX
 /// executable bits when present, and supports safe central- directory inspection before
 /// extraction.
@@ -264,6 +287,235 @@ class BinarySourceProvenanceV1 {
   };
 }
 
+/// A signature over a document, carried beside it rather than inside it. Detached because
+/// the signed bytes must be reproducible: embedding the signature in the document it signs
+/// forces a "remove this field first" rule, and every such rule is a place where a signer
+/// and a verifier can disagree.
+class DetachedSignatureV1 {
+  const DetachedSignatureV1({
+    required this.algorithm,
+    required this.keyId,
+    required this.signature,
+  });
+
+  factory DetachedSignatureV1.fromJson(Map<String, dynamic> json) => DetachedSignatureV1(
+    algorithm: json['algorithm'] as String,
+    keyId: json['key_id'] as String,
+    signature: json['signature'] as String,
+  );
+
+  final String algorithm;
+
+  final String keyId;
+
+  /// Unpadded base64url of the raw 64-byte signature.
+  final String signature;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'algorithm': algorithm,
+    'key_id': keyId,
+    'signature': signature,
+  };
+}
+
+/// One place a package's artifacts and/or metadata can be fetched from. Authors write the
+/// shortest form that identifies the mirror and the derived defaults fill in the rest — a
+/// `github-release` mirror with no fields at all means "the release assets on my own
+/// `[package.repository]`".
+class MirrorDescriptorV1 {
+  const MirrorDescriptorV1({
+    this.alternateUrls,
+    this.artifactTemplate,
+    this.assetPrefix,
+    this.branch,
+    this.id,
+    this.indexTag,
+    this.indexTemplate,
+    required this.kind,
+    this.path,
+    this.priority,
+    this.repository,
+    this.serves,
+    this.tagTemplate,
+    this.url,
+    this.versionTemplate,
+  });
+
+  factory MirrorDescriptorV1.fromJson(Map<String, dynamic> json) => MirrorDescriptorV1(
+    alternateUrls: (json['alternate_urls'] as List<dynamic>?)?.map((e) => e as String).toList(),
+    artifactTemplate: json['artifact_template'] as String?,
+    assetPrefix: json['asset_prefix'] as String?,
+    branch: json['branch'] as String?,
+    id: json['id'] as String?,
+    indexTag: json['index_tag'] as String?,
+    indexTemplate: json['index_template'] as String?,
+    kind: MirrorKindV1.fromJson(json['kind'] as String),
+    path: json['path'] as String?,
+    priority: (json['priority'] as num?)?.toInt(),
+    repository: json['repository'] as String?,
+    serves: json['serves'] == null ? null : MirrorServesV1.fromJson(json['serves'] as Map<String, dynamic>),
+    tagTemplate: json['tag_template'] as String?,
+    url: json['url'] as String?,
+    versionTemplate: json['version_template'] as String?,
+  );
+
+  /// Additional base URLs serving byte-identical content at a different hostname. This is the
+  /// field that survives a zone-level outage. `cdn.zpkg.net` and a `workers.dev` hostname
+  /// front the same bucket, but they fail independently, because the second does not resolve
+  /// through the `zpkg.net` zone at all. A client tries every base URL of a mirror before
+  /// moving to the next mirror.
+  final List<String>? alternateUrls;
+
+  /// Artifact key template. Only for a store whose layout is not
+  /// [`DEFAULT_ARTIFACT_TEMPLATE`] — a sharded bucket, or one where zed's objects live under
+  /// a prefix shared with other tooling.
+  final String? artifactTemplate;
+
+  /// Prefix on zed-owned release asset names. Defaults to [`DEFAULT_ASSET_PREFIX`].
+  final String? assetPrefix;
+
+  /// Branch of a raw-served mirror tree. Defaults to [`DEFAULT_RAW_BRANCH`].
+  final String? branch;
+
+  /// Stable identifier, used in diagnostics and to deduplicate a merged mirror set. Derived
+  /// from the kind and host when absent.
+  final String? id;
+
+  /// Tag of the rolling release carrying package indexes. Defaults to [`DEFAULT_INDEX_TAG`].
+  final String? indexTag;
+
+  /// Package-index key template; see [`DEFAULT_INDEX_TEMPLATE`].
+  final String? indexTemplate;
+
+  final MirrorKindV1 kind;
+
+  /// Absolute local path, for `directory` mirrors.
+  final String? path;
+
+  /// Ascending try order. Ties break on `id` so ordering is total and a merged set from
+  /// several sources is deterministic.
+  final int? priority;
+
+  /// Source repository, for the forge kinds. Accepts the same spellings as
+  /// `[package.repository].url`, including scp-style `git@host:owner/repo`. Defaults to the
+  /// package's own declared repository.
+  final String? repository;
+
+  final MirrorServesV1? serves;
+
+  /// Release tag carrying this version's assets. Defaults to the package's
+  /// `[publish].tag_format`, so mirrored artifacts hang off the exact tag zed already
+  /// verifies for provenance.
+  final String? tagTemplate;
+
+  /// Base URL. Required for `object-store` and `zed-registry`; optional for the forge kinds,
+  /// where it overrides the host derived from `repository` (a Pages origin, or a CDN in front
+  /// of raw content).
+  final String? url;
+
+  /// Version-metadata key template; see [`DEFAULT_VERSION_TEMPLATE`].
+  final String? versionTemplate;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'alternate_urls': alternateUrls,
+    'artifact_template': artifactTemplate,
+    'asset_prefix': assetPrefix,
+    'branch': branch,
+    'id': id,
+    'index_tag': indexTag,
+    'index_template': indexTemplate,
+    'kind': kind.toJson(),
+    'path': path,
+    'priority': priority,
+    'repository': repository,
+    'serves': serves?.toJson(),
+    'tag_template': tagTemplate,
+    'url': url,
+    'version_template': versionTemplate,
+  };
+}
+
+/// Transport family of a mirror. Each kind implies a URL derivation and a set of fields
+/// that are meaningful; [`MirrorDescriptorV1::validate`] rejects fields belonging to a
+/// different kind rather than ignoring them, so a misplaced key is a loud error instead of
+/// a mirror that silently never resolves.
+enum MirrorKindV1 {
+  /// Another `zed-api-server`, spoken to with the ordinary registry API.
+  zedRegistry('zed-registry'),
+  /// A content-addressed HTTP object store or CDN in front of one (R2, S3, MinIO). Public
+  /// read, no credential, no presign: the sha256 in the path is both the address and the
+  /// integrity check.
+  objectStore('object-store'),
+  /// Release assets on a Git forge that serves them at a public, predictable path. Named for
+  /// GitHub because that is the deployment that matters, but GitHub Enterprise, Gitea, and
+  /// Forgejo use the same route shape.
+  githubRelease('github-release'),
+  /// A branch or Pages site served as raw files. Cheap and cacheable, which makes it the best
+  /// index transport; poor for artifact bytes, which is why `serves.artifacts` defaults off
+  /// for this kind.
+  githubRaw('github-raw'),
+  /// A local directory in `file://` registry layout — an air-gapped mirror, a warmed CI
+  /// cache, or a Nix store input.
+  directory('directory');
+
+  const MirrorKindV1(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static MirrorKindV1 fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown MirrorKindV1: $value'),
+  );
+
+  static MirrorKindV1? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
+/// What a mirror is able to serve. Artifact bytes are self-verifying against the lockfile
+/// pin. Metadata and indexes are not, so a mirror that advertises them is asserting that it
+/// carries publisher signatures; a client that cannot verify one must treat the answer as
+/// absent rather than as trusted.
+class MirrorServesV1 {
+  const MirrorServesV1({
+    this.artifacts = true,
+    this.index = true,
+    this.metadata = true,
+  });
+
+  factory MirrorServesV1.fromJson(Map<String, dynamic> json) => MirrorServesV1(
+    artifacts: json['artifacts'] == null
+        ? true
+        : json['artifacts'] as bool,
+    index: json['index'] == null
+        ? true
+        : json['index'] as bool,
+    metadata: json['metadata'] == null
+        ? true
+        : json['metadata'] as bool,
+  );
+
+  /// Artifact archives, addressed by sha256.
+  final bool artifacts;
+
+  /// Signed package-level version indexes (what makes range resolution possible while the
+  /// registry is unreachable).
+  final bool index;
+
+  /// Signed per-version metadata documents.
+  final bool metadata;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'artifacts': artifacts,
+    'index': index,
+    'metadata': metadata,
+  };
+}
+
 class PackageSummary {
   const PackageSummary({
     this.description,
@@ -298,6 +550,87 @@ class PackageSummary {
     'name': name,
     'org': org,
     'tags': tags,
+  };
+}
+
+/// Lifecycle of a publisher key. Rotation is additive: a new key is enrolled `active` while
+/// the old one moves to `retired`. Retired keys still verify — revoking them would break
+/// every already-signed historical version, which is the opposite of what rotation is for.
+/// Compromise is expressed by `revoked`, which invalidates past signatures too and is
+/// deliberately a separate, louder state.
+enum PublisherKeyStateV1 {
+  /// Signs new publications and verifies everything.
+  active('active'),
+  /// No longer signs; still verifies historical signatures.
+  retired('retired'),
+  /// Compromised. Verification must fail, including for versions published before the
+  /// revocation.
+  revoked('revoked');
+
+  const PublisherKeyStateV1(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static PublisherKeyStateV1 fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown PublisherKeyStateV1: $value'),
+  );
+
+  static PublisherKeyStateV1? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
+/// One publisher signing key.
+class PublisherKeyV1 {
+  const PublisherKeyV1({
+    required this.algorithm,
+    this.enrolledAt,
+    required this.keyId,
+    required this.publicKeyMultibase,
+    this.revokedReason,
+    required this.state,
+  });
+
+  factory PublisherKeyV1.fromJson(Map<String, dynamic> json) => PublisherKeyV1(
+    algorithm: json['algorithm'] as String,
+    enrolledAt: json['enrolled_at'] as String?,
+    keyId: json['key_id'] as String,
+    publicKeyMultibase: json['public_key_multibase'] as String,
+    revokedReason: json['revoked_reason'] as String?,
+    state: PublisherKeyStateV1.fromJson(json['state'] as String),
+  );
+
+  /// Always `ed25519` in v1.
+  final String algorithm;
+
+  /// RFC 3339 timestamp the key was enrolled.
+  final String? enrolledAt;
+
+  /// Short stable label, unique within the org. Names the key in diagnostics and lets a
+  /// signature say which key made it without carrying the key itself.
+  final String keyId;
+
+  /// Multibase base58btc, `z`-prefixed.
+  final String publicKeyMultibase;
+
+  /// Why the key was revoked. Present only for `revoked` keys, so an operator reading a
+  /// failed verification learns the reason from the same document that caused the failure.
+  final String? revokedReason;
+
+  final PublisherKeyStateV1 state;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'algorithm': algorithm,
+    'enrolled_at': enrolledAt,
+    'key_id': keyId,
+    'public_key_multibase': publicKeyMultibase,
+    'revoked_reason': revokedReason,
+    'state': state.toJson(),
   };
 }
 

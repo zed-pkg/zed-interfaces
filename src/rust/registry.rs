@@ -8,6 +8,11 @@ use serde::{Deserialize, Serialize};
 use crate::artifact::ArtifactFormat;
 use crate::binary_artifact::BinaryArchiveFormatV1;
 use crate::manifest::Manifest;
+use crate::mirror::MirrorDescriptorV1;
+use crate::signing::{
+    DetachedSignatureV1, IndexAttestationV1, PublisherKeyV1, SIGNED_VERSION_SCHEMA_V1,
+    SignedVersionV1, SigningError, VersionAttestationV1,
+};
 use crate::vcs::Vcs;
 
 /// Default public registry (production host: zpkg.net). Override with
@@ -120,6 +125,33 @@ pub fn audit_verify_path(org: &str) -> String {
     format!("{API_V1}/orgs/{org}/audit/verify")
 }
 
+/// `GET` — an org's publisher signing keys (public halves only).
+/// `PUT` (bearer token, org `owner`) — enroll, retire, or revoke a key.
+///
+/// Anonymous read on purpose. These keys are the thing a client needs in order
+/// to *stop* trusting the registry for metadata, so gating them behind a
+/// credential would defeat the mechanism they exist for.
+pub fn org_keys_path(org: &str) -> String {
+    format!("{API_V1}/orgs/{org}/keys")
+}
+
+/// `GET` — the mirror set this registry advertises for its own contents.
+///
+/// Also served at [`crate::mirror::MIRROR_BOOTSTRAP_PATH`], which is where a
+/// client looks when the registry is the thing that is down.
+pub fn mirrors_path() -> String {
+    format!("{API_V1}/mirrors")
+}
+
+/// `GET` — a package's signed version index, as mirrors serve it.
+///
+/// The same document a client would fetch from a bucket or a forge, served by
+/// the registry too, so a client verifies one shape everywhere and switching
+/// transports changes nothing about how the answer is checked.
+pub fn signed_index_path(org: &str, name: &str) -> String {
+    format!("{API_V1}/packages/{org}/{name}/signed-index")
+}
+
 /// `GET` — liveness probe.
 pub fn healthz_path() -> String {
     "/healthz".to_string()
@@ -159,6 +191,15 @@ pub struct PackageMetadata {
     pub tags: Vec<String>,
     /// All published, non-yanked versions, newest first.
     pub versions: Vec<String>,
+    /// Where this package's artifacts and metadata can be fetched when this
+    /// registry cannot answer, in try order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<MirrorDescriptorV1>,
+    /// The org's publisher signing keys, inlined so a client that resolves a
+    /// package also learns how to verify a mirror's answer next time — without
+    /// a second round trip it may not get to make.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signing_keys: Vec<PublisherKeyV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -175,10 +216,65 @@ pub struct VersionMetadata {
     pub vcs_commit: Option<String>,
     /// Absolute or registry-relative URL the artifact can be fetched from.
     pub download_url: String,
-    /// RFC 3339 timestamp.
+    /// RFC 3339 timestamp, asserted by the publisher and echoed verbatim.
+    ///
+    /// Verbatim matters: it is covered by [`Self::signatures`], so a registry
+    /// that "helpfully" normalized it would invalidate every signature it
+    /// serves.
     pub published_at: String,
     #[serde(default)]
     pub yanked: bool,
+    /// Where these exact bytes can be fetched, in try order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<MirrorDescriptorV1>,
+    /// Publisher signatures over [`Self::attestation`].
+    ///
+    /// Absent for versions published before signing, and for publishers who
+    /// have not enrolled a key. Absence degrades cleanly: such a package still
+    /// installs from any mirror against a lockfile pin, and only loses the
+    /// ability to have its *ranges* resolved while the registry is down.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signatures: Vec<DetachedSignatureV1>,
+}
+
+impl VersionMetadata {
+    /// Rebuild the signed document from the wire fields.
+    ///
+    /// Reconstruction rather than transport: sending the attestation alongside
+    /// the fields it duplicates invites the two to disagree, and a verifier
+    /// then has to pick one. Deriving it in shared code means the server, the
+    /// CLI, and every SDK produce the same bytes by construction.
+    pub fn attestation(&self) -> VersionAttestationV1 {
+        VersionAttestationV1 {
+            org: self.org.clone(),
+            name: self.name.clone(),
+            version: self.version.clone(),
+            sha256: self.sha256.clone(),
+            size: self.size,
+            format: self.format,
+            vcs_tag: self.vcs_tag.clone(),
+            vcs_commit: self.vcs_commit.clone().unwrap_or_default(),
+            published_at: self.published_at.clone(),
+            mirrors: self.mirrors.clone(),
+        }
+    }
+
+    /// The signed document a mirror would serve for this version.
+    pub fn signed_version(&self) -> Option<SignedVersionV1> {
+        if self.signatures.is_empty() {
+            return None;
+        }
+        Some(SignedVersionV1 {
+            schema: SIGNED_VERSION_SCHEMA_V1.to_owned(),
+            payload: self.attestation(),
+            signatures: self.signatures.clone(),
+        })
+    }
+
+    /// The exact bytes [`Self::signatures`] cover.
+    pub fn signing_preimage(&self) -> Result<Vec<u8>, SigningError> {
+        crate::signing::version_attestation_preimage(&self.attestation())
+    }
 }
 
 /// JSON half of the multipart publish request; the artifact bytes travel in
@@ -196,6 +292,56 @@ pub struct PublishMeta {
     pub size: u64,
     #[serde(default)]
     pub format: ArtifactFormat,
+    /// Fully-resolved mirror set for this version. The server stores it and
+    /// serves it back; it never derives one, because deriving it would mean
+    /// re-reading the publisher's manifest at a time when the manifest may
+    /// have moved on.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<MirrorDescriptorV1>,
+    /// RFC 3339 publication timestamp asserted by the publisher.
+    ///
+    /// Publisher-assigned rather than server-assigned because it is inside the
+    /// signed payload: a signature can only cover fields its signer knows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_at: Option<String>,
+    /// Publisher signatures over the reconstructed attestation. The server
+    /// verifies them against the org's enrolled keys before accepting, so an
+    /// unverifiable signature fails the publish rather than becoming a
+    /// permanent record nobody can check.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signatures: Vec<DetachedSignatureV1>,
+}
+
+/// Body of `PUT /v1/orgs/{org}/keys` — enroll, retire, or revoke a key.
+///
+/// The whole set is submitted, never a delta: a client that can only add keys
+/// cannot express a revocation, and a client that can only remove them leaves
+/// no record of why.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct OrgKeysRequest {
+    pub keys: Vec<PublisherKeyV1>,
+}
+
+/// Response for `GET /v1/orgs/{org}/keys`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct OrgKeysResponse {
+    pub org: String,
+    pub keys: Vec<PublisherKeyV1>,
+}
+
+/// Response for `GET /v1/mirrors` and the well-known bootstrap path.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MirrorsResponse {
+    pub registry_url: String,
+    pub mirrors: Vec<MirrorDescriptorV1>,
+}
+
+/// Response for `GET /v1/packages/{org}/{name}/signed-index`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SignedIndexResponse {
+    pub schema: String,
+    pub payload: IndexAttestationV1,
+    pub signatures: Vec<DetachedSignatureV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

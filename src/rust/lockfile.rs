@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::artifact::ArtifactFormat;
 use crate::manifest::is_slug;
+use crate::mirror::{MirrorDescriptorV1, normalize_mirrors};
 use crate::native_dependency::NativeDependencyLock;
 use crate::native_registry::NativeRegistry;
 use crate::nix::NixAdapterRecord;
@@ -81,6 +82,42 @@ pub struct LockedPackage {
     /// Base URL of the registry the artifact was resolved from.
     #[schemars(length(min = 1))]
     pub source: String,
+    /// Every other place these exact bytes can be fetched, in try order,
+    /// captured at resolution time.
+    ///
+    /// The lockfile is the only artifact of resolution that survives into an
+    /// air-gapped or outage-time install, so the fallback routes have to live
+    /// here. A consumer whose registry is unreachable does not get to ask the
+    /// registry where else to look, and cannot read the publisher's manifest
+    /// either — it was never fetched.
+    ///
+    /// Safe to trust because it is not trusted: every route still has to
+    /// produce bytes hashing to `sha256`. The list decides where to *look*,
+    /// never what is acceptable.
+    #[serde(default, rename = "mirror", skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<MirrorDescriptorV1>,
+    /// The publisher key that signed the metadata this entry was resolved
+    /// from, pinned on first use.
+    ///
+    /// Trust-on-first-use, and deliberately so: the first resolution happened
+    /// against the canonical registry over TLS, and pinning what signed it
+    /// means every later resolution — including one served by a mirror during
+    /// an outage — must be signed by the same key. A mirror that swaps in a
+    /// different signer is then a lockfile diff a human reviews, not a silent
+    /// substitution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(length(min = 1, max = 64), regex(pattern = r"^[a-z0-9][a-z0-9._-]*$"))]
+    pub signed_by: Option<String>,
+    /// Multibase base58btc public half of `signed_by`, pinned alongside it.
+    ///
+    /// The key id alone would let whoever answers next choose the key it
+    /// names. Pinning the bytes is what makes the pin mean anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(
+        length(min = 8, max = 128),
+        regex(pattern = r"^z[1-9A-HJ-NP-Za-km-z]+$")
+    )]
+    pub signing_key: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -285,6 +322,32 @@ impl Lockfile {
             if package.source.trim().is_empty() {
                 return invalid_package(&label, "source must not be empty");
             }
+            if let Err(error) = normalize_mirrors(&package.mirrors) {
+                return invalid_package(&label, &error.to_string());
+            }
+            // A key id without its bytes is a name an attacker gets to
+            // resolve; bytes without a name cannot be matched to a signature.
+            // Neither half is meaningful alone, so require both or neither.
+            match (package.signed_by.as_deref(), package.signing_key.as_deref()) {
+                (None, None) => {}
+                (Some(_), Some(key)) => {
+                    if crate::signing::decode_multibase_base58btc(key)
+                        .map(|bytes| bytes.len() != crate::signing::ED25519_PUBLIC_KEY_BYTES)
+                        .unwrap_or(true)
+                    {
+                        return invalid_package(
+                            &label,
+                            "signing_key must be a multibase base58btc Ed25519 public key",
+                        );
+                    }
+                }
+                _ => {
+                    return invalid_package(
+                        &label,
+                        "signed_by and signing_key must be present together; a pinned key id without its public bytes pins nothing",
+                    );
+                }
+            }
         }
         Ok(())
     }
@@ -325,6 +388,33 @@ impl Lockfile {
 impl LockedPackage {
     pub fn full_name(&self) -> String {
         format!("{}/{}", self.org, self.name)
+    }
+
+    /// The coordinates a mirror derives URLs from.
+    pub fn mirror_coordinate(&self) -> crate::mirror::MirrorCoordinateV1<'_> {
+        crate::mirror::MirrorCoordinateV1 {
+            org: &self.org,
+            name: &self.name,
+            version: &self.version,
+            sha256: &self.sha256,
+            format: self.format,
+            vcs_tag: &self.vcs_tag,
+        }
+    }
+
+    /// The pinned publisher key, if this entry was resolved from signed
+    /// metadata.
+    pub fn pinned_key(&self) -> Option<crate::signing::PublisherKeyV1> {
+        let key_id = self.signed_by.as_deref()?;
+        let public_key_multibase = self.signing_key.as_deref()?;
+        Some(crate::signing::PublisherKeyV1 {
+            key_id: key_id.to_owned(),
+            algorithm: crate::signing::SIGNING_ALGORITHM.to_owned(),
+            public_key_multibase: public_key_multibase.to_owned(),
+            state: crate::signing::PublisherKeyStateV1::Active,
+            enrolled_at: None,
+            revoked_reason: None,
+        })
     }
 }
 
@@ -471,6 +561,9 @@ source = "file:///tmp/registry"
             vcs_tag: "v1.2.3".to_string(),
             vcs_commit: None,
             source: "file:///tmp/registry".to_string(),
+            mirrors: Vec::new(),
+            signed_by: None,
+            signing_key: None,
         }
     }
 

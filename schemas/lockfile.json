@@ -51,6 +51,13 @@
           "description": "Explicit archive format. A missing value must never be inferred during\na frozen install because the format is part of immutable artifact identity.",
           "$ref": "#/$defs/ArtifactFormat"
         },
+        "mirror": {
+          "description": "Every other place these exact bytes can be fetched, in try order,\ncaptured at resolution time.\n\nThe lockfile is the only artifact of resolution that survives into an\nair-gapped or outage-time install, so the fallback routes have to live\nhere. A consumer whose registry is unreachable does not get to ask the\nregistry where else to look, and cannot read the publisher's manifest\neither — it was never fetched.\n\nSafe to trust because it is not trusted: every route still has to\nproduce bytes hashing to `sha256`. The list decides where to *look*,\nnever what is acceptable.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MirrorDescriptorV1"
+          }
+        },
         "name": {
           "type": "string",
           "minLength": 1,
@@ -67,6 +74,26 @@
           "maxLength": 64,
           "minLength": 64,
           "pattern": "^[0-9a-f]{64}$"
+        },
+        "signed_by": {
+          "description": "The publisher key that signed the metadata this entry was resolved\nfrom, pinned on first use.\n\nTrust-on-first-use, and deliberately so: the first resolution happened\nagainst the canonical registry over TLS, and pinning what signed it\nmeans every later resolution — including one served by a mirror during\nan outage — must be signed by the same key. A mirror that swaps in a\ndifferent signer is then a lockfile diff a human reviews, not a silent\nsubstitution.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "signing_key": {
+          "description": "Multibase base58btc public half of `signed_by`, pinned alongside it.\n\nThe key id alone would let whoever answers next choose the key it\nnames. Pinning the bytes is what makes the pin mean anything.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128,
+          "minLength": 8,
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$"
         },
         "size": {
           "description": "Artifact size in bytes. Zero-byte package artifacts are invalid.",
@@ -107,6 +134,165 @@
         "vcs_commit",
         "source"
       ]
+    },
+    "MirrorDescriptorV1": {
+      "description": "One place a package's artifacts and/or metadata can be fetched from.\n\nAuthors write the shortest form that identifies the mirror and the derived\ndefaults fill in the rest — a `github-release` mirror with no fields at all\nmeans \"the release assets on my own `[package.repository]`\".",
+      "type": "object",
+      "properties": {
+        "alternate_urls": {
+          "description": "Additional base URLs serving byte-identical content at a different\nhostname.\n\nThis is the field that survives a zone-level outage. `cdn.zpkg.net` and\na `workers.dev` hostname front the same bucket, but they fail\nindependently, because the second does not resolve through the\n`zpkg.net` zone at all. A client tries every base URL of a mirror\nbefore moving to the next mirror.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "artifact_template": {
+          "description": "Artifact key template. Only for a store whose layout is not\n[`DEFAULT_ARTIFACT_TEMPLATE`] — a sharded bucket, or one where zed's\nobjects live under a prefix shared with other tooling.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "asset_prefix": {
+          "description": "Prefix on zed-owned release asset names. Defaults to [`DEFAULT_ASSET_PREFIX`].",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch": {
+          "description": "Branch of a raw-served mirror tree. Defaults to [`DEFAULT_RAW_BRANCH`].",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Stable identifier, used in diagnostics and to deduplicate a merged\nmirror set. Derived from the kind and host when absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index_tag": {
+          "description": "Tag of the rolling release carrying package indexes. Defaults to\n[`DEFAULT_INDEX_TAG`].",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index_template": {
+          "description": "Package-index key template; see [`DEFAULT_INDEX_TEMPLATE`].",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/MirrorKindV1"
+        },
+        "path": {
+          "description": "Absolute local path, for `directory` mirrors.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "description": "Ascending try order. Ties break on `id` so ordering is total and a\nmerged set from several sources is deterministic.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "repository": {
+          "description": "Source repository, for the forge kinds. Accepts the same spellings as\n`[package.repository].url`, including scp-style `git@host:owner/repo`.\nDefaults to the package's own declared repository.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serves": {
+          "$ref": "#/$defs/MirrorServesV1"
+        },
+        "tag_template": {
+          "description": "Release tag carrying this version's assets. Defaults to the package's\n`[publish].tag_format`, so mirrored artifacts hang off the exact tag\nzed already verifies for provenance.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "Base URL. Required for `object-store` and `zed-registry`; optional for\nthe forge kinds, where it overrides the host derived from `repository`\n(a Pages origin, or a CDN in front of raw content).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version_template": {
+          "description": "Version-metadata key template; see [`DEFAULT_VERSION_TEMPLATE`].",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "MirrorKindV1": {
+      "description": "Transport family of a mirror. Each kind implies a URL derivation and a set\nof fields that are meaningful; [`MirrorDescriptorV1::validate`] rejects\nfields belonging to a different kind rather than ignoring them, so a\nmisplaced key is a loud error instead of a mirror that silently never\nresolves.",
+      "oneOf": [
+        {
+          "description": "Another `zed-api-server`, spoken to with the ordinary registry API.",
+          "type": "string",
+          "const": "zed-registry"
+        },
+        {
+          "description": "A content-addressed HTTP object store or CDN in front of one (R2, S3,\nMinIO). Public read, no credential, no presign: the sha256 in the path\nis both the address and the integrity check.",
+          "type": "string",
+          "const": "object-store"
+        },
+        {
+          "description": "Release assets on a Git forge that serves them at a public, predictable\npath. Named for GitHub because that is the deployment that matters, but\nGitHub Enterprise, Gitea, and Forgejo use the same route shape.",
+          "type": "string",
+          "const": "github-release"
+        },
+        {
+          "description": "A branch or Pages site served as raw files. Cheap and cacheable, which\nmakes it the best index transport; poor for artifact bytes, which is\nwhy `serves.artifacts` defaults off for this kind.",
+          "type": "string",
+          "const": "github-raw"
+        },
+        {
+          "description": "A local directory in `file://` registry layout — an air-gapped mirror,\na warmed CI cache, or a Nix store input.",
+          "type": "string",
+          "const": "directory"
+        }
+      ]
+    },
+    "MirrorServesV1": {
+      "description": "What a mirror is able to serve.\n\nArtifact bytes are self-verifying against the lockfile pin. Metadata and\nindexes are not, so a mirror that advertises them is asserting that it\ncarries publisher signatures; a client that cannot verify one must treat\nthe answer as absent rather than as trusted.",
+      "type": "object",
+      "properties": {
+        "artifacts": {
+          "description": "Artifact archives, addressed by sha256.",
+          "type": "boolean",
+          "default": true
+        },
+        "index": {
+          "description": "Signed package-level version indexes (what makes range resolution\npossible while the registry is unreachable).",
+          "type": "boolean",
+          "default": true
+        },
+        "metadata": {
+          "description": "Signed per-version metadata documents.",
+          "type": "boolean",
+          "default": true
+        }
+      }
     },
     "NativeArtifact": {
       "description": "Exact immutable bytes published under one native package identity.",

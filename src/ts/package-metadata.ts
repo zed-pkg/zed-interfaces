@@ -2,12 +2,18 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/package-metadata.json
 
+import type { MirrorDescriptorV1, PublisherKeyV1 } from "./common.ts";
+
 export interface PackageMetadata {
   readonly description?: string | null;
   readonly latest?: string | null;
+  /** Where this package's artifacts and metadata can be fetched when this registry cannot answer, in try order. */
+  readonly mirrors?: readonly MirrorDescriptorV1[];
   readonly name: string;
   readonly org: string;
   readonly repo_url: string;
+  /** The org's publisher signing keys, inlined so a client that resolves a package also learns how to verify a mirror's answer next time — without a second round trip it may not get to make. */
+  readonly signing_keys?: readonly PublisherKeyV1[];
   /** Free-form tags for filtering/discovery (multi-tag lookup). */
   readonly tags?: readonly string[];
   readonly vcs: Vcs;

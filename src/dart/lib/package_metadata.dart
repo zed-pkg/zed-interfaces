@@ -2,13 +2,17 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/package-metadata.json
 
+import 'common.dart';
+
 class PackageMetadata {
   const PackageMetadata({
     this.description,
     this.latest,
+    this.mirrors,
     required this.name,
     required this.org,
     required this.repoUrl,
+    this.signingKeys,
     this.tags,
     required this.vcs,
     this.versionScheme,
@@ -18,9 +22,11 @@ class PackageMetadata {
   factory PackageMetadata.fromJson(Map<String, dynamic> json) => PackageMetadata(
     description: json['description'] as String?,
     latest: json['latest'] as String?,
+    mirrors: (json['mirrors'] as List<dynamic>?)?.map((e) => MirrorDescriptorV1.fromJson(e as Map<String, dynamic>)).toList(),
     name: json['name'] as String,
     org: json['org'] as String,
     repoUrl: json['repo_url'] as String,
+    signingKeys: (json['signing_keys'] as List<dynamic>?)?.map((e) => PublisherKeyV1.fromJson(e as Map<String, dynamic>)).toList(),
     tags: (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList(),
     vcs: Vcs.fromJson(json['vcs'] as String),
     versionScheme: VersionScheme.maybeFromJson(json['version_scheme'] as String?),
@@ -31,11 +37,20 @@ class PackageMetadata {
 
   final String? latest;
 
+  /// Where this package's artifacts and metadata can be fetched when this registry cannot
+  /// answer, in try order.
+  final List<MirrorDescriptorV1>? mirrors;
+
   final String name;
 
   final String org;
 
   final String repoUrl;
+
+  /// The org's publisher signing keys, inlined so a client that resolves a package also
+  /// learns how to verify a mirror's answer next time — without a second round trip it may
+  /// not get to make.
+  final List<PublisherKeyV1>? signingKeys;
 
   /// Free-form tags for filtering/discovery (multi-tag lookup).
   final List<String>? tags;
@@ -51,9 +66,11 @@ class PackageMetadata {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'description': description,
     'latest': latest,
+    'mirrors': mirrors?.map((e) => e.toJson()).toList(),
     'name': name,
     'org': org,
     'repo_url': repoUrl,
+    'signing_keys': signingKeys?.map((e) => e.toJson()).toList(),
     'tags': tags,
     'vcs': vcs.toJson(),
     'version_scheme': versionScheme?.toJson(),

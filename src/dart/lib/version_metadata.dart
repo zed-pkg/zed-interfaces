@@ -2,37 +2,18 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/version-metadata.json
 
-/// On-the-wire formats for published package artifacts.
-enum ArtifactFormat {
-  tarGz('tar.gz'),
-  zip('zip');
-
-  const ArtifactFormat(this.wire);
-
-  /// The value as it appears in JSON.
-  final String wire;
-
-  /// Throws [FormatException] on a value this build does not know — an
-  /// unrecognized variant is a version skew, not something to decode past.
-  static ArtifactFormat fromJson(String value) => values.firstWhere(
-    (candidate) => candidate.wire == value,
-    orElse: () => throw FormatException('unknown ArtifactFormat: $value'),
-  );
-
-  static ArtifactFormat? maybeFromJson(String? value) =>
-      value == null ? null : fromJson(value);
-
-  String toJson() => wire;
-}
+import 'common.dart';
 
 class VersionMetadata {
   const VersionMetadata({
     required this.downloadUrl,
     this.format = ArtifactFormat.tarGz,
+    this.mirrors,
     required this.name,
     required this.org,
     required this.publishedAt,
     required this.sha256,
+    this.signatures,
     required this.size,
     this.vcsCommit,
     required this.vcsTag,
@@ -45,10 +26,12 @@ class VersionMetadata {
     format: json['format'] == null
         ? ArtifactFormat.tarGz
         : ArtifactFormat.fromJson(json['format'] as String),
+    mirrors: (json['mirrors'] as List<dynamic>?)?.map((e) => MirrorDescriptorV1.fromJson(e as Map<String, dynamic>)).toList(),
     name: json['name'] as String,
     org: json['org'] as String,
     publishedAt: json['published_at'] as String,
     sha256: json['sha256'] as String,
+    signatures: (json['signatures'] as List<dynamic>?)?.map((e) => DetachedSignatureV1.fromJson(e as Map<String, dynamic>)).toList(),
     size: (json['size'] as num).toInt(),
     vcsCommit: json['vcs_commit'] as String?,
     vcsTag: json['vcs_tag'] as String,
@@ -63,14 +46,25 @@ class VersionMetadata {
 
   final ArtifactFormat format;
 
+  /// Where these exact bytes can be fetched, in try order.
+  final List<MirrorDescriptorV1>? mirrors;
+
   final String name;
 
   final String org;
 
-  /// RFC 3339 timestamp.
+  /// RFC 3339 timestamp, asserted by the publisher and echoed verbatim. Verbatim matters: it
+  /// is covered by [`Self::signatures`], so a registry that "helpfully" normalized it would
+  /// invalidate every signature it serves.
   final String publishedAt;
 
   final String sha256;
+
+  /// Publisher signatures over [`Self::attestation`]. Absent for versions published before
+  /// signing, and for publishers who have not enrolled a key. Absence degrades cleanly: such
+  /// a package still installs from any mirror against a lockfile pin, and only loses the
+  /// ability to have its *ranges* resolved while the registry is down.
+  final List<DetachedSignatureV1>? signatures;
 
   final int size;
 
@@ -85,10 +79,12 @@ class VersionMetadata {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'download_url': downloadUrl,
     'format': format.toJson(),
+    'mirrors': mirrors?.map((e) => e.toJson()).toList(),
     'name': name,
     'org': org,
     'published_at': publishedAt,
     'sha256': sha256,
+    'signatures': signatures?.map((e) => e.toJson()).toList(),
     'size': size,
     'vcs_commit': vcsCommit,
     'vcs_tag': vcsTag,
