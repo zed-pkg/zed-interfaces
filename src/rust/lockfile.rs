@@ -81,6 +81,17 @@ pub struct LockedPackage {
     /// Base URL of the registry the artifact was resolved from.
     #[schemars(length(min = 1))]
     pub source: String,
+    /// Public mirrors recorded at lock time so a frozen restore can retry
+    /// without the registry host.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<crate::mirror::MirrorDescriptorV1>,
+    /// Publisher key id that signed the version metadata, when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signed_by: Option<String>,
+    /// Publisher public key (multibase) pinned the first time this package
+    /// was resolved. Frozen restores do not re-verify signatures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signing_key: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -326,6 +337,28 @@ impl LockedPackage {
     pub fn full_name(&self) -> String {
         format!("{}/{}", self.org, self.name)
     }
+
+    pub fn mirror_coordinate(&self) -> crate::mirror::MirrorCoordinateV1<'_> {
+        crate::mirror::MirrorCoordinateV1 {
+            org: &self.org,
+            name: &self.name,
+            version: &self.version,
+            sha256: &self.sha256,
+            format: self.format,
+            vcs_tag: &self.vcs_tag,
+        }
+    }
+
+    pub fn pinned_key(&self) -> Option<crate::signing::PublisherKeyV1> {
+        Some(crate::signing::PublisherKeyV1 {
+            key_id: self.signed_by.clone()?,
+            algorithm: crate::signing::SIGNING_ALGORITHM.to_owned(),
+            public_key_multibase: self.signing_key.clone()?,
+            state: crate::signing::PublisherKeyStateV1::Active,
+            enrolled_at: None,
+            revoked_reason: None,
+        })
+    }
 }
 
 fn invalid_package<T>(package: &str, reason: &str) -> Result<T, LockfileError> {
@@ -471,6 +504,9 @@ source = "file:///tmp/registry"
             vcs_tag: "v1.2.3".to_string(),
             vcs_commit: None,
             source: "file:///tmp/registry".to_string(),
+            mirrors: Vec::new(),
+            signed_by: None,
+            signing_key: None,
         }
     }
 

@@ -191,6 +191,9 @@ fn lockfile_roundtrip() {
         vcs_tag: "v1.2.0".into(),
         vcs_commit: Some("deadbeef".into()),
         source: "https://registry.zed-pkg.dev".into(),
+        mirrors: Vec::new(),
+        signed_by: None,
+        signing_key: None,
     });
 
     let text = lock.to_toml_string().unwrap();

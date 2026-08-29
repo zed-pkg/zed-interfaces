@@ -16,6 +16,7 @@ repository = "https://github.com/zed-pkg/zed-interfaces"
 path = "lib.rs"
 
 [dependencies]
+bs58 = "0.5"
 hex = "0.4"
 schemars = "1.2.1"
 semver = { version = "1.0.28", features = ["serde"] }
