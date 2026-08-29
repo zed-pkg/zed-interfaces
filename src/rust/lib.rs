@@ -27,7 +27,6 @@ pub mod nix_plan;
 pub mod oci;
 pub mod paths;
 pub mod registry;
-pub mod source;
 pub mod registry_protocol_v1;
 pub mod source;
 pub mod sync;
