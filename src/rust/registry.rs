@@ -179,6 +179,12 @@ pub struct VersionMetadata {
     pub published_at: String,
     #[serde(default)]
     pub yanked: bool,
+    /// Alternate fetch locations (public R2, GitHub Release) so a client that
+    /// already has this metadata can retry without the registry host. Empty
+    /// when the publisher did not advertise mirrors; clients still guess
+    /// standard GitHub/R2 paths from `org`/`name`/`vcs_tag`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<crate::source::ArtifactLocator>,
 }
 
 /// JSON half of the multipart publish request; the artifact bytes travel in
