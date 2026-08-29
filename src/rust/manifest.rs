@@ -114,6 +114,16 @@ pub struct Manifest {
     /// another tool's metadata.
     #[serde(default, skip_serializing_if = "InteropSection::is_empty")]
     pub interop: InteropSection,
+    /// Optional `[signing]` table. Declares which publisher key this package
+    /// uses so `zed publish` can sign version metadata for registry-down
+    /// range resolution.
+    #[serde(default, skip_serializing_if = "crate::signing::SigningSection::is_empty")]
+    pub signing: crate::signing::SigningSection,
+    /// Explicit public mirrors this package publishes with. Combined with
+    /// guessed GitHub/R2 locations from `[package.repository]` and
+    /// `[package.artifacts]` by [`Manifest::resolved_mirrors`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<crate::mirror::MirrorDescriptorV1>,
     /// Language subtrees for a **polyglot package** — one repo shipping the
     /// same library for several ecosystems (e.g. `node/`, `python/`, `go/`).
     /// Keyed by ecosystem name; the value says which subdirectory is that
@@ -1681,6 +1691,48 @@ impl Manifest {
 
     pub fn to_toml_string(&self) -> Result<String, ManifestError> {
         toml::to_string_pretty(self).map_err(|e| ManifestError::Toml(e.to_string()))
+    }
+
+    /// Mirrors this package publishes and consumers should try when the
+    /// registry is down: explicit `[[mirrors]]` plus guessed GitHub/R2
+    /// locations from `[package.repository]` and `[package.artifacts]`.
+    pub fn resolved_mirrors(&self) -> Result<Vec<crate::mirror::MirrorDescriptorV1>, ManifestError> {
+        let mut mirrors = self.mirrors.clone();
+        let repo = self.package.repository.url.as_str();
+        if self.package.artifacts.github_release_enabled(Some(repo))
+            && crate::mirror::parse_repo_ref(repo).is_ok()
+            && !mirrors.iter().any(|mirror| {
+                matches!(
+                    mirror.kind,
+                    crate::mirror::MirrorKindV1::GithubRelease
+                        | crate::mirror::MirrorKindV1::GithubRaw
+                )
+            })
+        {
+            mirrors.push(crate::mirror::MirrorDescriptorV1::github_release_of(repo));
+        }
+        if let Some(base) = self.package.artifacts.r2_public_base.as_deref() {
+            let trimmed = base.trim_end_matches('/');
+            if !trimmed.is_empty()
+                && !mirrors.iter().any(|mirror| {
+                    mirror.url.as_deref() == Some(trimmed)
+                })
+            {
+                mirrors.push(crate::mirror::MirrorDescriptorV1::object_store(trimmed));
+            }
+        }
+        if mirrors.len() > crate::mirror::MAX_MIRRORS {
+            return Err(ManifestError::InvalidArtifacts(format!(
+                "more than {} mirrors",
+                crate::mirror::MAX_MIRRORS
+            )));
+        }
+        for mirror in &mirrors {
+            mirror
+                .validate()
+                .map_err(|error| ManifestError::InvalidArtifacts(error.to_string()))?;
+        }
+        Ok(mirrors)
     }
 
     pub fn validate(&self) -> Result<(), ManifestError> {

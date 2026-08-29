@@ -66,6 +66,8 @@ fn main() {
                     versions: vec!["1.0.0".into()],
                     version_scheme: VersionScheme::default(),
                     tags: Vec::new(),
+                    mirrors: Vec::new(),
+                    signing_keys: Vec::new(),
                 },
             ),
             (
@@ -80,6 +82,8 @@ fn main() {
                     versions: vec!["2.0.0".into(), "1.0.0".into()],
                     version_scheme: VersionScheme::Calver,
                     tags: vec!["http".into(), "client".into()],
+                    mirrors: Vec::new(),
+                    signing_keys: Vec::new(),
                 },
             ),
         ],
@@ -103,6 +107,7 @@ fn main() {
                 format: ArtifactFormat::TarGz,
                 yanked: false,
                 mirrors: Vec::new(),
+                signatures: Vec::new(),
             },
         )],
     );
