@@ -199,21 +199,12 @@ pub fn parse_github_identity(url: &str) -> Option<GithubIdentity> {
     if let Some(rest) = normalized.strip_prefix("git+") {
         normalized = rest.to_string();
     }
-    let rest = if let Some(rest) = strip_ignore_ascii(&normalized, "git@github.com:") {
-        rest
-    } else if let Some(rest) = strip_ignore_ascii(&normalized, "ssh://git@github.com/") {
-        rest
-    } else if let Some(rest) = strip_ignore_ascii(&normalized, "https://github.com/") {
-        rest
-    } else if let Some(rest) = strip_ignore_ascii(&normalized, "http://github.com/") {
-        rest
-    } else if let Some(rest) = strip_ignore_ascii(&normalized, "git://github.com/") {
-        rest
-    } else if let Some(rest) = strip_ignore_ascii(&normalized, "ssh://github.com/") {
-        rest
-    } else {
-        return None;
-    };
+    let rest = strip_ignore_ascii(&normalized, "git@github.com:")
+        .or_else(|| strip_ignore_ascii(&normalized, "ssh://git@github.com/"))
+        .or_else(|| strip_ignore_ascii(&normalized, "https://github.com/"))
+        .or_else(|| strip_ignore_ascii(&normalized, "http://github.com/"))
+        .or_else(|| strip_ignore_ascii(&normalized, "git://github.com/"))
+        .or_else(|| strip_ignore_ascii(&normalized, "ssh://github.com/"))?;
     let rest = rest.trim_end_matches('/').trim_end_matches(".git");
     let mut parts = rest.split('/');
     let owner = parts.next()?;
@@ -844,7 +835,10 @@ mod tests {
             repo: "HTTP-Kit".into(),
         };
         assert_eq!(ghcr_repository(&identity), "cliptown/http-kit");
-        assert_eq!(ghcr_reference(&identity, "v1.2.0"), "ghcr.io/cliptown/http-kit:v1.2.0");
+        assert_eq!(
+            ghcr_reference(&identity, "v1.2.0"),
+            "ghcr.io/cliptown/http-kit:v1.2.0"
+        );
         assert_eq!(
             github_packages_web_url(&identity),
             "https://github.com/orgs/Cliptown/packages/container/http-kit"
@@ -873,5 +867,73 @@ mod tests {
             ..ArtifactsSection::EMPTY
         };
         assert!(validate_artifacts_section(&ok).is_ok());
+    }
+
+    #[test]
+    fn github_packages_defaults_on_for_github_remotes_only() {
+        assert!(
+            ArtifactsSection::EMPTY
+                .github_packages_enabled(Some("https://github.com/acme/http-kit"))
+        );
+        assert!(
+            !ArtifactsSection::EMPTY
+                .github_packages_enabled(Some("https://gitlab.com/acme/http-kit"))
+        );
+        let off = ArtifactsSection {
+            github_packages: Some(false),
+            ..ArtifactsSection::EMPTY
+        };
+        assert!(!off.github_packages_enabled(Some("https://github.com/acme/http-kit")));
+        let on = ArtifactsSection {
+            github_packages: Some(true),
+            ..ArtifactsSection::EMPTY
+        };
+        assert!(on.github_packages_enabled(Some("https://gitlab.com/acme/http-kit")));
+    }
+
+    #[test]
+    fn manifest_parses_package_artifacts_and_rejects_escapes() {
+        let enabled = r#"
+[package]
+org = "acme"
+name = "http-kit"
+version = "1.2.0"
+license = "MIT"
+[package.repository]
+url = "https://github.com/acme/http-kit"
+[package.artifacts]
+github_packages = false
+github_release = true
+"#;
+        let manifest = crate::manifest::Manifest::parse(enabled).unwrap();
+        assert!(
+            !manifest
+                .package
+                .artifacts
+                .github_packages_enabled(Some(manifest.package.repository.url.as_str()))
+        );
+        assert!(
+            manifest
+                .package
+                .artifacts
+                .github_release_enabled(Some(manifest.package.repository.url.as_str()))
+        );
+
+        let escaped = r#"
+[package]
+org = "acme"
+name = "http-kit"
+version = "1.2.0"
+license = "MIT"
+[package.repository]
+url = "https://github.com/acme/http-kit"
+[package.artifacts]
+r2_key = "../secret"
+"#;
+        let error = crate::manifest::Manifest::parse(escaped).unwrap_err();
+        assert!(matches!(
+            error,
+            crate::manifest::ManifestError::InvalidArtifacts(_)
+        ));
     }
 }

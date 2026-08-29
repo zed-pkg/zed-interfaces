@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use crate::language::{Ecosystem, Language};
 use crate::native_host::{NativeHost, ReleaseChannel, UniversalHost};
 use crate::nix::NixExportSection;
-use crate::vcs::Vcs;
 use crate::source::{ArtifactsSection, validate_artifacts_section};
+use crate::vcs::Vcs;
 use crate::version::{Requirement, VersionScheme};
 
 /// The `.zpkg.toml` manifest at the root of every package repository.
@@ -168,7 +168,7 @@ pub struct PackageSection {
     #[serde(default, skip_serializing_if = "Ecosystem::is_default")]
     pub ecosystem: Ecosystem,
     /// Public artifact locations used when `registry.zpkg.net` is unreachable.
-    /// Omit the table and clients guess GitHub Release / R2 paths from
+    /// Omit the table and clients guess GitHub Release / R2 / GHCR paths from
     /// `[package.repository]` and `org`/`name`. Declare `r2_key` only when
     /// the object is not at a standard guessed path.
     #[serde(default, skip_serializing_if = "ArtifactsSection::is_empty")]

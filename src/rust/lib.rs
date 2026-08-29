@@ -29,6 +29,7 @@ pub mod paths;
 pub mod registry;
 pub mod source;
 pub mod registry_protocol_v1;
+pub mod source;
 pub mod sync;
 pub mod vcs;
 pub mod version;
