@@ -27,11 +27,13 @@ pub mod nix_plan;
 pub mod oci;
 pub mod paths;
 pub mod registry;
+pub mod source;
 pub mod registry_protocol_v1;
 pub mod source;
 pub mod sync;
 pub mod vcs;
 pub mod version;
+pub mod zed_api;
 
 pub use artifact::ArtifactFormat;
 pub use binary_artifact::{
@@ -82,7 +84,8 @@ pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile, LockfileError};
 pub use manifest::{
     GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,
-    NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute,
+    NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute, ProjectLifecycleHook,
+    ProjectLifecycleHookConfig, ProjectLifecycleMode, ProjectLifecycleSection,
 };
 pub use namespace_claim::{
     REGISTRY_NAMESPACE_PLAN_SCHEMA_V1, REGISTRY_NAMESPACE_RECEIPT_SCHEMA_V1,

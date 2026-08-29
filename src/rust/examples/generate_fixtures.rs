@@ -102,6 +102,7 @@ fn main() {
                 published_at: "2026-08-06T00:00:00Z".into(),
                 format: ArtifactFormat::TarGz,
                 yanked: false,
+                mirrors: Vec::new(),
             },
         )],
     );
