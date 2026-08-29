@@ -25,6 +25,10 @@ and validation.
 The Rust crate is the contract everything else builds against:
 
 - **`.zpkg.toml`** — the package manifest at the repo root, TOML only (`manifest` module)
+- **Root lifecycle** — a closed twelve-phase `[lifecycle.*]` vocabulary with
+  typed append/prepend/replace/disable ordering, command shorthands, safe shell
+  prefixes, and non-secret environment additions; dependency package install
+  hooks retain their separate consent and staging contract
 - **Interop intent** — typed `[interop.git].consume_gitmodules` ownership in the
   manifest, so consumers do not infer authority from file detection alone
 - **`.zpkg.lock`** — the lockfile with artifact hashes and VCS provenance (`lockfile`)

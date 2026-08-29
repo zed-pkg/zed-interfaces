@@ -341,6 +341,10 @@
           "$ref": "#/$defs/InteropSection",
           "description": "Explicit interoperability intent for external package and environment\nmanagers. Detection alone never grants Zed permission to consume\nanother tool's metadata."
         },
+        "lifecycle": {
+          "$ref": "#/$defs/ProjectLifecycleSection",
+          "description": "Root-project lifecycle hooks around Zed operations. These belong to the\nreviewed checkout and are distinct from dependency package install\nhooks, which retain their separate consent and staging boundary."
+        },
         "native-dependencies": {
           "additionalProperties": {
             "items": {
@@ -577,6 +581,107 @@
         "version",
         "repository"
       ],
+      "type": "object"
+    },
+    "ProjectLifecycleHook": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectLifecycleHookConfig"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        }
+      ],
+      "description": "One lifecycle phase accepts a full configuration or the documented string,\nstring-array, and boolean shorthands."
+    },
+    "ProjectLifecycleHookConfig": {
+      "additionalProperties": false,
+      "description": "Explicit configuration for one root-project lifecycle phase.",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "commands": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "mode": {
+          "$ref": "#/$defs/ProjectLifecycleMode"
+        },
+        "shell": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ProjectLifecycleMode": {
+      "description": "Ordering policy for explicit root-project hooks relative to convention\nfiles discovered under `.zed/` and `.zpkg/`.",
+      "enum": [
+        "append",
+        "prepend",
+        "replace",
+        "disable"
+      ],
+      "type": "string"
+    },
+    "ProjectLifecycleSection": {
+      "additionalProperties": false,
+      "description": "Typed vocabulary for every root-project lifecycle phase recognized by Zed.\nKeeping these as fields instead of an open map makes misspelled phases fail\nduring TOML parsing and gives the generated JSON Schema the same boundary.",
+      "properties": {
+        "post-build": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "post-install": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "post-pack": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "post-publish": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "post-test": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "post-uninstall": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-build": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-install": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-pack": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-publish": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-test": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-uninstall": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        }
+      },
       "type": "object"
     },
     "PublishSection": {
