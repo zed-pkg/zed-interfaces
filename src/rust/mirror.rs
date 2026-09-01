@@ -26,20 +26,15 @@ pub enum MirrorError {
     Message(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum MirrorKindV1 {
     ZedRegistry,
+    #[default]
     ObjectStore,
     Directory,
     GithubRelease,
     GithubRaw,
-}
-
-impl Default for MirrorKindV1 {
-    fn default() -> Self {
-        Self::ObjectStore
-    }
 }
 
 impl MirrorKindV1 {
