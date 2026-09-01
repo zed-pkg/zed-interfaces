@@ -230,10 +230,7 @@ impl MirrorDescriptorV1 {
 
     pub fn package_index_urls(&self, org: &str, name: &str) -> Result<Vec<String>, MirrorError> {
         self.validate()?;
-        let prefix = self
-            .asset_prefix
-            .as_deref()
-            .unwrap_or(DEFAULT_ASSET_PREFIX);
+        let prefix = self.asset_prefix.as_deref().unwrap_or(DEFAULT_ASSET_PREFIX);
         Ok(match self.kind {
             MirrorKindV1::ZedRegistry | MirrorKindV1::ObjectStore => self
                 .base_urls()
@@ -285,10 +282,7 @@ impl MirrorDescriptorV1 {
         coord: &MirrorCoordinateV1<'_>,
     ) -> Result<Vec<String>, MirrorError> {
         self.validate()?;
-        let prefix = self
-            .asset_prefix
-            .as_deref()
-            .unwrap_or(DEFAULT_ASSET_PREFIX);
+        let prefix = self.asset_prefix.as_deref().unwrap_or(DEFAULT_ASSET_PREFIX);
         Ok(match self.kind {
             MirrorKindV1::ZedRegistry | MirrorKindV1::ObjectStore => self
                 .base_urls()
@@ -301,11 +295,16 @@ impl MirrorDescriptorV1 {
                 })
                 .collect(),
             MirrorKindV1::GithubRelease => {
-                let identity = github_identity_for(coord.org, coord.name, self.repository.as_deref());
+                let identity =
+                    github_identity_for(coord.org, coord.name, self.repository.as_deref());
                 crate::source::git_tags_for_version(coord.version)
                     .into_iter()
                     .map(|tag| {
-                        github_release_download_url(&identity, &tag, &format!("{prefix}version.json"))
+                        github_release_download_url(
+                            &identity,
+                            &tag,
+                            &format!("{prefix}version.json"),
+                        )
                     })
                     .collect()
             }
@@ -328,10 +327,7 @@ impl MirrorDescriptorV1 {
         self.validate()?;
         let mut urls = Vec::new();
         let bases = self.base_urls();
-        let prefix = self
-            .asset_prefix
-            .as_deref()
-            .unwrap_or(DEFAULT_ASSET_PREFIX);
+        let prefix = self.asset_prefix.as_deref().unwrap_or(DEFAULT_ASSET_PREFIX);
         match self.kind {
             MirrorKindV1::ObjectStore | MirrorKindV1::ZedRegistry => {
                 let query = ArtifactQuery {

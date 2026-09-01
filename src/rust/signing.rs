@@ -47,14 +47,12 @@ pub struct PublisherKeyV1 {
 impl PublisherKeyV1 {
     pub fn public_key(&self) -> Result<[u8; ED25519_PUBLIC_KEY_BYTES], String> {
         let bytes = decode_multibase_base58btc(&self.public_key_multibase)?;
-        bytes
-            .try_into()
-            .map_err(|bytes: Vec<u8>| {
-                format!(
-                    "public key is {} bytes, expected {ED25519_PUBLIC_KEY_BYTES}",
-                    bytes.len()
-                )
-            })
+        bytes.try_into().map_err(|bytes: Vec<u8>| {
+            format!(
+                "public key is {} bytes, expected {ED25519_PUBLIC_KEY_BYTES}",
+                bytes.len()
+            )
+        })
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -62,7 +60,10 @@ impl PublisherKeyV1 {
             return Err("publisher key_id is empty".into());
         }
         if self.algorithm != SIGNING_ALGORITHM {
-            return Err(format!("unsupported signing algorithm `{}`", self.algorithm));
+            return Err(format!(
+                "unsupported signing algorithm `{}`",
+                self.algorithm
+            ));
         }
         let bytes = decode_multibase_base58btc(&self.public_key_multibase)?;
         if bytes.len() != ED25519_PUBLIC_KEY_BYTES {
@@ -86,7 +87,10 @@ pub struct PublisherKeySetV1 {
 impl PublisherKeySetV1 {
     pub fn validate(&self) -> Result<(), String> {
         if self.schema != PUBLISHER_KEYS_SCHEMA_V1 {
-            return Err(format!("unsupported publisher-keys schema `{}`", self.schema));
+            return Err(format!(
+                "unsupported publisher-keys schema `{}`",
+                self.schema
+            ));
         }
         if self.org.is_empty() {
             return Err("publisher key set org is empty".into());
@@ -151,7 +155,10 @@ pub struct SignedVersionV1 {
 impl SignedVersionV1 {
     pub fn validate(&self) -> Result<(), String> {
         if self.schema != SIGNED_VERSION_SCHEMA_V1 {
-            return Err(format!("unsupported signed-version schema `{}`", self.schema));
+            return Err(format!(
+                "unsupported signed-version schema `{}`",
+                self.schema
+            ));
         }
         if self.payload.org.is_empty() || self.payload.name.is_empty() {
             return Err("signed version is missing org/name".into());

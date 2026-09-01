@@ -117,7 +117,10 @@ pub struct Manifest {
     /// Optional `[signing]` table. Declares which publisher key this package
     /// uses so `zed publish` can sign version metadata for registry-down
     /// range resolution.
-    #[serde(default, skip_serializing_if = "crate::signing::SigningSection::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "crate::signing::SigningSection::is_empty"
+    )]
     pub signing: crate::signing::SigningSection,
     /// Explicit public mirrors this package publishes with. Combined with
     /// guessed GitHub/R2 locations from `[package.repository]` and
@@ -1696,7 +1699,9 @@ impl Manifest {
     /// Mirrors this package publishes and consumers should try when the
     /// registry is down: explicit `[[mirrors]]` plus guessed GitHub/R2
     /// locations from `[package.repository]` and `[package.artifacts]`.
-    pub fn resolved_mirrors(&self) -> Result<Vec<crate::mirror::MirrorDescriptorV1>, ManifestError> {
+    pub fn resolved_mirrors(
+        &self,
+    ) -> Result<Vec<crate::mirror::MirrorDescriptorV1>, ManifestError> {
         let mut mirrors = self.mirrors.clone();
         let repo = self.package.repository.url.as_str();
         if self.package.artifacts.github_release_enabled(Some(repo))
@@ -1714,9 +1719,9 @@ impl Manifest {
         if let Some(base) = self.package.artifacts.r2_public_base.as_deref() {
             let trimmed = base.trim_end_matches('/');
             if !trimmed.is_empty()
-                && !mirrors.iter().any(|mirror| {
-                    mirror.url.as_deref() == Some(trimmed)
-                })
+                && !mirrors
+                    .iter()
+                    .any(|mirror| mirror.url.as_deref() == Some(trimmed))
             {
                 mirrors.push(crate::mirror::MirrorDescriptorV1::object_store(trimmed));
             }
