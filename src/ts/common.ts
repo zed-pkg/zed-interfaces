@@ -103,6 +103,27 @@ export interface PackageSummary {
   readonly tags?: readonly string[];
 }
 
+export type PublicIntakeInterestV1 = "package_publishing" | "private_registry" | "supply_chain_security" | "enterprise_support" | "developer_experience" | "migration" | "compliance" | "self_hosted" | "air_gapped";
+
+/** Every `PublicIntakeInterestV1` value, in schema order — for validation and pickers. */
+export const PUBLIC_INTAKE_INTEREST_V1_VALUES = ["package_publishing", "private_registry", "supply_chain_security", "enterprise_support", "developer_experience", "migration", "compliance", "self_hosted", "air_gapped"] as const;
+
+/**
+ * A single-variant enum makes the schema marker closed in Rust, JSON Schema, Dart, and TypeScript instead of accepting an arbitrary version string.
+ */
+export type PublicIntakeSchemaV1 = "zed.public-intake.v1";
+
+/** Every `PublicIntakeSchemaV1` value, in schema order — for validation and pickers. */
+export const PUBLIC_INTAKE_SCHEMA_V1_VALUES = ["zed.public-intake.v1"] as const;
+
+/**
+ * Public browser roles admitted by the v1 contract. The domain layer also checks that an individual request uses `user.zpkg.net` and an organization request uses `org.zpkg.net`; this enum prevents nonstandard hostnames from entering the shared wire model at all.
+ */
+export type PublicIntakeSourceHostV1 = "user.zpkg.net" | "org.zpkg.net";
+
+/** Every `PublicIntakeSourceHostV1` value, in schema order — for validation and pickers. */
+export const PUBLIC_INTAKE_SOURCE_HOST_V1_VALUES = ["user.zpkg.net", "org.zpkg.net"] as const;
+
 /**
  * Evidence or authority a provider requires before ownership can be asserted.
  */

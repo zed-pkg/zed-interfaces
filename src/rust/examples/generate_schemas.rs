@@ -635,6 +635,20 @@ fn main() {
     write::<zed_interfaces::registry::AuditIntegrityResponse>(dir, "audit-integrity-response");
     write::<zed_interfaces::registry::ApiError>(dir, "api-error");
 
+    // Public commercial-intake contracts used by the individual and
+    // organization browser roles. Accepted/error envelopes intentionally
+    // contain no submitted contact data.
+    write::<zed_interfaces::public_intake::PreInterestRegistrationRequestV1>(
+        dir,
+        "pre-interest-registration-request-v1",
+    );
+    write::<zed_interfaces::public_intake::QuoteRequestV1>(dir, "quote-request-v1");
+    write::<zed_interfaces::public_intake::PublicIntakeAcceptedV1>(
+        dir,
+        "public-intake-accepted-v1",
+    );
+    write::<zed_interfaces::public_intake::PublicIntakeErrorV1>(dir, "public-intake-error-v1");
+
     // Registry protocol v1 trust, static-read, archive, and publish contracts.
     write::<zed_interfaces::RegistryDiscoveryV1>(dir, "registry-discovery-v1");
     write::<zed_interfaces::RegistryIndexRecordV1>(dir, "registry-index-record-v1");

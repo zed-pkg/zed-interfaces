@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QuoteRequestV1",
+  "description": "Request organization pricing. This stays a separate intent from\npre-interest registration, so registration can never silently become a\nquote request.",
+  "type": "object",
+  "properties": {
+    "consentRevision": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1
+    },
+    "consentedAt": {
+      "type": "string",
+      "maxLength": 35,
+      "minLength": 20
+    },
+    "contactConsent": {
+      "type": "boolean"
+    },
+    "contactName": {
+      "type": "string",
+      "maxLength": 120,
+      "minLength": 1
+    },
+    "deploymentModel": {
+      "$ref": "#/$defs/QuoteDeploymentModelV1"
+    },
+    "email": {
+      "type": "string",
+      "maxLength": 254,
+      "minLength": 3
+    },
+    "interests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PublicIntakeInterestV1"
+      },
+      "maxItems": 9,
+      "minItems": 1
+    },
+    "locale": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 35,
+      "minLength": 2
+    },
+    "marketingConsent": {
+      "type": "boolean"
+    },
+    "marketingConsentRevision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 64,
+      "minLength": 1
+    },
+    "migrationWindow": {
+      "$ref": "#/$defs/QuoteMigrationWindowV1"
+    },
+    "monthlyDownloads": {
+      "$ref": "#/$defs/QuoteMonthlyDownloadBandV1"
+    },
+    "organizationName": {
+      "type": "string",
+      "maxLength": 200,
+      "minLength": 1
+    },
+    "packageCount": {
+      "$ref": "#/$defs/QuotePackageCountBandV1"
+    },
+    "referralCode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 64,
+      "minLength": 1
+    },
+    "requestId": {
+      "type": "string",
+      "maxLength": 36,
+      "minLength": 36
+    },
+    "requirementsSummary": {
+      "description": "Intentionally bounded and optional. The form warns submitters not to\ninclude credentials, private keys, tokens, or regulated data; the API\nmust never log this field.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 1000,
+      "minLength": 1
+    },
+    "role": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 120,
+      "minLength": 1
+    },
+    "schema": {
+      "$ref": "#/$defs/PublicIntakeSchemaV1"
+    },
+    "sourceHost": {
+      "$ref": "#/$defs/PublicIntakeSourceHostV1"
+    },
+    "teamSize": {
+      "$ref": "#/$defs/QuoteTeamSizeBandV1"
+    },
+    "websiteUrl": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2048,
+      "minLength": 8
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "requestId",
+    "email",
+    "sourceHost",
+    "organizationName",
+    "contactName",
+    "interests",
+    "deploymentModel",
+    "teamSize",
+    "packageCount",
+    "monthlyDownloads",
+    "migrationWindow",
+    "consentRevision",
+    "consentedAt",
+    "contactConsent",
+    "marketingConsent"
+  ],
+  "$defs": {
+    "PublicIntakeInterestV1": {
+      "type": "string",
+      "enum": [
+        "package_publishing",
+        "private_registry",
+        "supply_chain_security",
+        "enterprise_support",
+        "developer_experience",
+        "migration",
+        "compliance",
+        "self_hosted",
+        "air_gapped"
+      ]
+    },
+    "PublicIntakeSchemaV1": {
+      "description": "A single-variant enum makes the schema marker closed in Rust, JSON Schema,\nDart, and TypeScript instead of accepting an arbitrary version string.",
+      "type": "string",
+      "enum": [
+        "zed.public-intake.v1"
+      ]
+    },
+    "PublicIntakeSourceHostV1": {
+      "description": "Public browser roles admitted by the v1 contract. The domain layer also\nchecks that an individual request uses `user.zpkg.net` and an organization\nrequest uses `org.zpkg.net`; this enum prevents nonstandard hostnames from\nentering the shared wire model at all.",
+      "type": "string",
+      "enum": [
+        "user.zpkg.net",
+        "org.zpkg.net"
+      ]
+    },
+    "QuoteDeploymentModelV1": {
+      "type": "string",
+      "enum": [
+        "evaluating",
+        "zed_cloud",
+        "self_hosted",
+        "hybrid",
+        "air_gapped"
+      ]
+    },
+    "QuoteMigrationWindowV1": {
+      "type": "string",
+      "enum": [
+        "exploring",
+        "under_three_months",
+        "three_to_six_months",
+        "six_to_twelve_months",
+        "over_twelve_months"
+      ]
+    },
+    "QuoteMonthlyDownloadBandV1": {
+      "type": "string",
+      "enum": [
+        "under_one_hundred_thousand",
+        "one_hundred_thousand_to_one_million",
+        "one_million_to_ten_million",
+        "over_ten_million",
+        "unknown"
+      ]
+    },
+    "QuotePackageCountBandV1": {
+      "type": "string",
+      "enum": [
+        "under_one_hundred",
+        "one_hundred_to_one_thousand",
+        "one_thousand_to_ten_thousand",
+        "over_ten_thousand",
+        "unknown"
+      ]
+    },
+    "QuoteTeamSizeBandV1": {
+      "type": "string",
+      "enum": [
+        "one_to_ten",
+        "eleven_to_fifty",
+        "fifty_one_to_two_hundred",
+        "two_hundred_one_to_one_thousand",
+        "over_one_thousand",
+        "unknown"
+      ]
+    }
+  }
+}

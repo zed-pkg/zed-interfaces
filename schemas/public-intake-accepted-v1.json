@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PublicIntakeAcceptedV1",
+  "description": "A generic 202 response. It cannot disclose whether an email, organization,\nor idempotency key was already known because none of those fields exist in\nthe response model.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "$ref": "#/$defs/PublicIntakeSchemaV1"
+    },
+    "status": {
+      "$ref": "#/$defs/PublicIntakeAcceptedStatusV1"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status"
+  ],
+  "$defs": {
+    "PublicIntakeAcceptedStatusV1": {
+      "type": "string",
+      "enum": [
+        "accepted"
+      ]
+    },
+    "PublicIntakeSchemaV1": {
+      "description": "A single-variant enum makes the schema marker closed in Rust, JSON Schema,\nDart, and TypeScript instead of accepting an arbitrary version string.",
+      "type": "string",
+      "enum": [
+        "zed.public-intake.v1"
+      ]
+    }
+  }
+}
