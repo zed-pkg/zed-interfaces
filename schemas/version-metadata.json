@@ -15,7 +15,7 @@
       "description": "Alternate fetch locations (public R2, GitHub Release) so a client that\nalready has this metadata can retry without the registry host. Empty\nwhen the publisher did not advertise mirrors; clients still guess\nstandard GitHub/R2 paths from `org`/`name`/`vcs_tag`.",
       "type": "array",
       "items": {
-        "$ref": "#/$defs/ArtifactLocator"
+        "$ref": "#/$defs/MirrorDescriptorV1"
       }
     },
     "name": {
@@ -30,6 +30,13 @@
     },
     "sha256": {
       "type": "string"
+    },
+    "signatures": {
+      "description": "Detached signatures over the version attestation. Empty when the\npublisher did not sign; frozen installs still work from the lock digest.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DetachedSignatureV1"
+      }
     },
     "size": {
       "type": "integer",
@@ -72,51 +79,118 @@
         "zip"
       ]
     },
-    "ArtifactLocator": {
-      "description": "One concrete fetch location for a published artifact.",
+    "DetachedSignatureV1": {
       "type": "object",
       "properties": {
-        "kind": {
-          "$ref": "#/$defs/ArtifactSourceKind"
+        "algorithm": {
+          "type": "string"
         },
-        "url": {
+        "key_id": {
+          "type": "string"
+        },
+        "signature_multibase": {
           "type": "string"
         }
       },
       "required": [
-        "kind",
-        "url"
+        "key_id",
+        "algorithm",
+        "signature_multibase"
       ]
     },
-    "ArtifactSourceKind": {
-      "description": "Where a published artifact can be fetched from when the primary registry\nhost is down. Order in [`artifact_locators`] is the client retry order.",
-      "oneOf": [
-        {
-          "description": "`zed-api-server` (`/v1/artifacts/<sha256>` or a presigned redirect).",
-          "type": "string",
-          "const": "registry"
+    "MirrorDescriptorV1": {
+      "type": "object",
+      "properties": {
+        "alternate_urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
-        {
-          "description": "Direct GET against the public R2/CDN origin.",
-          "type": "string",
-          "const": "r2"
+        "asset_prefix": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        {
-          "description": "Packed tarball attached to a GitHub Release.",
-          "type": "string",
-          "const": "github-release"
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        {
-          "description": "Packed artifact stored as an OCI artifact on GitHub Packages (GHCR).\nThis is the GitHub surface that shows on\n`https://github.com/orgs/{org}/packages`.",
-          "type": "string",
-          "const": "github-packages"
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        {
-          "description": "Source archive of the tagged commit. Last resort: the bytes are the\nVCS tree, not the pruned publish artifact, so a lockfile sha256 will\nnot match unless the client re-packs with the same rules.",
-          "type": "string",
-          "const": "github-archive"
+        "kind": {
+          "$ref": "#/$defs/MirrorKindV1",
+          "default": "object-store"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "repository": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serves": {
+          "$ref": "#/$defs/MirrorServesV1",
+          "default": {
+            "artifacts": true,
+            "index": true,
+            "metadata": true
+          }
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
+      }
+    },
+    "MirrorKindV1": {
+      "type": "string",
+      "enum": [
+        "zed-registry",
+        "object-store",
+        "directory",
+        "github-release",
+        "github-raw"
       ]
+    },
+    "MirrorServesV1": {
+      "type": "object",
+      "properties": {
+        "artifacts": {
+          "type": "boolean",
+          "default": true
+        },
+        "index": {
+          "type": "boolean",
+          "default": true
+        },
+        "metadata": {
+          "type": "boolean",
+          "default": true
+        }
+      }
     }
   }
 }

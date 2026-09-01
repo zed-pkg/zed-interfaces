@@ -70,6 +70,30 @@ export interface BinarySourceProvenanceV1 {
   readonly vcs_tag: string;
 }
 
+export interface MirrorDescriptorV1 {
+  readonly alternate_urls?: readonly string[];
+  readonly asset_prefix?: string | null;
+  readonly branch?: string | null;
+  readonly id?: string | null;
+  readonly kind?: MirrorKindV1;
+  readonly path?: string | null;
+  readonly priority?: number | null;
+  readonly repository?: string | null;
+  readonly serves?: MirrorServesV1;
+  readonly url?: string | null;
+}
+
+export type MirrorKindV1 = "zed-registry" | "object-store" | "directory" | "github-release" | "github-raw";
+
+/** Every `MirrorKindV1` value, in schema order — for validation and pickers. */
+export const MIRROR_KIND_V1_VALUES = ["zed-registry", "object-store", "directory", "github-release", "github-raw"] as const;
+
+export interface MirrorServesV1 {
+  readonly artifacts?: boolean;
+  readonly index?: boolean;
+  readonly metadata?: boolean;
+}
+
 export interface PackageSummary {
   readonly description?: string | null;
   readonly latest?: string | null;
