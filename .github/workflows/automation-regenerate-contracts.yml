@@ -11,7 +11,7 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Check out exact branch head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -27,25 +27,144 @@ jobs:
         with:
           node-version: 22
 
+      - name: Apply and test the structured-default generator repair
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          generator = Path('codegen/generate.mjs')
+          text = generator.read_text(encoding='utf-8')
+          old = '''function dartLiteral(ref, value, kinds) {
+            if (value === null || value === undefined) return "null";
+            if (ref.kind === "ref" && kinds.get(ref.name) === "enum") {
+              return `${ref.name}.${dartEnumIdent(String(value))}`;
+            }
+            if (ref.kind === "list") return "const []";
+            if (ref.kind === "map") return "const {}";
+            if (typeof value === "string") return dartStr(value);
+            if (typeof value === "boolean" || typeof value === "number") return String(value);
+            return fail(`unsupported default ${JSON.stringify(value)}`);
+          }
+          '''
+          new = '''function dartLiteral(ref, value, kinds, types) {
+            if (value === null || value === undefined) return "null";
+            if (ref.kind === "ref") {
+              const kind = kinds.get(ref.name);
+              if (kind === "enum") return `${ref.name}.${dartEnumIdent(String(value))}`;
+              if (kind === "object") {
+                if (!value || typeof value !== "object" || Array.isArray(value)) {
+                  return fail(`default for ${ref.name} must be an object, got ${JSON.stringify(value)}`);
+                }
+                const target = types.get(ref.name);
+                if (!target || target.kind !== "object") {
+                  return fail(`cannot resolve object default type ${ref.name}`);
+                }
+                const known = new Set(target.props.map((prop) => prop.wire));
+                for (const key of Object.keys(value)) {
+                  if (!known.has(key)) return fail(`default for ${ref.name} has unknown field ${key}`);
+                }
+                const args = [];
+                for (const prop of target.props) {
+                  if (Object.hasOwn(value, prop.wire)) {
+                    args.push(`${prop.dart}: ${dartLiteral(prop.type, value[prop.wire], kinds, types)}`);
+                  } else if (prop.required && !prop.hasDefault) {
+                    return fail(`default for ${ref.name} is missing required field ${prop.wire}`);
+                  }
+                }
+                return `const ${ref.name}(${args.join(", ")})`;
+              }
+            }
+            if (ref.kind === "list") {
+              if (!Array.isArray(value)) return fail(`list default must be an array, got ${JSON.stringify(value)}`);
+              return `const [${value.map((item) => dartLiteral(ref.item, item, kinds, types)).join(", ")}]`;
+            }
+            if (ref.kind === "map") {
+              if (!value || typeof value !== "object" || Array.isArray(value)) {
+                return fail(`map default must be an object, got ${JSON.stringify(value)}`);
+              }
+              const entries = Object.entries(value)
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([key, item]) => `${dartStr(key)}: ${dartLiteral(ref.value, item, kinds, types)}`);
+              return `const {${entries.join(", ")}}`;
+            }
+            if (typeof value === "string") return dartStr(value);
+            if (typeof value === "boolean" || typeof value === "number") return String(value);
+            return fail(`unsupported default ${JSON.stringify(value)}`);
+          }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one dartLiteral block, found {text.count(old)}')
+          text = text.replace(old, new)
+          replacements = {
+              'function dartClass(type, kinds) {': 'function dartClass(type, kinds, types) {',
+              'dartLiteral(p.type, p.default, kinds)': 'dartLiteral(p.type, p.default, kinds, types)',
+              'const kinds = new Map([...built.byName].map(([name, v]) => [name, v.type.kind]));\n  const files = {};': 'const kinds = new Map([...built.byName].map(([name, v]) => [name, v.type.kind]));\n  const types = new Map([...built.byName].map(([name, v]) => [name, v.type]));\n  const files = {};',
+              'dartClass(type, kinds)))': 'dartClass(type, kinds, types)))',
+          }
+          for old_value, new_value in replacements.items():
+              count = text.count(old_value)
+              expected = 2 if old_value == 'dartLiteral(p.type, p.default, kinds)' else 1
+              if count != expected:
+                  raise SystemExit(f'expected {expected} occurrences of {old_value!r}, found {count}')
+              text = text.replace(old_value, new_value)
+          generator.write_text(text, encoding='utf-8')
+
+          tests = Path('codegen/generate.test.mjs')
+          test_text = tests.read_text(encoding='utf-8')
+          anchor = '''test("oneOf-of-const is an enum, and per-variant docs survive into both languages", () => {'''
+          regression = '''test("a referenced object default becomes a recursive const Dart value", () => {
+            const dart = dartOf(
+              "Thing",
+              OBJ({
+                serves: {
+                  $ref: "#/$defs/MirrorServesV1",
+                  default: { artifacts: true, metadata: true, index: true },
+                },
+              }),
+              {
+                MirrorServesV1: OBJ(
+                  {
+                    artifacts: { type: "boolean" },
+                    metadata: { type: "boolean" },
+                    index: { type: "boolean" },
+                  },
+                  ["artifacts", "metadata", "index"],
+                ),
+              },
+            );
+            const literal = "const MirrorServesV1(artifacts: true, metadata: true, index: true)";
+            assert.ok(dart.includes(`this.serves = ${literal},`));
+            assert.ok(dart.includes(`? ${literal}`));
+          });
+
+          '''
+          if test_text.count(anchor) != 1:
+              raise SystemExit('could not find codegen regression insertion point')
+          test_text = test_text.replace(anchor, regression + anchor)
+          tests.write_text(test_text, encoding='utf-8')
+          PY
+          node --test codegen/generate.test.mjs
+
       - name: Regenerate all canonical contracts and projections
         run: |
           set -euo pipefail
           cargo run --locked --example generate_schemas
           cargo run --locked --example generate_fixtures
           node codegen/generate.mjs
+          node --test codegen/generate.test.mjs
 
       - name: Export exact changed files and binary-safe patch
         run: |
           set -euo pipefail
           export_dir="$RUNNER_TEMP/generated-contracts"
           mkdir -p "$export_dir/files"
-          git diff --name-only --diff-filter=ACMRT -- schemas fixtures src/dart src/ts \
+          git diff --name-only --diff-filter=ACMRT -- codegen schemas fixtures src/dart src/ts \
             | LC_ALL=C sort -u > "$export_dir/changed-files.txt"
-          git diff --name-only --diff-filter=D -- schemas fixtures src/dart src/ts \
+          git diff --name-only --diff-filter=D -- codegen schemas fixtures src/dart src/ts \
             | LC_ALL=C sort -u > "$export_dir/deleted-files.txt"
-          git status --short -- schemas fixtures src/dart src/ts \
+          git status --short -- codegen schemas fixtures src/dart src/ts \
             > "$export_dir/status.txt"
-          git diff --binary -- schemas fixtures src/dart src/ts \
+          git diff --binary -- codegen schemas fixtures src/dart src/ts \
             > "$export_dir/generated.patch"
           test -s "$export_dir/changed-files.txt"
           while IFS= read -r path; do
