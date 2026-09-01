@@ -1,0 +1,63 @@
+name: one-shot exact contract regeneration
+
+on:
+  push:
+    branches:
+      - automation/2026-09-01-regenerate-contracts
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Regenerate all canonical contracts and projections
+        run: |
+          set -euo pipefail
+          cargo run --locked --example generate_schemas
+          cargo run --locked --example generate_fixtures
+          node codegen/generate.mjs
+
+      - name: Export exact changed files and binary-safe patch
+        run: |
+          set -euo pipefail
+          export_dir="$RUNNER_TEMP/generated-contracts"
+          mkdir -p "$export_dir/files"
+          git diff --name-only --diff-filter=ACMRT -- schemas fixtures src/dart src/ts \
+            | LC_ALL=C sort -u > "$export_dir/changed-files.txt"
+          git diff --name-only --diff-filter=D -- schemas fixtures src/dart src/ts \
+            | LC_ALL=C sort -u > "$export_dir/deleted-files.txt"
+          git status --short -- schemas fixtures src/dart src/ts \
+            > "$export_dir/status.txt"
+          git diff --binary -- schemas fixtures src/dart src/ts \
+            > "$export_dir/generated.patch"
+          test -s "$export_dir/changed-files.txt"
+          while IFS= read -r path; do
+            mkdir -p "$export_dir/files/$(dirname "$path")"
+            cp -- "$path" "$export_dir/files/$path"
+          done < "$export_dir/changed-files.txt"
+          printf '%s\n' "$GITHUB_SHA" > "$export_dir/source-sha.txt"
+
+      - name: Upload exact regeneration output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0
+        with:
+          name: regenerated-contracts-${{ github.sha }}
+          path: ${{ runner.temp }}/generated-contracts
+          retention-days: 1
+          if-no-files-found: error
