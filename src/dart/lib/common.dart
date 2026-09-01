@@ -264,6 +264,128 @@ class BinarySourceProvenanceV1 {
   };
 }
 
+class MirrorDescriptorV1 {
+  const MirrorDescriptorV1({
+    this.alternateUrls,
+    this.assetPrefix,
+    this.branch,
+    this.id,
+    this.kind = MirrorKindV1.objectStore,
+    this.path,
+    this.priority,
+    this.repository,
+    this.serves = const MirrorServesV1(artifacts: true, index: true, metadata: true),
+    this.url,
+  });
+
+  factory MirrorDescriptorV1.fromJson(Map<String, dynamic> json) => MirrorDescriptorV1(
+    alternateUrls: (json['alternate_urls'] as List<dynamic>?)?.map((e) => e as String).toList(),
+    assetPrefix: json['asset_prefix'] as String?,
+    branch: json['branch'] as String?,
+    id: json['id'] as String?,
+    kind: json['kind'] == null
+        ? MirrorKindV1.objectStore
+        : MirrorKindV1.fromJson(json['kind'] as String),
+    path: json['path'] as String?,
+    priority: (json['priority'] as num?)?.toInt(),
+    repository: json['repository'] as String?,
+    serves: json['serves'] == null
+        ? const MirrorServesV1(artifacts: true, index: true, metadata: true)
+        : MirrorServesV1.fromJson(json['serves'] as Map<String, dynamic>),
+    url: json['url'] as String?,
+  );
+
+  final List<String>? alternateUrls;
+
+  final String? assetPrefix;
+
+  final String? branch;
+
+  final String? id;
+
+  final MirrorKindV1 kind;
+
+  final String? path;
+
+  final int? priority;
+
+  final String? repository;
+
+  final MirrorServesV1 serves;
+
+  final String? url;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'alternate_urls': alternateUrls,
+    'asset_prefix': assetPrefix,
+    'branch': branch,
+    'id': id,
+    'kind': kind.toJson(),
+    'path': path,
+    'priority': priority,
+    'repository': repository,
+    'serves': serves.toJson(),
+    'url': url,
+  };
+}
+
+enum MirrorKindV1 {
+  zedRegistry('zed-registry'),
+  objectStore('object-store'),
+  directory('directory'),
+  githubRelease('github-release'),
+  githubRaw('github-raw');
+
+  const MirrorKindV1(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static MirrorKindV1 fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown MirrorKindV1: $value'),
+  );
+
+  static MirrorKindV1? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
+class MirrorServesV1 {
+  const MirrorServesV1({
+    this.artifacts = true,
+    this.index = true,
+    this.metadata = true,
+  });
+
+  factory MirrorServesV1.fromJson(Map<String, dynamic> json) => MirrorServesV1(
+    artifacts: json['artifacts'] == null
+        ? true
+        : json['artifacts'] as bool,
+    index: json['index'] == null
+        ? true
+        : json['index'] as bool,
+    metadata: json['metadata'] == null
+        ? true
+        : json['metadata'] as bool,
+  );
+
+  final bool artifacts;
+
+  final bool index;
+
+  final bool metadata;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'artifacts': artifacts,
+    'index': index,
+    'metadata': metadata,
+  };
+}
+
 class PackageSummary {
   const PackageSummary({
     this.description,

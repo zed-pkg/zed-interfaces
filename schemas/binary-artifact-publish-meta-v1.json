@@ -371,6 +371,13 @@
           "$ref": "#/$defs/ProjectLifecycleSection",
           "description": "Root-project lifecycle hooks around Zed operations. These belong to the\nreviewed checkout and are distinct from dependency package install\nhooks, which retain their separate consent and staging boundary."
         },
+        "mirrors": {
+          "description": "Explicit public mirrors this package publishes with. Combined with\nguessed GitHub/R2 locations from `[package.repository]` and\n`[package.artifacts]` by [`Manifest::resolved_mirrors`].",
+          "items": {
+            "$ref": "#/$defs/MirrorDescriptorV1"
+          },
+          "type": "array"
+        },
         "native-dependencies": {
           "additionalProperties": {
             "items": {
@@ -403,6 +410,10 @@
             "test": null
           }
         },
+        "signing": {
+          "$ref": "#/$defs/SigningSection",
+          "description": "Optional `[signing]` table. Declares which publisher key this package\nuses so `zed publish` can sign version metadata for registry-down\nrange resolution."
+        },
         "targets": {
           "additionalProperties": {
             "$ref": "#/$defs/TargetSection"
@@ -418,6 +429,79 @@
       "required": [
         "package"
       ],
+      "type": "object"
+    },
+    "MirrorDescriptorV1": {
+      "properties": {
+        "alternate_urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "asset_prefix": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/MirrorKindV1",
+          "default": "object-store"
+        },
+        "path": {
+          "type": "string"
+        },
+        "priority": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "serves": {
+          "$ref": "#/$defs/MirrorServesV1",
+          "default": {
+            "artifacts": true,
+            "index": true,
+            "metadata": true
+          }
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "MirrorKindV1": {
+      "enum": [
+        "zed-registry",
+        "object-store",
+        "directory",
+        "github-release",
+        "github-raw"
+      ],
+      "type": "string"
+    },
+    "MirrorServesV1": {
+      "properties": {
+        "artifacts": {
+          "default": true,
+          "type": "boolean"
+        },
+        "index": {
+          "default": true,
+          "type": "boolean"
+        },
+        "metadata": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
       "type": "object"
     },
     "NativeRegistry": {
@@ -559,7 +643,7 @@
       "properties": {
         "artifacts": {
           "$ref": "#/$defs/ArtifactsSection",
-          "description": "Public artifact locations used when `registry.zpkg.net` is unreachable.\nOmit the table and clients guess GitHub Release / R2 / GHCR paths from\n`[package.repository]` and `org`/`name`."
+          "description": "Public artifact locations used when `registry.zpkg.net` is unreachable.\nOmit the table and clients guess GitHub Release / R2 / GHCR paths from\n`[package.repository]` and `org`/`name`. Declare `r2_key` only when\nthe object is not at a standard guessed path."
         },
         "description": {
           "type": "string"
@@ -799,6 +883,15 @@
         "test": {
           "default": null,
           "description": "Test command run from the repository (not from published artifacts;\ntests are stripped at publish time).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SigningSection": {
+      "description": "Optional `[signing]` table on `.zpkg.toml`.",
+      "properties": {
+        "key_id": {
           "type": "string"
         }
       },

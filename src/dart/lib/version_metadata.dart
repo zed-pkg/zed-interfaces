@@ -2,6 +2,8 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/version-metadata.json
 
+import 'common.dart';
+
 /// On-the-wire formats for published package artifacts.
 enum ArtifactFormat {
   tarGz('tar.gz'),
@@ -25,58 +27,30 @@ enum ArtifactFormat {
   String toJson() => wire;
 }
 
-/// One concrete fetch location for a published artifact.
-class ArtifactLocator {
-  const ArtifactLocator({
-    required this.kind,
-    required this.url,
+class DetachedSignatureV1 {
+  const DetachedSignatureV1({
+    required this.algorithm,
+    required this.keyId,
+    required this.signatureMultibase,
   });
 
-  factory ArtifactLocator.fromJson(Map<String, dynamic> json) => ArtifactLocator(
-    kind: ArtifactSourceKind.fromJson(json['kind'] as String),
-    url: json['url'] as String,
+  factory DetachedSignatureV1.fromJson(Map<String, dynamic> json) => DetachedSignatureV1(
+    algorithm: json['algorithm'] as String,
+    keyId: json['key_id'] as String,
+    signatureMultibase: json['signature_multibase'] as String,
   );
 
-  final ArtifactSourceKind kind;
+  final String algorithm;
 
-  final String url;
+  final String keyId;
+
+  final String signatureMultibase;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    'kind': kind.toJson(),
-    'url': url,
+    'algorithm': algorithm,
+    'key_id': keyId,
+    'signature_multibase': signatureMultibase,
   };
-}
-
-/// Where a published artifact can be fetched from when the primary registry host is down.
-/// Order in [`artifact_locators`] is the client retry order.
-enum ArtifactSourceKind {
-  /// `zed-api-server` (`/v1/artifacts/<sha256>` or a presigned redirect).
-  registry('registry'),
-  /// Direct GET against the public R2/CDN origin.
-  r2('r2'),
-  /// Packed tarball attached to a GitHub Release.
-  githubRelease('github-release'),
-  /// Source archive of the tagged commit. Last resort: the bytes are the VCS tree, not the
-  /// pruned publish artifact, so a lockfile sha256 will not match unless the client re-packs
-  /// with the same rules.
-  githubArchive('github-archive');
-
-  const ArtifactSourceKind(this.wire);
-
-  /// The value as it appears in JSON.
-  final String wire;
-
-  /// Throws [FormatException] on a value this build does not know — an
-  /// unrecognized variant is a version skew, not something to decode past.
-  static ArtifactSourceKind fromJson(String value) => values.firstWhere(
-    (candidate) => candidate.wire == value,
-    orElse: () => throw FormatException('unknown ArtifactSourceKind: $value'),
-  );
-
-  static ArtifactSourceKind? maybeFromJson(String? value) =>
-      value == null ? null : fromJson(value);
-
-  String toJson() => wire;
 }
 
 class VersionMetadata {
@@ -88,6 +62,7 @@ class VersionMetadata {
     required this.org,
     required this.publishedAt,
     required this.sha256,
+    this.signatures,
     required this.size,
     this.vcsCommit,
     required this.vcsTag,
@@ -100,11 +75,12 @@ class VersionMetadata {
     format: json['format'] == null
         ? ArtifactFormat.tarGz
         : ArtifactFormat.fromJson(json['format'] as String),
-    mirrors: (json['mirrors'] as List<dynamic>?)?.map((e) => ArtifactLocator.fromJson(e as Map<String, dynamic>)).toList(),
+    mirrors: (json['mirrors'] as List<dynamic>?)?.map((e) => MirrorDescriptorV1.fromJson(e as Map<String, dynamic>)).toList(),
     name: json['name'] as String,
     org: json['org'] as String,
     publishedAt: json['published_at'] as String,
     sha256: json['sha256'] as String,
+    signatures: (json['signatures'] as List<dynamic>?)?.map((e) => DetachedSignatureV1.fromJson(e as Map<String, dynamic>)).toList(),
     size: (json['size'] as num).toInt(),
     vcsCommit: json['vcs_commit'] as String?,
     vcsTag: json['vcs_tag'] as String,
@@ -122,7 +98,7 @@ class VersionMetadata {
   /// Alternate fetch locations (public R2, GitHub Release) so a client that already has this
   /// metadata can retry without the registry host. Empty when the publisher did not advertise
   /// mirrors; clients still guess standard GitHub/R2 paths from `org`/`name`/`vcs_tag`.
-  final List<ArtifactLocator>? mirrors;
+  final List<MirrorDescriptorV1>? mirrors;
 
   final String name;
 
@@ -132,6 +108,10 @@ class VersionMetadata {
   final String publishedAt;
 
   final String sha256;
+
+  /// Detached signatures over the version attestation. Empty when the publisher did not sign;
+  /// frozen installs still work from the lock digest.
+  final List<DetachedSignatureV1>? signatures;
 
   final int size;
 
@@ -151,6 +131,7 @@ class VersionMetadata {
     'org': org,
     'published_at': publishedAt,
     'sha256': sha256,
+    'signatures': signatures?.map((e) => e.toJson()).toList(),
     'size': size,
     'vcs_commit': vcsCommit,
     'vcs_tag': vcsTag,

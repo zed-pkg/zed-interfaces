@@ -2,12 +2,18 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/package-metadata.json
 
+import type { MirrorDescriptorV1 } from "./common.ts";
+
 export interface PackageMetadata {
   readonly description?: string | null;
   readonly latest?: string | null;
+  /** Package-level public mirrors advertised by the publisher. */
+  readonly mirrors?: readonly MirrorDescriptorV1[];
   readonly name: string;
   readonly org: string;
   readonly repo_url: string;
+  /** Publisher keys consumers pin on first resolve. */
+  readonly signing_keys?: readonly PublisherKeyV1[];
   /** Free-form tags for filtering/discovery (multi-tag lookup). */
   readonly tags?: readonly string[];
   readonly vcs: Vcs;
@@ -15,6 +21,20 @@ export interface PackageMetadata {
   readonly version_scheme?: VersionScheme;
   /** All published, non-yanked versions, newest first. */
   readonly versions: readonly string[];
+}
+
+export type PublisherKeyStateV1 = "active" | "retired" | "revoked";
+
+/** Every `PublisherKeyStateV1` value, in schema order — for validation and pickers. */
+export const PUBLISHER_KEY_STATE_V1_VALUES = ["active", "retired", "revoked"] as const;
+
+export interface PublisherKeyV1 {
+  readonly algorithm: string;
+  readonly enrolled_at?: string | null;
+  readonly key_id: string;
+  readonly public_key_multibase: string;
+  readonly revoked_reason?: string | null;
+  readonly state: PublisherKeyStateV1;
 }
 
 /**
