@@ -95,18 +95,23 @@ jobs:
           if text.count(old) != 1:
               raise SystemExit(f'expected one dartLiteral block, found {text.count(old)}')
           text = text.replace(old, new)
-          replacements = {
-              'function dartClass(type, kinds) {': 'function dartClass(type, kinds, types) {',
-              'dartLiteral(p.type, p.default, kinds)': 'dartLiteral(p.type, p.default, kinds, types)',
-              'const kinds = new Map([...built.byName].map(([name, v]) => [name, v.type.kind]));\n  const files = {};': 'const kinds = new Map([...built.byName].map(([name, v]) => [name, v.type.kind]));\n  const types = new Map([...built.byName].map(([name, v]) => [name, v.type]));\n  const files = {};',
-              'dartClass(type, kinds)))': 'dartClass(type, kinds, types)))',
-          }
-          for old_value, new_value in replacements.items():
+
+          ordinary_replacements = (
+              ('function dartClass(type, kinds) {', 'function dartClass(type, kinds, types) {', 1),
+              ('dartLiteral(p.type, p.default, kinds)', 'dartLiteral(p.type, p.default, kinds, types)', 2),
+              ('dartClass(type, kinds)))', 'dartClass(type, kinds, types)))', 1),
+          )
+          for old_value, new_value, expected in ordinary_replacements:
               count = text.count(old_value)
-              expected = 2 if old_value == 'dartLiteral(p.type, p.default, kinds)' else 1
               if count != expected:
                   raise SystemExit(f'expected {expected} occurrences of {old_value!r}, found {count}')
               text = text.replace(old_value, new_value)
+
+          prelude = 'const kinds = new Map([...built.byName].map(([name, v]) => [name, v.type.kind]));\n  const files = {};'
+          dart_prelude = 'const kinds = new Map([...built.byName].map(([name, v]) => [name, v.type.kind]));\n  const types = new Map([...built.byName].map(([name, v]) => [name, v.type]));\n  const files = {};'
+          if text.count(prelude) != 2:
+              raise SystemExit(f'expected Dart and TypeScript emitter preludes, found {text.count(prelude)}')
+          text = text.replace(prelude, dart_prelude, 1)
           generator.write_text(text, encoding='utf-8')
 
           tests = Path('codegen/generate.test.mjs')
