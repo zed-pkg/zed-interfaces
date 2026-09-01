@@ -28,9 +28,7 @@ pub const ABUSE_PROOF_HEADER: &str = "X-Zed-Abuse-Proof";
 
 /// A single-variant enum makes the schema marker closed in Rust, JSON Schema,
 /// Dart, and TypeScript instead of accepting an arbitrary version string.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub enum PublicIntakeSchemaV1 {
     #[default]
     #[serde(rename = "zed.public-intake.v1")]

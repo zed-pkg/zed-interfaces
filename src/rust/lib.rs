@@ -27,6 +27,7 @@ pub mod nix;
 pub mod nix_plan;
 pub mod oci;
 pub mod paths;
+pub mod public_intake;
 pub mod registry;
 pub mod registry_protocol_v1;
 pub mod signing;

@@ -423,6 +423,83 @@ class PackageSummary {
   };
 }
 
+enum PublicIntakeInterestV1 {
+  packagePublishing('package_publishing'),
+  privateRegistry('private_registry'),
+  supplyChainSecurity('supply_chain_security'),
+  enterpriseSupport('enterprise_support'),
+  developerExperience('developer_experience'),
+  migration('migration'),
+  compliance('compliance'),
+  selfHosted('self_hosted'),
+  airGapped('air_gapped');
+
+  const PublicIntakeInterestV1(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static PublicIntakeInterestV1 fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown PublicIntakeInterestV1: $value'),
+  );
+
+  static PublicIntakeInterestV1? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
+/// A single-variant enum makes the schema marker closed in Rust, JSON Schema, Dart, and
+/// TypeScript instead of accepting an arbitrary version string.
+enum PublicIntakeSchemaV1 {
+  zedPublicIntakeV1('zed.public-intake.v1');
+
+  const PublicIntakeSchemaV1(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static PublicIntakeSchemaV1 fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown PublicIntakeSchemaV1: $value'),
+  );
+
+  static PublicIntakeSchemaV1? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
+/// Public browser roles admitted by the v1 contract. The domain layer also checks that an
+/// individual request uses `user.zpkg.net` and an organization request uses `org.zpkg.net`;
+/// this enum prevents nonstandard hostnames from entering the shared wire model at all.
+enum PublicIntakeSourceHostV1 {
+  userZpkgNet('user.zpkg.net'),
+  orgZpkgNet('org.zpkg.net');
+
+  const PublicIntakeSourceHostV1(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static PublicIntakeSourceHostV1 fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown PublicIntakeSourceHostV1: $value'),
+  );
+
+  static PublicIntakeSourceHostV1? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
 /// Evidence or authority a provider requires before ownership can be asserted.
 enum RegistryNamespaceProof {
   registryAccountControl('registry-account-control'),
