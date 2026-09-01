@@ -6,17 +6,17 @@ on:
       - automation/2026-09-01-regenerate-contracts
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  generate:
+  generate-and-commit:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - name: Check out exact branch head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          persist-credentials: false
+          persist-credentials: true
           show-progress: false
 
       - name: Install Rust toolchain
@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Apply and test the structured-default generator repair
+      - name: Apply the structured-default generator repair
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -148,40 +148,57 @@ jobs:
           test_text = test_text.replace(anchor, regression + anchor)
           tests.write_text(test_text, encoding='utf-8')
           PY
-          node --test codegen/generate.test.mjs
 
-      - name: Regenerate all canonical contracts and projections
+      - name: Regenerate and test every canonical projection
         run: |
           set -euo pipefail
+          node --test codegen/generate.test.mjs
           cargo run --locked --example generate_schemas
           cargo run --locked --example generate_fixtures
           node codegen/generate.mjs
           node --test codegen/generate.test.mjs
+          cargo test --locked --all-targets
+          (cd src/ts && npm install --no-save typescript@5 @types/node && npx tsc --noEmit && node --test wire-format.test.ts)
 
-      - name: Export exact changed files and binary-safe patch
+      - name: Commit only the tested repair and remove this workflow
+        env:
+          BRANCH_NAME: automation/2026-09-01-regenerate-contracts
         run: |
           set -euo pipefail
-          export_dir="$RUNNER_TEMP/generated-contracts"
-          mkdir -p "$export_dir/files"
-          git diff --name-only --diff-filter=ACMRT -- codegen schemas fixtures src/dart src/ts \
-            | LC_ALL=C sort -u > "$export_dir/changed-files.txt"
-          git diff --name-only --diff-filter=D -- codegen schemas fixtures src/dart src/ts \
-            | LC_ALL=C sort -u > "$export_dir/deleted-files.txt"
-          git status --short -- codegen schemas fixtures src/dart src/ts \
-            > "$export_dir/status.txt"
-          git diff --binary -- codegen schemas fixtures src/dart src/ts \
-            > "$export_dir/generated.patch"
-          test -s "$export_dir/changed-files.txt"
-          while IFS= read -r path; do
-            mkdir -p "$export_dir/files/$(dirname "$path")"
-            cp -- "$path" "$export_dir/files/$path"
-          done < "$export_dir/changed-files.txt"
-          printf '%s\n' "$GITHUB_SHA" > "$export_dir/source-sha.txt"
+          python3 - <<'PY'
+          import subprocess
 
-      - name: Upload exact regeneration output
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: regenerated-contracts-${{ github.sha }}
-          path: ${{ runner.temp }}/generated-contracts
-          retention-days: 1
-          if-no-files-found: error
+          allowed = (
+              'codegen/',
+              'schemas/',
+              'fixtures/',
+              'src/dart/',
+              'src/ts/',
+          )
+          output = subprocess.check_output(
+              ['git', 'status', '--porcelain=v1', '-z'],
+              text=True,
+          )
+          paths = []
+          records = output.split('\0')
+          index = 0
+          while index < len(records) and records[index]:
+              record = records[index]
+              status = record[:2]
+              path = record[3:]
+              paths.append(path)
+              index += 2 if status[0] in {'R', 'C'} else 1
+          unexpected = [path for path in paths if not path.startswith(allowed)]
+          if unexpected:
+              raise SystemExit(f'unexpected generated paths: {unexpected}')
+          if not paths:
+              raise SystemExit('generator produced no changes')
+          print(f'validated {len(paths)} generated changes')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add codegen schemas fixtures src/dart src/ts
+          git rm .github/workflows/automation-regenerate-contracts.yml
+          git diff --cached --check
+          git commit -m 'fix(codegen): support structured defaults and refresh contracts'
+          git push origin "HEAD:$BRANCH_NAME"
