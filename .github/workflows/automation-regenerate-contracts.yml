@@ -55,7 +55,7 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > "$export_dir/source-sha.txt"
 
       - name: Upload exact regeneration output
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: regenerated-contracts-${{ github.sha }}
           path: ${{ runner.temp }}/generated-contracts
