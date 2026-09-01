@@ -1,0 +1,86 @@
+name: materialize narrow mirror default repair
+
+on:
+  push:
+    branches:
+      - automation/2026-09-01-regenerate-contracts
+    paths:
+      - .github/workflows/materialize-mirror-default.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-mirror-default
+  cancel-in-progress: false
+
+jobs:
+  repair-and-commit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact feature branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: automation/2026-09-01-regenerate-contracts
+          fetch-depth: 0
+          show-progress: false
+
+      - name: Apply the exact derivable-default repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/rust/mirror.rs')
+          source = path.read_text(encoding='utf-8')
+          old = '''#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+          #[serde(rename_all = "kebab-case")]
+          pub enum MirrorKindV1 {
+              ZedRegistry,
+              ObjectStore,
+              Directory,
+              GithubRelease,
+              GithubRaw,
+          }
+
+          impl Default for MirrorKindV1 {
+              fn default() -> Self {
+                  Self::ObjectStore
+              }
+          }
+          '''
+          new = '''#[derive(
+              Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema,
+          )]
+          #[serde(rename_all = "kebab-case")]
+          pub enum MirrorKindV1 {
+              ZedRegistry,
+              #[default]
+              ObjectStore,
+              Directory,
+              GithubRelease,
+              GithubRaw,
+          }
+          '''
+          if source.count(old) != 1:
+              raise SystemExit('expected exactly one handwritten MirrorKindV1 default')
+          path.write_text(source.replace(old, new), encoding='utf-8', newline='\n')
+          PY
+          cargo fmt --all
+          git diff --check
+          test "$(git diff --name-only)" = 'src/rust/mirror.rs'
+
+      - name: Remove bootstrap workflow and commit only the repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/materialize-mirror-default.yml
+          git add src/rust/mirror.rs .github/workflows/materialize-mirror-default.yml
+          git diff --cached --check
+          test "$(git diff --cached --name-only | sort)" = "$(printf '%s\n' .github/workflows/materialize-mirror-default.yml src/rust/mirror.rs | sort)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'refactor(rust): derive the mirror kind default'
+          git push origin HEAD:automation/2026-09-01-regenerate-contracts
