@@ -1,0 +1,45 @@
+name: public intake schema shadows
+
+on:
+  pull_request:
+    paths:
+      - "src/rust/public_intake.rs"
+      - "schemas/*public-intake*.json"
+      - "schemas/pre-interest-registration-request-v1.json"
+      - "schemas/quote-request-v1.json"
+      - "contracts/public-intake/**"
+      - "proto/zed_public_intake_v1.proto"
+      - "codegen/public-intake-shadow.test.mjs"
+      - ".github/workflows/public-intake-shadow.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/rust/public_intake.rs"
+      - "schemas/*public-intake*.json"
+      - "schemas/pre-interest-registration-request-v1.json"
+      - "schemas/quote-request-v1.json"
+      - "contracts/public-intake/**"
+      - "proto/zed_public_intake_v1.proto"
+      - "codegen/public-intake-shadow.test.mjs"
+      - ".github/workflows/public-intake-shadow.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-intake-shadow-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semantic-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Verify TypeSpec, Protobuf, JSON Schema, and Rust parity
+        run: node --test codegen/public-intake-shadow.test.mjs
