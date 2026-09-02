@@ -5,7 +5,7 @@ import test from "node:test";
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const schema = (name) => JSON.parse(read(`schemas/${name}.json`));
 const typeSpec = read("contracts/public-intake/v1/main.tsp");
-const proto = read("proto/zed_public_intake_v1.proto");
+const proto = read("proto/zed/public_intake/v1/public_intake.proto");
 const rust = read("src/rust/public_intake.rs");
 
 const requestSchemas = new Map([
@@ -110,6 +110,22 @@ test("transport routes stay coupled to the Rust authority", () => {
     assert.match(proto, new RegExp(`HTTP: POST ${path.replaceAll("/", "\\/")}`));
     assert.ok(rust.includes(`"${path}"`), `Rust exports ${path}`);
   }
+});
+
+test("Protobuf RPCs use unique Buf-standard transport envelopes", () => {
+  const service = block(proto, "service", "PublicIntakeService");
+  assert.match(
+    service,
+    /rpc SubmitPreInterest\(SubmitPreInterestRequest\) returns \(SubmitPreInterestResponse\);/,
+  );
+  assert.match(
+    service,
+    /rpc SubmitQuoteRequest\(SubmitQuoteRequestRequest\) returns \(SubmitQuoteRequestResponse\);/,
+  );
+  assertSameSet(protoFields("SubmitPreInterestRequest"), new Set(["request"]), "pre-interest request envelope");
+  assertSameSet(protoFields("SubmitPreInterestResponse"), new Set(["accepted"]), "pre-interest response envelope");
+  assertSameSet(protoFields("SubmitQuoteRequestRequest"), new Set(["request"]), "quote request envelope");
+  assertSameSet(protoFields("SubmitQuoteRequestResponse"), new Set(["accepted"]), "quote response envelope");
 });
 
 test("public wire messages cannot carry credentials or administrative authority", () => {
