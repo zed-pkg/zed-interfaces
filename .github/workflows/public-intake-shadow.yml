@@ -75,8 +75,10 @@ jobs:
         run: |
           set -euo pipefail
           proto_path="zed/public_intake/v1/public_intake.proto"
-          buf format --diff --exit-code "proto/$proto_path"
-          buf lint proto --path "$proto_path"
-          buf build proto --path "$proto_path" \
+          pushd proto >/dev/null
+          buf format --diff --exit-code "$proto_path"
+          buf lint . --path "$proto_path"
+          buf build . --path "$proto_path" \
             -o "$RUNNER_TEMP/zed-public-intake-v1.binpb"
+          popd >/dev/null
           test -s "$RUNNER_TEMP/zed-public-intake-v1.binpb"
