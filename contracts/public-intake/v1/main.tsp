@@ -45,7 +45,7 @@ enum QuoteTeamSizeBandV1 {
   fiftyOneToTwoHundred: "fifty_one_to_two_hundred",
   twoHundredOneToOneThousand: "two_hundred_one_to_one_thousand",
   overOneThousand: "over_one_thousand",
-  unknown,
+  unknownValue: "unknown",
 }
 
 enum QuotePackageCountBandV1 {
@@ -53,7 +53,7 @@ enum QuotePackageCountBandV1 {
   oneHundredToOneThousand: "one_hundred_to_one_thousand",
   oneThousandToTenThousand: "one_thousand_to_ten_thousand",
   overTenThousand: "over_ten_thousand",
-  unknown,
+  unknownValue: "unknown",
 }
 
 enum QuoteMonthlyDownloadBandV1 {
@@ -61,7 +61,7 @@ enum QuoteMonthlyDownloadBandV1 {
   oneHundredThousandToOneMillion: "one_hundred_thousand_to_one_million",
   oneMillionToTenMillion: "one_million_to_ten_million",
   overTenMillion: "over_ten_million",
-  unknown,
+  unknownValue: "unknown",
 }
 
 enum QuoteMigrationWindowV1 {
