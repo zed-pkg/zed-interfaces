@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package zed.public_intake.v1;
+
+option java_multiple_files = true;
+option java_package = "net.zpkg.publicintake.v1";
+option csharp_namespace = "Zed.PublicIntake.V1";
+
+enum PublicIntakeSchemaV1 {
+  PUBLIC_INTAKE_SCHEMA_V1_UNSPECIFIED = 0;
+  PUBLIC_INTAKE_SCHEMA_V1 = 1; // wire: zed.public-intake.v1
+}
+
+enum PublicIntakeSourceHostV1 {
+  PUBLIC_INTAKE_SOURCE_HOST_V1_UNSPECIFIED = 0;
+  PUBLIC_INTAKE_SOURCE_HOST_V1_USER = 1; // wire: user.zpkg.net
+  PUBLIC_INTAKE_SOURCE_HOST_V1_ORGANIZATION = 2; // wire: org.zpkg.net
+}
+
+enum PublicIntakePartyV1 {
+  PUBLIC_INTAKE_PARTY_V1_UNSPECIFIED = 0;
+  PUBLIC_INTAKE_PARTY_V1_INDIVIDUAL = 1; // wire: individual
+  PUBLIC_INTAKE_PARTY_V1_ORGANIZATION = 2; // wire: organization
+}
+
+enum PublicIntakeInterestV1 {
+  PUBLIC_INTAKE_INTEREST_V1_UNSPECIFIED = 0;
+  PUBLIC_INTAKE_INTEREST_V1_PACKAGE_PUBLISHING = 1; // wire: package_publishing
+  PUBLIC_INTAKE_INTEREST_V1_PRIVATE_REGISTRY = 2; // wire: private_registry
+  PUBLIC_INTAKE_INTEREST_V1_SUPPLY_CHAIN_SECURITY = 3; // wire: supply_chain_security
+  PUBLIC_INTAKE_INTEREST_V1_ENTERPRISE_SUPPORT = 4; // wire: enterprise_support
+  PUBLIC_INTAKE_INTEREST_V1_DEVELOPER_EXPERIENCE = 5; // wire: developer_experience
+  PUBLIC_INTAKE_INTEREST_V1_MIGRATION = 6; // wire: migration
+  PUBLIC_INTAKE_INTEREST_V1_COMPLIANCE = 7; // wire: compliance
+  PUBLIC_INTAKE_INTEREST_V1_SELF_HOSTED = 8; // wire: self_hosted
+  PUBLIC_INTAKE_INTEREST_V1_AIR_GAPPED = 9; // wire: air_gapped
+}
+
+enum QuoteDeploymentModelV1 {
+  QUOTE_DEPLOYMENT_MODEL_V1_UNSPECIFIED = 0;
+  QUOTE_DEPLOYMENT_MODEL_V1_EVALUATING = 1; // wire: evaluating
+  QUOTE_DEPLOYMENT_MODEL_V1_ZED_CLOUD = 2; // wire: zed_cloud
+  QUOTE_DEPLOYMENT_MODEL_V1_SELF_HOSTED = 3; // wire: self_hosted
+  QUOTE_DEPLOYMENT_MODEL_V1_HYBRID = 4; // wire: hybrid
+  QUOTE_DEPLOYMENT_MODEL_V1_AIR_GAPPED = 5; // wire: air_gapped
+}
+
+enum QuoteTeamSizeBandV1 {
+  QUOTE_TEAM_SIZE_BAND_V1_UNSPECIFIED = 0;
+  QUOTE_TEAM_SIZE_BAND_V1_ONE_TO_TEN = 1; // wire: one_to_ten
+  QUOTE_TEAM_SIZE_BAND_V1_ELEVEN_TO_FIFTY = 2; // wire: eleven_to_fifty
+  QUOTE_TEAM_SIZE_BAND_V1_FIFTY_ONE_TO_TWO_HUNDRED = 3; // wire: fifty_one_to_two_hundred
+  QUOTE_TEAM_SIZE_BAND_V1_TWO_HUNDRED_ONE_TO_ONE_THOUSAND = 4; // wire: two_hundred_one_to_one_thousand
+  QUOTE_TEAM_SIZE_BAND_V1_OVER_ONE_THOUSAND = 5; // wire: over_one_thousand
+  QUOTE_TEAM_SIZE_BAND_V1_UNKNOWN = 6; // wire: unknown
+}
+
+enum QuotePackageCountBandV1 {
+  QUOTE_PACKAGE_COUNT_BAND_V1_UNSPECIFIED = 0;
+  QUOTE_PACKAGE_COUNT_BAND_V1_UNDER_ONE_HUNDRED = 1; // wire: under_one_hundred
+  QUOTE_PACKAGE_COUNT_BAND_V1_ONE_HUNDRED_TO_ONE_THOUSAND = 2; // wire: one_hundred_to_one_thousand
+  QUOTE_PACKAGE_COUNT_BAND_V1_ONE_THOUSAND_TO_TEN_THOUSAND = 3; // wire: one_thousand_to_ten_thousand
+  QUOTE_PACKAGE_COUNT_BAND_V1_OVER_TEN_THOUSAND = 4; // wire: over_ten_thousand
+  QUOTE_PACKAGE_COUNT_BAND_V1_UNKNOWN = 5; // wire: unknown
+}
+
+enum QuoteMonthlyDownloadBandV1 {
+  QUOTE_MONTHLY_DOWNLOAD_BAND_V1_UNSPECIFIED = 0;
+  QUOTE_MONTHLY_DOWNLOAD_BAND_V1_UNDER_ONE_HUNDRED_THOUSAND = 1; // wire: under_one_hundred_thousand
+  QUOTE_MONTHLY_DOWNLOAD_BAND_V1_ONE_HUNDRED_THOUSAND_TO_ONE_MILLION = 2; // wire: one_hundred_thousand_to_one_million
+  QUOTE_MONTHLY_DOWNLOAD_BAND_V1_ONE_MILLION_TO_TEN_MILLION = 3; // wire: one_million_to_ten_million
+  QUOTE_MONTHLY_DOWNLOAD_BAND_V1_OVER_TEN_MILLION = 4; // wire: over_ten_million
+  QUOTE_MONTHLY_DOWNLOAD_BAND_V1_UNKNOWN = 5; // wire: unknown
+}
+
+enum QuoteMigrationWindowV1 {
+  QUOTE_MIGRATION_WINDOW_V1_UNSPECIFIED = 0;
+  QUOTE_MIGRATION_WINDOW_V1_EXPLORING = 1; // wire: exploring
+  QUOTE_MIGRATION_WINDOW_V1_UNDER_THREE_MONTHS = 2; // wire: under_three_months
+  QUOTE_MIGRATION_WINDOW_V1_THREE_TO_SIX_MONTHS = 3; // wire: three_to_six_months
+  QUOTE_MIGRATION_WINDOW_V1_SIX_TO_TWELVE_MONTHS = 4; // wire: six_to_twelve_months
+  QUOTE_MIGRATION_WINDOW_V1_OVER_TWELVE_MONTHS = 5; // wire: over_twelve_months
+}
+
+enum PublicIntakeAcceptedStatusV1 {
+  PUBLIC_INTAKE_ACCEPTED_STATUS_V1_UNSPECIFIED = 0;
+  PUBLIC_INTAKE_ACCEPTED_STATUS_V1_ACCEPTED = 1; // wire: accepted
+}
+
+enum PublicIntakeErrorCodeV1 {
+  PUBLIC_INTAKE_ERROR_CODE_V1_UNSPECIFIED = 0;
+  PUBLIC_INTAKE_ERROR_CODE_V1_INVALID_REQUEST = 1; // wire: invalid_request
+  PUBLIC_INTAKE_ERROR_CODE_V1_UNSUPPORTED_MEDIA_TYPE = 2; // wire: unsupported_media_type
+  PUBLIC_INTAKE_ERROR_CODE_V1_PAYLOAD_TOO_LARGE = 3; // wire: payload_too_large
+  PUBLIC_INTAKE_ERROR_CODE_V1_ABUSE_CHALLENGE_FAILED = 4; // wire: abuse_challenge_failed
+  PUBLIC_INTAKE_ERROR_CODE_V1_RATE_LIMITED = 5; // wire: rate_limited
+  PUBLIC_INTAKE_ERROR_CODE_V1_TEMPORARILY_UNAVAILABLE = 6; // wire: temporarily_unavailable
+}
+
+message PreInterestRegistrationRequestV1 {
+  PublicIntakeSchemaV1 schema = 1;
+  string request_id = 2;
+  string email = 3;
+  PublicIntakePartyV1 party_type = 4;
+  PublicIntakeSourceHostV1 source_host = 5;
+  repeated PublicIntakeInterestV1 interests = 6;
+  optional string contact_name = 7;
+  optional string organization_name = 8;
+  optional string website_url = 9;
+  optional string locale = 10;
+  optional string referral_code = 11;
+  string consent_revision = 12;
+  string consented_at = 13;
+  bool contact_consent = 14;
+  bool marketing_consent = 15;
+  optional string marketing_consent_revision = 16;
+}
+
+message QuoteRequestV1 {
+  PublicIntakeSchemaV1 schema = 1;
+  string request_id = 2;
+  string email = 3;
+  PublicIntakeSourceHostV1 source_host = 4;
+  string organization_name = 5;
+  string contact_name = 6;
+  optional string role = 7;
+  optional string website_url = 8;
+  repeated PublicIntakeInterestV1 interests = 9;
+  QuoteDeploymentModelV1 deployment_model = 10;
+  QuoteTeamSizeBandV1 team_size = 11;
+  QuotePackageCountBandV1 package_count = 12;
+  QuoteMonthlyDownloadBandV1 monthly_downloads = 13;
+  QuoteMigrationWindowV1 migration_window = 14;
+  optional string requirements_summary = 15;
+  optional string locale = 16;
+  optional string referral_code = 17;
+  string consent_revision = 18;
+  string consented_at = 19;
+  bool contact_consent = 20;
+  bool marketing_consent = 21;
+  optional string marketing_consent_revision = 22;
+}
+
+message PublicIntakeAcceptedV1 {
+  PublicIntakeSchemaV1 schema = 1;
+  PublicIntakeAcceptedStatusV1 status = 2;
+}
+
+message PublicIntakeErrorV1 {
+  PublicIntakeSchemaV1 schema = 1;
+  PublicIntakeErrorCodeV1 code = 2;
+  bool retryable = 3;
+}
+
+service PublicIntakeServiceV1 {
+  // HTTP: POST /v1/pre-interest
+  rpc SubmitPreInterest(PreInterestRegistrationRequestV1) returns (PublicIntakeAcceptedV1);
+  // HTTP: POST /v1/quote-requests
+  rpc SubmitQuoteRequest(QuoteRequestV1) returns (PublicIntakeAcceptedV1);
+}
