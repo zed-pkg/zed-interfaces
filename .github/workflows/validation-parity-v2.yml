@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: ORESoftware/api-docs
-          ref: 4aa92aeda9ba089c1f3990c65b877a76b51853c0
+          ref: c75c3924847a42d8d2854eb78c85f330ea726bef
           path: .deps/api-docs
           persist-credentials: false
       - uses: actions/setup-node@1e60f620b9541dca151540016ba637bae5c2bf7a
