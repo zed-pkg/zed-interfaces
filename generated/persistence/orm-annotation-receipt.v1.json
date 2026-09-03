@@ -1,0 +1,16 @@
+{
+  "agreement": true,
+  "authorities": {
+    "jsonSchema": "validation/authorities/server/contracts.json",
+    "typespec": "validation/authorities/server/contracts.tsp"
+  },
+  "models": [
+    "RegistryLeaseRow",
+    "RegistryPackageRow",
+    "RegistryVersionRow"
+  ],
+  "receiptVersion": "zed.orm-annotations.v1",
+  "repository": "zed-pkg/zed-interfaces",
+  "schema": "zed_pkg",
+  "semanticDigest": "cd9982332bb9c185f55a76769dca5b726e9b58f11a903eedb62a74a41c274070"
+}

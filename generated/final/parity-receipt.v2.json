@@ -1,17 +1,21 @@
 {
   "agreement": true,
   "contractVersion": "ores.validation.v2",
-  "finalAggregateDigest": "c882e5cf6e11303369568bfdd64108008814ff3b1e7e9bf3cd29ab85ced350e6",
+  "finalAggregateDigest": "3a91eba4db5f93ffaee0597a396ac937e8b56a06d8e66416b78659ab4440015a",
   "finalTargetDigests": {
     "gleam/isomorphic/src/zed_validation_interfaces_isomorphic.gleam": "8a42f6bb90c47d5935c3fd493fe932e3bb47f76a07b1169f6b11efee2f343a58",
+    "gleam/server/src/zed_validation_interfaces_server.gleam": "98cf720e0bcd43b80697e3534b73d3587cbe198d884f3e4dab635103ea5e0086",
     "golang/isomorphic/types.go": "d56ae9dbcbc748b224927e10bb5a0755bceb1a928c177abf04a8bac789e33ae8",
+    "golang/server/types.go": "137df92617379803c3b0fc0f44e547c8d426d893a13f99f7a043f377223c171a",
     "rust/isomorphic/src/lib.rs": "22d73cd7f43109b1ce8c82190c799229c084178ec873c328ea174181acd88578",
+    "rust/server/src/lib.rs": "21964baa32abce4d0e439221d81dcfc8a3ba79a6a168e1492ba8cb48f96bead5",
     "typescript/isomorphic/types.ts": "0b1bb3d1780c58d09c5f7b22fe331285f949bf1c9ea39745473a97dfa1d2a605",
     "typescript/runtime/browser/index.ts": "a028f5d8a3dd98dc3d1078c43f6c798935ee5b0f7296f7f7a017341097a2db53",
-    "typescript/runtime/bun/index.ts": "88dc4c46cd4f652590565164a77d227d3d6c9a2b53e5e56583bc4f69c6f03ab4",
-    "typescript/runtime/deno/index.ts": "1f904c946fa84af88a4e5e5519679f1b4ae6b301aa642131ebe6b350fb7cde51",
+    "typescript/runtime/bun/index.ts": "3199fcc251296bcb800fe9b8f191b64816f496bd03986b7e86850c23a91a196f",
+    "typescript/runtime/deno/index.ts": "550d44ca3f7c2570a1b30b904f6340bdf9b900c21042feab0bc2c38dc1ef10d8",
     "typescript/runtime/edge/index.ts": "886bd463bd3b3a655dc3d3dc2a1f102be8b68d58b083df1939310d2bc1763eef",
-    "typescript/runtime/node/index.ts": "4ea13c768eeaa3ffd2e9e673f36411db6db9ce4bfdae139c781fee99c7a7d248"
+    "typescript/runtime/node/index.ts": "8dc00d485c41a6b5c346f21f5a3974b277918b994660090a65fa51afa26fda4a",
+    "typescript/server/types.ts": "6d6022281e6c113440e506e71dc068336ffb05ebb519ac256e1cd444a625895d"
   },
   "generatedOnlyAfterAgreement": true,
   "receiptVersion": "ores.validation.parity-receipt.v2",
@@ -74,6 +78,30 @@
         "golang/isomorphic/types.go": "d56ae9dbcbc748b224927e10bb5a0755bceb1a928c177abf04a8bac789e33ae8",
         "rust/isomorphic/src/lib.rs": "22d73cd7f43109b1ce8c82190c799229c084178ec873c328ea174181acd88578",
         "typescript/isomorphic/types.ts": "0b1bb3d1780c58d09c5f7b22fe331285f949bf1c9ea39745473a97dfa1d2a605"
+      }
+    },
+    "server": {
+      "agreement": true,
+      "authorities": {
+        "jsonSchema": {
+          "path": "validation/authorities/server/contracts.json",
+          "semanticDigest": "92773e0b62d08627de80ffe49e56e1a2c7b6b1e373e2c1423d48be604a79e3bf"
+        },
+        "typespec": {
+          "path": "validation/authorities/server/contracts.tsp",
+          "semanticDigest": "92773e0b62d08627de80ffe49e56e1a2c7b6b1e373e2c1423d48be604a79e3bf"
+        }
+      },
+      "models": [
+        "RegistryLeaseRow",
+        "RegistryPackageRow",
+        "RegistryVersionRow"
+      ],
+      "targetDigests": {
+        "gleam/server/src/zed_validation_interfaces_server.gleam": "98cf720e0bcd43b80697e3534b73d3587cbe198d884f3e4dab635103ea5e0086",
+        "golang/server/types.go": "137df92617379803c3b0fc0f44e547c8d426d893a13f99f7a043f377223c171a",
+        "rust/server/src/lib.rs": "21964baa32abce4d0e439221d81dcfc8a3ba79a6a168e1492ba8cb48f96bead5",
+        "typescript/server/types.ts": "6d6022281e6c113440e506e71dc068336ffb05ebb519ac256e1cd444a625895d"
       }
     }
   }
