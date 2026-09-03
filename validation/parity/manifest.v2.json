@@ -36,7 +36,11 @@
       }
     },
     "server": {
-      "models": [],
+      "models": [
+        "RegistryPackageRow",
+        "RegistryVersionRow",
+        "RegistryLeaseRow"
+      ],
       "authorities": {
         "jsonSchema": "validation/authorities/server/contracts.json",
         "typespec": "validation/authorities/server/contracts.tsp"
@@ -74,7 +78,10 @@
   "forbiddenPublicModels": [
     "TrustedActor",
     "ServerRequestContext",
-    "InternalCommand"
+    "InternalCommand",
+    "RegistryPackageRow",
+    "RegistryVersionRow",
+    "RegistryLeaseRow"
   ],
   "outputRoot": "generated/final",
   "candidatesRoot": "generated/candidates",

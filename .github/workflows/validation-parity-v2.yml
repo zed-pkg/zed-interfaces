@@ -18,7 +18,8 @@ permissions:
 
 jobs:
   parity:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -32,5 +33,22 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22.16.0"
-      - run: node .deps/api-docs/tools/validation-parity/parity-tool.mjs --self-test
-      - run: node .deps/api-docs/tools/validation-parity/parity-tool.mjs --check
+      - name: Self-test peer-authority comparators
+        run: |
+          node validation/parity/orm-annotation-check.mjs --self-test
+          node .deps/api-docs/tools/validation-parity/parity-tool.mjs --self-test
+      - name: Verify private ORM annotations
+        run: node validation/parity/orm-annotation-check.mjs --check
+      - name: Verify TypeSpec and JSON Schema parity
+        run: node .deps/api-docs/tools/validation-parity/parity-tool.mjs --check
+      - name: Assert browser and edge exports exclude server models
+        shell: bash
+        run: |
+          set -euo pipefail
+          for runtime in browser edge; do
+            if grep -R -nE 'Registry(Package|Version|Lease)Row' \
+              "generated/final/typescript/runtime/${runtime}"; then
+              echo "server persistence model leaked into ${runtime} exports" >&2
+              exit 1
+            fi
+          done
