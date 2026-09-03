@@ -1,0 +1,86 @@
+{
+  "contractVersion": "ores.validation.v2",
+  "repository": "zed-pkg/zed-interfaces",
+  "authorities": {
+    "jsonSchema": "validation/public-contracts.v1.json",
+    "typespec": "validation/typespec/validation.tsp"
+  },
+  "routeAuthority": "https://github.com/ORESoftware/api-docs",
+  "routeBindings": "validation/route-bindings.v1.json",
+  "scopes": {
+    "isomorphic": {
+      "models": [
+        "RequestMeta",
+        "PageQuery",
+        "ProblemDetails"
+      ],
+      "languages": [
+        "typescript",
+        "rust",
+        "golang",
+        "gleam"
+      ]
+    },
+    "client": {
+      "models": [],
+      "authorities": {
+        "jsonSchema": "validation/authorities/client/contracts.json",
+        "typespec": "validation/authorities/client/contracts.tsp"
+      }
+    },
+    "edge": {
+      "models": [],
+      "authorities": {
+        "jsonSchema": "validation/authorities/edge/contracts.json",
+        "typespec": "validation/authorities/edge/contracts.tsp"
+      }
+    },
+    "server": {
+      "models": [],
+      "authorities": {
+        "jsonSchema": "validation/authorities/server/contracts.json",
+        "typespec": "validation/authorities/server/contracts.tsp"
+      }
+    }
+  },
+  "runtimeExports": {
+    "browser": [
+      "isomorphic",
+      "client"
+    ],
+    "node": [
+      "isomorphic",
+      "client",
+      "server"
+    ],
+    "deno": [
+      "isomorphic",
+      "client",
+      "edge",
+      "server"
+    ],
+    "bun": [
+      "isomorphic",
+      "client",
+      "edge",
+      "server"
+    ],
+    "edge": [
+      "isomorphic",
+      "client",
+      "edge"
+    ]
+  },
+  "forbiddenPublicModels": [
+    "TrustedActor",
+    "ServerRequestContext",
+    "InternalCommand"
+  ],
+  "outputRoot": "generated/final",
+  "candidatesRoot": "generated/candidates",
+  "receipt": "generated/final/parity-receipt.v2.json",
+  "codegen": {
+    "goPackage": "interfaces",
+    "gleamModule": "zed_validation_interfaces"
+  }
+}

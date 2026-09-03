@@ -1,0 +1,36 @@
+name: validation-parity-v2
+
+on:
+  pull_request:
+    paths:
+      - "validation/**"
+      - "generated/**"
+      - ".github/workflows/validation-parity-v2.yml"
+  push:
+    branches: [main]
+    paths:
+      - "validation/**"
+      - "generated/**"
+      - ".github/workflows/validation-parity-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ORESoftware/api-docs
+          ref: 4aa92aeda9ba089c1f3990c65b877a76b51853c0
+          path: .deps/api-docs
+          persist-credentials: false
+      - uses: actions/setup-node@1e60f620b9541dca151540016ba637bae5c2bf7a
+        with:
+          node-version: "22.16.0"
+      - run: node .deps/api-docs/tools/validation-parity/parity-tool.mjs --self-test
+      - run: node .deps/api-docs/tools/validation-parity/parity-tool.mjs --check
