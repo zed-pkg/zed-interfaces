@@ -1,0 +1,79 @@
+{
+  "models": {
+    "PageQuery": {
+      "closed": true,
+      "fields": {
+        "cursor": {
+          "kind": "string",
+          "maxLength": 512,
+          "minLength": 1,
+          "required": false
+        },
+        "limit": {
+          "default": 50,
+          "kind": "integer",
+          "maximum": 100,
+          "minimum": 1,
+          "required": true
+        }
+      }
+    },
+    "ProblemDetails": {
+      "closed": true,
+      "fields": {
+        "detail": {
+          "kind": "string",
+          "maxLength": 4096,
+          "required": false
+        },
+        "requestId": {
+          "kind": "string",
+          "maxLength": 128,
+          "minLength": 1,
+          "required": true
+        },
+        "status": {
+          "kind": "integer",
+          "maximum": 599,
+          "minimum": 400,
+          "required": true
+        },
+        "title": {
+          "kind": "string",
+          "maxLength": 256,
+          "minLength": 1,
+          "required": true
+        },
+        "type": {
+          "kind": "string",
+          "maxLength": 512,
+          "minLength": 1,
+          "required": true
+        }
+      }
+    },
+    "RequestMeta": {
+      "closed": true,
+      "fields": {
+        "locale": {
+          "kind": "string",
+          "maxLength": 64,
+          "minLength": 2,
+          "required": false
+        },
+        "requestId": {
+          "kind": "string",
+          "maxLength": 128,
+          "minLength": 1,
+          "required": true
+        },
+        "traceId": {
+          "kind": "string",
+          "maxLength": 128,
+          "minLength": 1,
+          "required": true
+        }
+      }
+    }
+  }
+}
