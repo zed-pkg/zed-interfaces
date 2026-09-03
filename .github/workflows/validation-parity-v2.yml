@@ -29,7 +29,7 @@ jobs:
           ref: c75c3924847a42d8d2854eb78c85f330ea726bef
           path: .deps/api-docs
           persist-credentials: false
-      - uses: actions/setup-node@1e60f620b9541dca151540016ba637bae5c2bf7a
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22.16.0"
       - run: node .deps/api-docs/tools/validation-parity/parity-tool.mjs --self-test
