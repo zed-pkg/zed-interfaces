@@ -1,0 +1,20 @@
+name: validation-contract
+
+on:
+  pull_request:
+    paths: ["validation/**", "scripts/check-validation-contract.py", ".github/workflows/validation-contract.yml"]
+  push:
+    branches: [main]
+    paths: ["validation/**", "scripts/check-validation-contract.py", ".github/workflows/validation-contract.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  public-authorities:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: python3 scripts/check-validation-contract.py
+      - run: python3 -m json.tool validation/public-contracts.v1.json >/dev/null
+      - run: python3 -m json.tool validation/route-bindings.v1.json >/dev/null
