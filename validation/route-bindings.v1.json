@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contractVersion": "ores.validation.v1",
+  "routeAuthority": "https://github.com/ORESoftware/api-docs",
+  "bindings": []
+}

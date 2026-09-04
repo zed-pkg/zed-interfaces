@@ -2,6 +2,8 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/version-metadata.json
 
+import 'common.dart';
+
 /// On-the-wire formats for published package artifacts.
 enum ArtifactFormat {
   tarGz('tar.gz'),
@@ -25,14 +27,42 @@ enum ArtifactFormat {
   String toJson() => wire;
 }
 
+class DetachedSignatureV1 {
+  const DetachedSignatureV1({
+    required this.algorithm,
+    required this.keyId,
+    required this.signatureMultibase,
+  });
+
+  factory DetachedSignatureV1.fromJson(Map<String, dynamic> json) => DetachedSignatureV1(
+    algorithm: json['algorithm'] as String,
+    keyId: json['key_id'] as String,
+    signatureMultibase: json['signature_multibase'] as String,
+  );
+
+  final String algorithm;
+
+  final String keyId;
+
+  final String signatureMultibase;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'algorithm': algorithm,
+    'key_id': keyId,
+    'signature_multibase': signatureMultibase,
+  };
+}
+
 class VersionMetadata {
   const VersionMetadata({
     required this.downloadUrl,
     this.format = ArtifactFormat.tarGz,
+    this.mirrors,
     required this.name,
     required this.org,
     required this.publishedAt,
     required this.sha256,
+    this.signatures,
     required this.size,
     this.vcsCommit,
     required this.vcsTag,
@@ -45,10 +75,12 @@ class VersionMetadata {
     format: json['format'] == null
         ? ArtifactFormat.tarGz
         : ArtifactFormat.fromJson(json['format'] as String),
+    mirrors: (json['mirrors'] as List<dynamic>?)?.map((e) => MirrorDescriptorV1.fromJson(e as Map<String, dynamic>)).toList(),
     name: json['name'] as String,
     org: json['org'] as String,
     publishedAt: json['published_at'] as String,
     sha256: json['sha256'] as String,
+    signatures: (json['signatures'] as List<dynamic>?)?.map((e) => DetachedSignatureV1.fromJson(e as Map<String, dynamic>)).toList(),
     size: (json['size'] as num).toInt(),
     vcsCommit: json['vcs_commit'] as String?,
     vcsTag: json['vcs_tag'] as String,
@@ -63,6 +95,11 @@ class VersionMetadata {
 
   final ArtifactFormat format;
 
+  /// Alternate fetch locations (public R2, GitHub Release) so a client that already has this
+  /// metadata can retry without the registry host. Empty when the publisher did not advertise
+  /// mirrors; clients still guess standard GitHub/R2 paths from `org`/`name`/`vcs_tag`.
+  final List<MirrorDescriptorV1>? mirrors;
+
   final String name;
 
   final String org;
@@ -71,6 +108,10 @@ class VersionMetadata {
   final String publishedAt;
 
   final String sha256;
+
+  /// Detached signatures over the version attestation. Empty when the publisher did not sign;
+  /// frozen installs still work from the lock digest.
+  final List<DetachedSignatureV1>? signatures;
 
   final int size;
 
@@ -85,10 +126,12 @@ class VersionMetadata {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'download_url': downloadUrl,
     'format': format.toJson(),
+    'mirrors': mirrors?.map((e) => e.toJson()).toList(),
     'name': name,
     'org': org,
     'published_at': publishedAt,
     'sha256': sha256,
+    'signatures': signatures?.map((e) => e.toJson()).toList(),
     'size': size,
     'vcs_commit': vcsCommit,
     'vcs_tag': vcsTag,

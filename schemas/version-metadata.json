@@ -11,6 +11,13 @@
       "$ref": "#/$defs/ArtifactFormat",
       "default": "tar.gz"
     },
+    "mirrors": {
+      "description": "Alternate fetch locations (public R2, GitHub Release) so a client that\nalready has this metadata can retry without the registry host. Empty\nwhen the publisher did not advertise mirrors; clients still guess\nstandard GitHub/R2 paths from `org`/`name`/`vcs_tag`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MirrorDescriptorV1"
+      }
+    },
     "name": {
       "type": "string"
     },
@@ -23,6 +30,13 @@
     },
     "sha256": {
       "type": "string"
+    },
+    "signatures": {
+      "description": "Detached signatures over the version attestation. Empty when the\npublisher did not sign; frozen installs still work from the lock digest.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DetachedSignatureV1"
+      }
     },
     "size": {
       "type": "integer",
@@ -64,6 +78,119 @@
         "tar.gz",
         "zip"
       ]
+    },
+    "DetachedSignatureV1": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "type": "string"
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "signature_multibase": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key_id",
+        "algorithm",
+        "signature_multibase"
+      ]
+    },
+    "MirrorDescriptorV1": {
+      "type": "object",
+      "properties": {
+        "alternate_urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "asset_prefix": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/MirrorKindV1",
+          "default": "object-store"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "repository": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serves": {
+          "$ref": "#/$defs/MirrorServesV1",
+          "default": {
+            "artifacts": true,
+            "index": true,
+            "metadata": true
+          }
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "MirrorKindV1": {
+      "type": "string",
+      "enum": [
+        "zed-registry",
+        "object-store",
+        "directory",
+        "github-release",
+        "github-raw"
+      ]
+    },
+    "MirrorServesV1": {
+      "type": "object",
+      "properties": {
+        "artifacts": {
+          "type": "boolean",
+          "default": true
+        },
+        "index": {
+          "type": "boolean",
+          "default": true
+        },
+        "metadata": {
+          "type": "boolean",
+          "default": true
+        }
+      }
     }
   }
 }

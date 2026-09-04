@@ -15,6 +15,13 @@
         "null"
       ]
     },
+    "mirrors": {
+      "description": "Package-level public mirrors advertised by the publisher.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MirrorDescriptorV1"
+      }
+    },
     "name": {
       "type": "string"
     },
@@ -23,6 +30,13 @@
     },
     "repo_url": {
       "type": "string"
+    },
+    "signing_keys": {
+      "description": "Publisher keys consumers pin on first resolve.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PublisherKeyV1"
+      }
     },
     "tags": {
       "description": "Free-form tags for filtering/discovery (multi-tag lookup).",
@@ -54,6 +68,143 @@
     "versions"
   ],
   "$defs": {
+    "MirrorDescriptorV1": {
+      "type": "object",
+      "properties": {
+        "alternate_urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "asset_prefix": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/MirrorKindV1",
+          "default": "object-store"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "repository": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serves": {
+          "$ref": "#/$defs/MirrorServesV1",
+          "default": {
+            "artifacts": true,
+            "index": true,
+            "metadata": true
+          }
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "MirrorKindV1": {
+      "type": "string",
+      "enum": [
+        "zed-registry",
+        "object-store",
+        "directory",
+        "github-release",
+        "github-raw"
+      ]
+    },
+    "MirrorServesV1": {
+      "type": "object",
+      "properties": {
+        "artifacts": {
+          "type": "boolean",
+          "default": true
+        },
+        "index": {
+          "type": "boolean",
+          "default": true
+        },
+        "metadata": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "PublisherKeyStateV1": {
+      "type": "string",
+      "enum": [
+        "active",
+        "retired",
+        "revoked"
+      ]
+    },
+    "PublisherKeyV1": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "type": "string"
+        },
+        "enrolled_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key_id": {
+          "type": "string"
+        },
+        "public_key_multibase": {
+          "type": "string"
+        },
+        "revoked_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/PublisherKeyStateV1"
+        }
+      },
+      "required": [
+        "key_id",
+        "algorithm",
+        "public_key_multibase",
+        "state"
+      ]
+    },
     "Vcs": {
       "description": "Version-control systems a package's source repository can live on.\n\nzed-pkg is VCS-agnostic by design: what gets installed is always a\nregistry artifact, and the VCS is where provenance (tags) is anchored.\nAuthors must create a matching tag on their declared backing repo\n(GitHub, GitLab, Bitbucket, Codeberg, SourceHut, Forgejo, Gitea, Azure\nDevOps, CodeCommit, Radicle, or self-hosted) before publishing.\n\n`jj` and Sapling are git-compatible and push to git remotes, so their\nprovenance is verified through git tags.",
       "type": "string",

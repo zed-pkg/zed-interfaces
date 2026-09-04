@@ -125,6 +125,21 @@ pub fn healthz_path() -> String {
     "/healthz".to_string()
 }
 
+/// `GET` / `PUT` (bearer token) — publisher signing keys for an org.
+pub fn org_keys_path(org: &str) -> String {
+    format!("{API_V1}/orgs/{org}/keys")
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct OrgKeysRequest {
+    pub keys: Vec<crate::signing::PublisherKeyV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct OrgKeysResponse {
+    pub keys: Vec<crate::signing::PublisherKeyV1>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct PackageSummary {
     pub org: String,
@@ -159,6 +174,12 @@ pub struct PackageMetadata {
     pub tags: Vec<String>,
     /// All published, non-yanked versions, newest first.
     pub versions: Vec<String>,
+    /// Package-level public mirrors advertised by the publisher.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<crate::mirror::MirrorDescriptorV1>,
+    /// Publisher keys consumers pin on first resolve.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signing_keys: Vec<crate::signing::PublisherKeyV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -179,6 +200,16 @@ pub struct VersionMetadata {
     pub published_at: String,
     #[serde(default)]
     pub yanked: bool,
+    /// Alternate fetch locations (public R2, GitHub Release) so a client that
+    /// already has this metadata can retry without the registry host. Empty
+    /// when the publisher did not advertise mirrors; clients still guess
+    /// standard GitHub/R2 paths from `org`/`name`/`vcs_tag`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<crate::mirror::MirrorDescriptorV1>,
+    /// Detached signatures over the version attestation. Empty when the
+    /// publisher did not sign; frozen installs still work from the lock digest.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signatures: Vec<crate::signing::DetachedSignatureV1>,
 }
 
 /// JSON half of the multipart publish request; the artifact bytes travel in
@@ -196,6 +227,16 @@ pub struct PublishMeta {
     pub size: u64,
     #[serde(default)]
     pub format: ArtifactFormat,
+    /// Public mirrors the publisher wants consumers to try when the registry
+    /// is unreachable. Signed together with the attestation when a key is set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<crate::mirror::MirrorDescriptorV1>,
+    /// RFC 3339 timestamp chosen by the publisher so a signature can cover it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub published_at: Option<String>,
+    /// Detached signatures over the publish attestation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signatures: Vec<crate::signing::DetachedSignatureV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

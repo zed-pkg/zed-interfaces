@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PreInterestRegistrationRequestV1",
+  "description": "Register interest without creating an account, quote, organization, or\nauthenticated session.",
+  "type": "object",
+  "properties": {
+    "consentRevision": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1
+    },
+    "consentedAt": {
+      "description": "RFC 3339 timestamp supplied by the browser and bounded by domain\nvalidation against server time.",
+      "type": "string",
+      "maxLength": 35,
+      "minLength": 20
+    },
+    "contactConsent": {
+      "description": "Must be true after validation. This is consent to store and contact,\nnot account creation and not marketing consent.",
+      "type": "boolean"
+    },
+    "contactName": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 120,
+      "minLength": 1
+    },
+    "email": {
+      "type": "string",
+      "maxLength": 254,
+      "minLength": 3
+    },
+    "interests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PublicIntakeInterestV1"
+      },
+      "maxItems": 9,
+      "minItems": 1
+    },
+    "locale": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 35,
+      "minLength": 2
+    },
+    "marketingConsent": {
+      "type": "boolean"
+    },
+    "marketingConsentRevision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 64,
+      "minLength": 1
+    },
+    "organizationName": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200,
+      "minLength": 1
+    },
+    "partyType": {
+      "$ref": "#/$defs/PublicIntakePartyV1"
+    },
+    "referralCode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 64,
+      "minLength": 1
+    },
+    "requestId": {
+      "description": "Client-generated UUID used together with `Idempotency-Key`. It is not\nreturned from the public endpoint.",
+      "type": "string",
+      "maxLength": 36,
+      "minLength": 36
+    },
+    "schema": {
+      "$ref": "#/$defs/PublicIntakeSchemaV1"
+    },
+    "sourceHost": {
+      "$ref": "#/$defs/PublicIntakeSourceHostV1"
+    },
+    "websiteUrl": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2048,
+      "minLength": 8
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "requestId",
+    "email",
+    "partyType",
+    "sourceHost",
+    "interests",
+    "consentRevision",
+    "consentedAt",
+    "contactConsent",
+    "marketingConsent"
+  ],
+  "$defs": {
+    "PublicIntakeInterestV1": {
+      "type": "string",
+      "enum": [
+        "package_publishing",
+        "private_registry",
+        "supply_chain_security",
+        "enterprise_support",
+        "developer_experience",
+        "migration",
+        "compliance",
+        "self_hosted",
+        "air_gapped"
+      ]
+    },
+    "PublicIntakePartyV1": {
+      "type": "string",
+      "enum": [
+        "individual",
+        "organization"
+      ]
+    },
+    "PublicIntakeSchemaV1": {
+      "description": "A single-variant enum makes the schema marker closed in Rust, JSON Schema,\nDart, and TypeScript instead of accepting an arbitrary version string.",
+      "type": "string",
+      "enum": [
+        "zed.public-intake.v1"
+      ]
+    },
+    "PublicIntakeSourceHostV1": {
+      "description": "Public browser roles admitted by the v1 contract. The domain layer also\nchecks that an individual request uses `user.zpkg.net` and an organization\nrequest uses `org.zpkg.net`; this enum prevents nonstandard hostnames from\nentering the shared wire model at all.",
+      "type": "string",
+      "enum": [
+        "user.zpkg.net",
+        "org.zpkg.net"
+      ]
+    }
+  }
+}

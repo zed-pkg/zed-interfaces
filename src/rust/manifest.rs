@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::language::{Ecosystem, Language};
 use crate::native_host::{NativeHost, ReleaseChannel, UniversalHost};
 use crate::nix::NixExportSection;
+use crate::source::{ArtifactsSection, validate_artifacts_section};
 use crate::vcs::Vcs;
 use crate::version::{Requirement, VersionScheme};
 
@@ -75,6 +76,11 @@ pub struct Manifest {
     /// before the finalized artifact is promoted to the platform cache.
     #[serde(default, skip_serializing_if = "InstallHooksSection::is_empty")]
     pub hooks: InstallHooksSection,
+    /// Root-project lifecycle hooks around Zed operations. These belong to the
+    /// reviewed checkout and are distinct from dependency package install
+    /// hooks, which retain their separate consent and staging boundary.
+    #[serde(default, skip_serializing_if = "ProjectLifecycleSection::is_empty")]
+    pub lifecycle: ProjectLifecycleSection,
     /// This package's own post-extract build step (compiled extensions,
     /// codegen), run when the package ships source that needs compiling.
     /// Builds run in an isolated staging copy — never inside the immutable
@@ -108,6 +114,19 @@ pub struct Manifest {
     /// another tool's metadata.
     #[serde(default, skip_serializing_if = "InteropSection::is_empty")]
     pub interop: InteropSection,
+    /// Optional `[signing]` table. Declares which publisher key this package
+    /// uses so `zed publish` can sign version metadata for registry-down
+    /// range resolution.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::signing::SigningSection::is_empty"
+    )]
+    pub signing: crate::signing::SigningSection,
+    /// Explicit public mirrors this package publishes with. Combined with
+    /// guessed GitHub/R2 locations from `[package.repository]` and
+    /// `[package.artifacts]` by [`Manifest::resolved_mirrors`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mirrors: Vec<crate::mirror::MirrorDescriptorV1>,
     /// Language subtrees for a **polyglot package** — one repo shipping the
     /// same library for several ecosystems (e.g. `node/`, `python/`, `go/`).
     /// Keyed by ecosystem name; the value says which subdirectory is that
@@ -161,6 +180,12 @@ pub struct PackageSection {
     /// rather than touching this field, so the fallback always applies.
     #[serde(default, skip_serializing_if = "Ecosystem::is_default")]
     pub ecosystem: Ecosystem,
+    /// Public artifact locations used when `registry.zpkg.net` is unreachable.
+    /// Omit the table and clients guess GitHub Release / R2 / GHCR paths from
+    /// `[package.repository]` and `org`/`name`. Declare `r2_key` only when
+    /// the object is not at a standard guessed path.
+    #[serde(default, skip_serializing_if = "ArtifactsSection::is_empty")]
+    pub artifacts: ArtifactsSection,
 }
 
 impl PackageSection {
@@ -893,6 +918,228 @@ pub const NATIVE_PACKAGE_MANAGERS: &[&str] = &[
 /// list to state that it is supported without adding target-specific packages.
 pub type NativeDependencies = BTreeMap<String, Vec<String>>;
 
+/// Ordering policy for explicit root-project hooks relative to convention
+/// files discovered under `.zed/` and `.zpkg/`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProjectLifecycleMode {
+    #[default]
+    #[serde(
+        alias = "supplement",
+        alias = "supplements",
+        alias = "complement",
+        alias = "complements"
+    )]
+    Append,
+    Prepend,
+    #[serde(alias = "override", alias = "overrides")]
+    Replace,
+    #[serde(alias = "disabled", alias = "off")]
+    Disable,
+}
+
+impl ProjectLifecycleMode {
+    fn is_default(&self) -> bool {
+        *self == Self::Append
+    }
+}
+
+/// Explicit configuration for one root-project lifecycle phase.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProjectLifecycleHookConfig {
+    #[serde(skip_serializing_if = "ProjectLifecycleMode::is_default")]
+    pub mode: ProjectLifecycleMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub commands: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, String>,
+}
+
+impl ProjectLifecycleHookConfig {
+    /// Canonical explicit command order. The singular command runs first,
+    /// followed by the array, and empty strings are omitted only after the
+    /// manifest validator has rejected them.
+    pub fn normalized_commands(&self) -> Vec<String> {
+        self.command
+            .iter()
+            .chain(self.commands.iter())
+            .map(|command| command.trim())
+            .filter(|command| !command.is_empty())
+            .map(str::to_owned)
+            .collect()
+    }
+}
+
+/// One lifecycle phase accepts a full configuration or the documented string,
+/// string-array, and boolean shorthands.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum ProjectLifecycleHook {
+    Config(ProjectLifecycleHookConfig),
+    Commands(Vec<String>),
+    Command(String),
+    Enabled(bool),
+}
+
+impl ProjectLifecycleHook {
+    /// Expand a shorthand into the one configuration shape runtime consumers
+    /// execute. `false` is the boolean spelling of `mode = "disable"`.
+    pub fn into_config(self) -> ProjectLifecycleHookConfig {
+        match self {
+            Self::Config(config) => config,
+            Self::Commands(commands) => ProjectLifecycleHookConfig {
+                commands,
+                ..ProjectLifecycleHookConfig::default()
+            },
+            Self::Command(command) => ProjectLifecycleHookConfig {
+                command: Some(command),
+                ..ProjectLifecycleHookConfig::default()
+            },
+            Self::Enabled(true) => ProjectLifecycleHookConfig::default(),
+            Self::Enabled(false) => ProjectLifecycleHookConfig {
+                mode: ProjectLifecycleMode::Disable,
+                ..ProjectLifecycleHookConfig::default()
+            },
+        }
+    }
+}
+
+/// Typed vocabulary for every root-project lifecycle phase recognized by Zed.
+/// Keeping these as fields instead of an open map makes misspelled phases fail
+/// during TOML parsing and gives the generated JSON Schema the same boundary.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProjectLifecycleSection {
+    #[serde(
+        rename = "pre-install",
+        alias = "pre_install",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pre_install: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "post-install",
+        alias = "post_install",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub post_install: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "pre-build",
+        alias = "pre_build",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pre_build: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "post-build",
+        alias = "post_build",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub post_build: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "pre-test",
+        alias = "pre_test",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pre_test: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "post-test",
+        alias = "post_test",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub post_test: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "pre-pack",
+        alias = "pre_pack",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pre_pack: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "post-pack",
+        alias = "post_pack",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub post_pack: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "pre-publish",
+        alias = "pre_publish",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pre_publish: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "post-publish",
+        alias = "post_publish",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub post_publish: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "pre-uninstall",
+        alias = "pre_uninstall",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pre_uninstall: Option<ProjectLifecycleHook>,
+    #[serde(
+        rename = "post-uninstall",
+        alias = "post_uninstall",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub post_uninstall: Option<ProjectLifecycleHook>,
+}
+
+impl ProjectLifecycleSection {
+    pub fn is_empty(&self) -> bool {
+        self.phases().all(|(_, hook)| hook.is_none())
+    }
+
+    pub fn phases(&self) -> impl Iterator<Item = (&'static str, &Option<ProjectLifecycleHook>)> {
+        [
+            ("pre-install", &self.pre_install),
+            ("post-install", &self.post_install),
+            ("pre-build", &self.pre_build),
+            ("post-build", &self.post_build),
+            ("pre-test", &self.pre_test),
+            ("post-test", &self.post_test),
+            ("pre-pack", &self.pre_pack),
+            ("post-pack", &self.post_pack),
+            ("pre-publish", &self.pre_publish),
+            ("post-publish", &self.post_publish),
+            ("pre-uninstall", &self.pre_uninstall),
+            ("post-uninstall", &self.post_uninstall),
+        ]
+        .into_iter()
+    }
+
+    /// Look up a canonical kebab-case phase without reopening the phase
+    /// vocabulary as an arbitrary string map.
+    pub fn get(&self, phase: &str) -> Option<&ProjectLifecycleHook> {
+        match phase {
+            "pre-install" => self.pre_install.as_ref(),
+            "post-install" => self.post_install.as_ref(),
+            "pre-build" => self.pre_build.as_ref(),
+            "post-build" => self.post_build.as_ref(),
+            "pre-test" => self.pre_test.as_ref(),
+            "post-test" => self.post_test.as_ref(),
+            "pre-pack" => self.pre_pack.as_ref(),
+            "post-pack" => self.post_pack.as_ref(),
+            "pre-publish" => self.pre_publish.as_ref(),
+            "post-publish" => self.post_publish.as_ref(),
+            "pre-uninstall" => self.pre_uninstall.as_ref(),
+            "post-uninstall" => self.post_uninstall.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Apply the semantic checks that JSON Schema cannot express, including
+    /// command bounds, mode conflicts, shell-prefix safety, and non-secret
+    /// environment policy.
+    pub fn validate(&self) -> Result<(), ManifestError> {
+        validate_project_lifecycle(self)
+    }
+}
+
 /// Package-local lifecycle hooks. Commands are author-controlled shell code,
 /// but execution is separately consented by the installer and occurs only in
 /// a writable staging tree.
@@ -1018,6 +1265,161 @@ fn validate_install_hooks(hooks: &InstallHooksSection, context: &str) -> Result<
     Ok(())
 }
 
+fn validate_project_lifecycle(lifecycle: &ProjectLifecycleSection) -> Result<(), ManifestError> {
+    for (phase, hook) in lifecycle.phases() {
+        let Some(hook) = hook else {
+            continue;
+        };
+        match hook {
+            ProjectLifecycleHook::Config(config) => {
+                if config.mode == ProjectLifecycleMode::Disable {
+                    if config.command.is_some()
+                        || !config.commands.is_empty()
+                        || config.shell.is_some()
+                        || !config.env.is_empty()
+                    {
+                        return Err(ManifestError::InvalidProjectLifecycle(
+                            phase.to_string(),
+                            "mode `disable` cannot declare commands, shell, or environment"
+                                .to_string(),
+                        ));
+                    }
+                    continue;
+                }
+                if let Some(command) = &config.command {
+                    validate_project_lifecycle_command(command, phase, "command")?;
+                }
+                for (index, command) in config.commands.iter().enumerate() {
+                    validate_project_lifecycle_command(
+                        command,
+                        phase,
+                        &format!("commands[{}]", index + 1),
+                    )?;
+                }
+                if let Some(shell) = &config.shell {
+                    validate_project_lifecycle_shell(shell, phase)?;
+                }
+                validate_project_lifecycle_env(&config.env, phase)?;
+            }
+            ProjectLifecycleHook::Commands(commands) => {
+                for (index, command) in commands.iter().enumerate() {
+                    validate_project_lifecycle_command(
+                        command,
+                        phase,
+                        &format!("commands[{}]", index + 1),
+                    )?;
+                }
+            }
+            ProjectLifecycleHook::Command(command) => {
+                validate_project_lifecycle_command(command, phase, "command")?;
+            }
+            ProjectLifecycleHook::Enabled(_) => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_project_lifecycle_command(
+    command: &str,
+    phase: &str,
+    field: &str,
+) -> Result<(), ManifestError> {
+    if command.trim().is_empty() {
+        return Err(ManifestError::InvalidProjectLifecycle(
+            phase.to_string(),
+            format!("{field} must not be empty"),
+        ));
+    }
+    if command.contains('\0') {
+        return Err(ManifestError::InvalidProjectLifecycle(
+            phase.to_string(),
+            format!("{field} contains NUL"),
+        ));
+    }
+    if command.len() > 32 * 1024 {
+        return Err(ManifestError::InvalidProjectLifecycle(
+            phase.to_string(),
+            format!("{field} exceeds 32768 bytes"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_project_lifecycle_shell(shell: &str, phase: &str) -> Result<(), ManifestError> {
+    if shell.is_empty()
+        || shell.trim() != shell
+        || shell.len() > 512
+        || shell.chars().any(char::is_control)
+    {
+        return Err(ManifestError::InvalidProjectLifecycle(
+            phase.to_string(),
+            "shell must be a trimmed 1-512 character executable/prefix without control characters"
+                .to_string(),
+        ));
+    }
+    let mut tokens = shell.split_whitespace();
+    let executable = tokens.next().expect("non-empty shell has one token");
+    if executable.starts_with('-')
+        || std::iter::once(executable).chain(tokens).any(|token| {
+            token
+                .chars()
+                .any(|c| matches!(c, ';' | '|' | '&' | '<' | '>'))
+        })
+    {
+        return Err(ManifestError::InvalidProjectLifecycle(
+            phase.to_string(),
+            "shell must be a program-plus-arguments prefix, not a shell expression".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_project_lifecycle_env(
+    environment: &BTreeMap<String, String>,
+    phase: &str,
+) -> Result<(), ManifestError> {
+    for (name, value) in environment {
+        if name.is_empty()
+            || !name.chars().enumerate().all(|(index, c)| {
+                c == '_' || c.is_ascii_alphabetic() || (index > 0 && c.is_ascii_digit())
+            })
+        {
+            return Err(ManifestError::InvalidProjectLifecycle(
+                phase.to_string(),
+                format!("environment key `{name}` is not a portable variable name"),
+            ));
+        }
+        let uppercase = name.to_ascii_uppercase();
+        if [
+            "TOKEN",
+            "SECRET",
+            "PASSWORD",
+            "PRIVATE_KEY",
+            "API_KEY",
+            "CREDENTIAL",
+        ]
+        .iter()
+        .any(|suffix| uppercase == *suffix || uppercase.ends_with(&format!("_{suffix}")))
+        {
+            return Err(ManifestError::InvalidProjectLifecycle(
+                phase.to_string(),
+                format!(
+                    "environment key `{name}` appears secret-bearing; lifecycle manifests may contain only non-secret additions"
+                ),
+            ));
+        }
+        if value.len() > 32 * 1024 || value.chars().any(char::is_control) {
+            return Err(ManifestError::InvalidProjectLifecycle(
+                phase.to_string(),
+                format!(
+                    "environment value for `{name}` must be at most 32768 characters without control characters"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// A post-extract build step. Because compiled output is OS/arch-specific,
 /// zed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the
 /// source and caches the result in a build cache keyed by
@@ -1073,6 +1475,8 @@ pub enum ManifestError {
     InvalidDependencyReq(String, String, String),
     #[error("invalid repository url `{0}`: {1}")]
     InvalidRepositoryUrl(String, String),
+    #[error("invalid [package.artifacts]: {0}")]
+    InvalidArtifacts(String),
     #[error("invalid bin entry `{0}`: {1}")]
     InvalidBin(String, String),
     #[error("invalid build section: {0}")]
@@ -1081,6 +1485,8 @@ pub enum ManifestError {
     InvalidNativeDependency(String, String),
     #[error("invalid install hook declaration for `{0}`: {1}")]
     InvalidInstallHook(String, String),
+    #[error("invalid project lifecycle declaration for `{0}`: {1}")]
+    InvalidProjectLifecycle(String, String),
     #[error("invalid workspace member pattern `{0}`")]
     InvalidWorkspaceMember(String),
     #[error("invalid install dir `{0}`: {1}")]
@@ -1290,6 +1696,50 @@ impl Manifest {
         toml::to_string_pretty(self).map_err(|e| ManifestError::Toml(e.to_string()))
     }
 
+    /// Mirrors this package publishes and consumers should try when the
+    /// registry is down: explicit `[[mirrors]]` plus guessed GitHub/R2
+    /// locations from `[package.repository]` and `[package.artifacts]`.
+    pub fn resolved_mirrors(
+        &self,
+    ) -> Result<Vec<crate::mirror::MirrorDescriptorV1>, ManifestError> {
+        let mut mirrors = self.mirrors.clone();
+        let repo = self.package.repository.url.as_str();
+        if self.package.artifacts.github_release_enabled(Some(repo))
+            && crate::mirror::parse_repo_ref(repo).is_ok()
+            && !mirrors.iter().any(|mirror| {
+                matches!(
+                    mirror.kind,
+                    crate::mirror::MirrorKindV1::GithubRelease
+                        | crate::mirror::MirrorKindV1::GithubRaw
+                )
+            })
+        {
+            mirrors.push(crate::mirror::MirrorDescriptorV1::github_release_of(repo));
+        }
+        if let Some(base) = self.package.artifacts.r2_public_base.as_deref() {
+            let trimmed = base.trim_end_matches('/');
+            if !trimmed.is_empty()
+                && !mirrors
+                    .iter()
+                    .any(|mirror| mirror.url.as_deref() == Some(trimmed))
+            {
+                mirrors.push(crate::mirror::MirrorDescriptorV1::object_store(trimmed));
+            }
+        }
+        if mirrors.len() > crate::mirror::MAX_MIRRORS {
+            return Err(ManifestError::InvalidArtifacts(format!(
+                "more than {} mirrors",
+                crate::mirror::MAX_MIRRORS
+            )));
+        }
+        for mirror in &mirrors {
+            mirror
+                .validate()
+                .map_err(|error| ManifestError::InvalidArtifacts(error.to_string()))?;
+        }
+        Ok(mirrors)
+    }
+
     pub fn validate(&self) -> Result<(), ManifestError> {
         if !is_slug(&self.package.org) {
             return Err(ManifestError::InvalidOrg(self.package.org.clone()));
@@ -1306,6 +1756,9 @@ impl Manifest {
                 self.package.repository.url.clone(),
                 "expected an https/http/ssh/git URL or scp-like git syntax".to_string(),
             ));
+        }
+        if let Err(reason) = validate_artifacts_section(&self.package.artifacts) {
+            return Err(ManifestError::InvalidArtifacts(reason));
         }
         for (key, req) in self.dependencies.iter().chain(&self.build_dependencies) {
             if !is_dependency_key(key) {
@@ -1366,6 +1819,7 @@ impl Manifest {
         }
         validate_native_dependencies(&self.native_dependencies, "package")?;
         validate_install_hooks(&self.hooks, "package")?;
+        self.lifecycle.validate()?;
         for (name, target) in &self.targets {
             if !is_target_name(name) {
                 return Err(ManifestError::InvalidTarget(

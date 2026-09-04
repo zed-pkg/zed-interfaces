@@ -1,0 +1,54 @@
+name: validation-parity-v2
+
+on:
+  pull_request:
+    paths:
+      - "validation/**"
+      - "generated/**"
+      - ".github/workflows/validation-parity-v2.yml"
+  push:
+    branches: [main]
+    paths:
+      - "validation/**"
+      - "generated/**"
+      - ".github/workflows/validation-parity-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ORESoftware/api-docs
+          ref: c75c3924847a42d8d2854eb78c85f330ea726bef
+          path: .deps/api-docs
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22.16.0"
+      - name: Self-test peer-authority comparators
+        run: |
+          node validation/parity/orm-annotation-check.mjs --self-test
+          node .deps/api-docs/tools/validation-parity/parity-tool.mjs --self-test
+      - name: Verify private ORM annotations
+        run: node validation/parity/orm-annotation-check.mjs --check
+      - name: Verify TypeSpec and JSON Schema parity
+        run: node .deps/api-docs/tools/validation-parity/parity-tool.mjs --check
+      - name: Assert browser and edge exports exclude server models
+        shell: bash
+        run: |
+          set -euo pipefail
+          for runtime in browser edge; do
+            if grep -R -nE 'Registry(Package|Version|Lease)Row' \
+              "generated/final/typescript/runtime/${runtime}"; then
+              echo "server persistence model leaked into ${runtime} exports" >&2
+              exit 1
+            fi
+          done

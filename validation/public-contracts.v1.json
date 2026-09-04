@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zed-pkg/zed-interfaces/validation/public-contracts.v1.json",
+  "title": "Zed public validation contracts",
+  "contractVersion": "ores.validation.v1",
+  "visibility": "public",
+  "routeAuthority": "https://github.com/ORESoftware/api-docs",
+  "type": "object",
+  "oneOf": [
+    {"$ref": "#/$defs/RequestMeta"},
+    {"$ref": "#/$defs/PageQuery"},
+    {"$ref": "#/$defs/ProblemDetails"}
+  ],
+  "$defs": {
+    "RequestMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId", "traceId"],
+      "properties": {
+        "requestId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "traceId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "locale": {"type": "string", "minLength": 2, "maxLength": 64}
+      }
+    },
+    "PageQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit"],
+      "properties": {
+        "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50},
+        "cursor": {"type": "string", "minLength": 1, "maxLength": 512}
+      }
+    },
+    "ProblemDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "title", "status", "requestId"],
+      "properties": {
+        "type": {"type": "string", "minLength": 1, "maxLength": 512},
+        "title": {"type": "string", "minLength": 1, "maxLength": 256},
+        "status": {"type": "integer", "minimum": 400, "maximum": 599},
+        "detail": {"type": "string", "maxLength": 4096},
+        "requestId": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    }
+  },
+  "x-ores-routeBindings": []
+}

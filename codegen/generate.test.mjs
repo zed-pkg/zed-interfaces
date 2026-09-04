@@ -75,6 +75,31 @@ test("an enum $ref defaults to the matching Dart enum value", () => {
   assert.match(dart, /format: json\['format'\] == null\n\s+\? ArtifactFormat\.tarGz/);
 });
 
+test("a referenced object default becomes a recursive const Dart value", () => {
+  const dart = dartOf(
+    "Thing",
+    OBJ({
+      serves: {
+        $ref: "#/$defs/MirrorServesV1",
+        default: { artifacts: true, metadata: true, index: true },
+      },
+    }),
+    {
+      MirrorServesV1: OBJ(
+        {
+          artifacts: { type: "boolean" },
+          metadata: { type: "boolean" },
+          index: { type: "boolean" },
+        },
+        ["artifacts", "metadata", "index"],
+      ),
+    },
+  );
+  const literal = "const MirrorServesV1(artifacts: true, metadata: true, index: true)";
+  assert.ok(dart.includes(`this.serves = ${literal},`));
+  assert.ok(dart.includes(`? ${literal}`));
+});
+
 test("oneOf-of-const is an enum, and per-variant docs survive into both languages", () => {
   const defs = {
     AuditAction: {
