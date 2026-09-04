@@ -44,6 +44,10 @@
       "description": "Where zed materializes the (few, hand-picked) dependencies it sources —\nzed complements npm/maven/etc. rather than replacing them, so this dir\nsits alongside the native one and the ecosystem adapter wires it into\nthe toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`\ndefaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or\n`.deps/.zed`.",
       "$ref": "#/$defs/InstallSection"
     },
+    "interop": {
+      "description": "Explicit interoperability contracts with project-local tool metadata.\nThese opt-ins let non-mutating tooling distinguish files Zed consumes\nfrom unrelated files that merely happen to be present in the checkout.",
+      "$ref": "#/$defs/InteropSection"
+    },
     "native-dependencies": {
       "description": "Host-native packages required before this package's install hooks or\nbuild step can run. Keys are supported package-manager names (`apt`,\n`apk`, `brew`, `nix`, ...); values are package specs passed as argv,\nnever interpolated into a shell command. Installing these prerequisites\nis an explicitly consented zed operation, separate from build-hook\nconsent.",
       "type": "object",
@@ -219,6 +223,17 @@
             "string",
             "null"
           ]
+        }
+      }
+    },
+    "InteropSection": {
+      "description": "Project-local metadata owned by another tool that Zed is explicitly\npermitted to consume. Interop is opt-in so a repository can contain native\ntool files without silently changing Zed package-manager behavior.",
+      "type": "object",
+      "properties": {
+        "git-submodules": {
+          "description": "Consume the owning checkout's regular, committed `.gitmodules` file for\nGit-submodule synchronization and adopted-workspace verification.",
+          "type": "boolean",
+          "default": false
         }
       }
     },

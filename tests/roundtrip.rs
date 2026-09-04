@@ -45,6 +45,27 @@ fn manifest_roundtrip() {
 }
 
 #[test]
+fn git_submodule_interop_is_explicit_and_roundtrips_canonically() {
+    let unconfigured = Manifest::parse(SAMPLE).unwrap();
+    assert!(!unconfigured.interop.git_submodules);
+    assert!(!unconfigured.to_toml_string().unwrap().contains("[interop]"));
+
+    let configured =
+        Manifest::parse(&format!("{SAMPLE}\n[interop]\ngit-submodules = true\n")).unwrap();
+    assert!(configured.interop.git_submodules);
+
+    let rendered = configured.to_toml_string().unwrap();
+    assert!(rendered.contains("[interop]"));
+    assert!(rendered.contains("git-submodules = true"));
+    assert!(!rendered.contains("git_submodules"));
+    assert_eq!(Manifest::parse(&rendered).unwrap(), configured);
+
+    let misspelled =
+        Manifest::parse(&format!("{SAMPLE}\n[interop]\ngit_submodules = true\n")).unwrap();
+    assert!(!misspelled.interop.git_submodules);
+}
+
+#[test]
 fn install_dir_defaults_and_overrides() {
     // No [install] section -> the default dep dir.
     assert_eq!(

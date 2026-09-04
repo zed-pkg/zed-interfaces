@@ -33,6 +33,11 @@ use crate::version::{Requirement, VersionScheme};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Manifest {
     pub package: PackageSection,
+    /// Explicit interoperability contracts with project-local tool metadata.
+    /// These opt-ins let non-mutating tooling distinguish files Zed consumes
+    /// from unrelated files that merely happen to be present in the checkout.
+    #[serde(default, skip_serializing_if = "InteropSection::is_empty")]
+    pub interop: InteropSection,
     /// Monorepo workspace declaration (zed-docs issue #7); only meaningful in
     /// a workspace root manifest. When present, `zed install` at this root
     /// resolves every member against one store and writes one `.zpkg.lock`;
@@ -248,6 +253,24 @@ pub struct InstallSection {
     /// fallback: the consumer asked for something specific.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
+}
+
+/// Project-local metadata owned by another tool that Zed is explicitly
+/// permitted to consume. Interop is opt-in so a repository can contain native
+/// tool files without silently changing Zed package-manager behavior.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct InteropSection {
+    /// Consume the owning checkout's regular, committed `.gitmodules` file for
+    /// Git-submodule synchronization and adopted-workspace verification.
+    #[serde(rename = "git-submodules")]
+    pub git_submodules: bool,
+}
+
+impl InteropSection {
+    pub fn is_empty(&self) -> bool {
+        !self.git_submodules
+    }
 }
 
 impl InstallSection {
@@ -1464,6 +1487,7 @@ impl Manifest {
         derived.hooks = self.hooks.merged(&section.hooks);
         derived.targets = BTreeMap::new();
         derived.workspace = None;
+        derived.interop = InteropSection::default();
         // The consumer-facing wiring for this ecosystem.
         derived.install.adapter = section.adapter.clone().or(self.install.adapter.clone());
         derived.install.target = None;
