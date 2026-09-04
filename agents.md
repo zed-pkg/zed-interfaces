@@ -40,6 +40,16 @@ Do not silently translate one authority into the other and call the result agree
 - Pin GitHub Actions and external generators by immutable commit SHA. Keep workflow permissions read-only unless a documented write is required.
 - Resolve conflicts semantically by preserving compatibility, validation strength, source independence, generated determinism, visibility boundaries, and consumer expectations rather than selecting an entire side.
 
+## Functional design rules
+
+- Prefer explicit inputs, explicit outputs, immutable values, pure transformations, typed errors, explicit state transitions, and composition.
+- Push filesystem, process, network, clock, randomness, database, and deployment effects to narrow adapter boundaries.
+- Model illegal states so they are excluded by types where practical, and use exhaustive pattern matching for finite state and error domains.
+- Keep Rust, TypeScript, and Dart modules focused; do not accumulate unrelated behavior in a single entrypoint or oversized module.
+- Use object-oriented state only when lifecycle ownership or performance requires it, while keeping state transitions explicit and testable.
+- Favor reusable utilities and moderate deduplication without hiding domain distinctions behind premature abstraction.
+- Apply formal or exhaustive checking to state machines, generators, caches, lockfiles, compatibility rules, and failure modes.
+
 ## Reproducible validation
 
 Use the pinned shell for the legacy pipeline:
