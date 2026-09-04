@@ -1,0 +1,14 @@
+[package]
+org = "zed-pkg"
+name = "zed-public-validation-contracts"
+version = "0.1.0"
+description = "Public peer validation authorities for zed-pkg"
+license = "MIT"
+
+[targets.json-schema]
+dir = "."
+adapter = "none"
+
+[targets.typespec]
+dir = "typespec"
+adapter = "none"

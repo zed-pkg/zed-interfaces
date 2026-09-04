@@ -455,13 +455,47 @@ function dartEncode(ref, name, kinds) {
   }
 }
 
-function dartLiteral(ref, value, kinds) {
+function dartLiteral(ref, value, kinds, types) {
   if (value === null || value === undefined) return "null";
-  if (ref.kind === "ref" && kinds.get(ref.name) === "enum") {
-    return `${ref.name}.${dartEnumIdent(String(value))}`;
+  if (ref.kind === "ref") {
+    const kind = kinds.get(ref.name);
+    if (kind === "enum") return `${ref.name}.${dartEnumIdent(String(value))}`;
+    if (kind === "object") {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return fail(`default for ${ref.name} must be an object, got ${JSON.stringify(value)}`);
+      }
+      const target = types.get(ref.name);
+      if (!target || target.kind !== "object") {
+        return fail(`cannot resolve object default type ${ref.name}`);
+      }
+      const known = new Set(target.props.map((prop) => prop.wire));
+      for (const key of Object.keys(value)) {
+        if (!known.has(key)) return fail(`default for ${ref.name} has unknown field ${key}`);
+      }
+      const args = [];
+      for (const prop of target.props) {
+        if (Object.hasOwn(value, prop.wire)) {
+          args.push(`${prop.dart}: ${dartLiteral(prop.type, value[prop.wire], kinds, types)}`);
+        } else if (prop.required && !prop.hasDefault) {
+          return fail(`default for ${ref.name} is missing required field ${prop.wire}`);
+        }
+      }
+      return `const ${ref.name}(${args.join(", ")})`;
+    }
   }
-  if (ref.kind === "list") return "const []";
-  if (ref.kind === "map") return "const {}";
+  if (ref.kind === "list") {
+    if (!Array.isArray(value)) return fail(`list default must be an array, got ${JSON.stringify(value)}`);
+    return `const [${value.map((item) => dartLiteral(ref.item, item, kinds, types)).join(", ")}]`;
+  }
+  if (ref.kind === "map") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return fail(`map default must be an object, got ${JSON.stringify(value)}`);
+    }
+    const entries = Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${dartStr(key)}: ${dartLiteral(ref.value, item, kinds, types)}`);
+    return `const {${entries.join(", ")}}`;
+  }
   if (typeof value === "string") return dartStr(value);
   if (typeof value === "boolean" || typeof value === "number") return String(value);
   return fail(`unsupported default ${JSON.stringify(value)}`);
@@ -508,12 +542,12 @@ function dartFieldRef(prop) {
   return { ...prop.type, nullable };
 }
 
-function dartClass(type, kinds) {
+function dartClass(type, kinds, types) {
   const ctorParams = type.props
     .map((p) => {
       const ref = dartFieldRef(p);
       if (!ref.nullable && p.hasDefault && !p.required) {
-        return `    this.${p.dart} = ${dartLiteral(p.type, p.default, kinds)},`;
+        return `    this.${p.dart} = ${dartLiteral(p.type, p.default, kinds, types)},`;
       }
       return ref.nullable ? `    this.${p.dart},` : `    required this.${p.dart},`;
     })
@@ -526,7 +560,7 @@ function dartClass(type, kinds) {
       if (p.type.kind === "any") return `    ${p.dart}: ${raw},`;
       if (!ref.nullable && p.hasDefault && !p.required) {
         // Absent means "take the default", which is what the Rust side does.
-        return `    ${p.dart}: ${raw} == null\n        ? ${dartLiteral(p.type, p.default, kinds)}\n        : ${dartDecode(p.type, raw, kinds)},`;
+        return `    ${p.dart}: ${raw} == null\n        ? ${dartLiteral(p.type, p.default, kinds, types)}\n        : ${dartDecode(p.type, raw, kinds)},`;
       }
       return `    ${p.dart}: ${dartDecode(p.type, raw, kinds, ref.nullable)},`;
     })
@@ -571,6 +605,7 @@ ${encode}
 function emitDart(built) {
   const { modules, home } = built;
   const kinds = new Map([...built.byName].map(([name, v]) => [name, v.type.kind]));
+  const types = new Map([...built.byName].map(([name, v]) => [name, v.type]));
   const files = {};
   const libFiles = [];
 
@@ -590,7 +625,7 @@ function emitDart(built) {
       "\n";
     const importBlock = [...imports].sort().map((f) => `import '${f}';`).join("\n");
     const body = module.types
-      .map((type) => (type.kind === "enum" ? dartEnum(type) : dartClass(type, kinds)))
+      .map((type) => (type.kind === "enum" ? dartEnum(type) : dartClass(type, kinds, types)))
       .join("\n\n");
     // A root type can move to `common` when another schema embeds it. Keep the
     // schema-named module importable instead of emitting a banner-only file,

@@ -18,6 +18,7 @@ pub mod inspection;
 pub mod language;
 pub mod lockfile;
 pub mod manifest;
+pub mod mirror;
 pub mod namespace_claim;
 pub mod native_dependency;
 pub mod native_host;
@@ -26,11 +27,15 @@ pub mod nix;
 pub mod nix_plan;
 pub mod oci;
 pub mod paths;
+pub mod public_intake;
 pub mod registry;
 pub mod registry_protocol_v1;
+pub mod signing;
+pub mod source;
 pub mod sync;
 pub mod vcs;
 pub mod version;
+pub mod zed_api;
 
 pub use artifact::ArtifactFormat;
 pub use binary_artifact::{
@@ -81,7 +86,13 @@ pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile, LockfileError};
 pub use manifest::{
     GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,
-    NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute,
+    NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute, ProjectLifecycleHook,
+    ProjectLifecycleHookConfig, ProjectLifecycleMode, ProjectLifecycleSection,
+};
+pub use mirror::{
+    DEFAULT_ASSET_PREFIX, DEFAULT_INDEX_TAG, DEFAULT_RAW_BRANCH, DEFAULT_RAW_PREFIX, GITHUB_HOST,
+    MAX_MIRRORS, MIRROR_BOOTSTRAP_PATH, MirrorBootstrapV1, MirrorCoordinateV1, MirrorDescriptorV1,
+    MirrorError, MirrorKindV1, MirrorServesV1, RepoRefV1, default_public_mirrors, parse_repo_ref,
 };
 pub use namespace_claim::{
     REGISTRY_NAMESPACE_PLAN_SCHEMA_V1, REGISTRY_NAMESPACE_RECEIPT_SCHEMA_V1,
@@ -134,6 +145,20 @@ pub use registry_protocol_v1::{
     RegistryLimitsV1, RegistryProtocolErrorCodeV1, RegistryProtocolErrorV1,
     RegistryProtocolV1Error, RegistryPublishRequestV1, RegistryRootSignatureV1,
     RegistrySigningKeyStateV1, RegistrySigningKeyV1, RegistryVisibilityV1,
+};
+pub use signing::{
+    DetachedSignatureV1, ED25519_PUBLIC_KEY_BYTES, ED25519_SIGNATURE_BYTES, IndexAttestationV1,
+    IndexVersionV1, ManifestSigningKey, PUBLISHER_KEYS_SCHEMA_V1, PublisherKeySetV1,
+    PublisherKeyStateV1, PublisherKeyV1, SIGNED_INDEX_SCHEMA_V1, SIGNED_VERSION_SCHEMA_V1,
+    SIGNING_ALGORITHM, SignedIndexV1, SignedVersionV1, SigningSection, VersionAttestationV1,
+    decode_multibase_base58btc, encode_multibase_base58btc, version_attestation_preimage,
+};
+pub use source::{
+    ArtifactLocator, ArtifactQuery, ArtifactSourceKind, ArtifactsSection, DEFAULT_GHCR,
+    DEFAULT_GITHUB_API, DEFAULT_GITHUB_WEB, DEFAULT_R2_PUBLIC_BASE, GithubIdentity,
+    artifact_locators, ghcr_blob_url, ghcr_manifest_url, ghcr_reference, ghcr_repository,
+    git_tags_for_version, github_identity_for, github_packages_web_url, parse_github_identity,
+    r2_object_keys, resolve_r2_public_base, validate_artifacts_section, version_from_git_tag,
 };
 pub use vcs::Vcs;
 pub use version::{Requirement, VersionScheme};

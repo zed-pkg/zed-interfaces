@@ -2,6 +2,8 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/version-metadata.json
 
+import type { MirrorDescriptorV1 } from "./common.ts";
+
 /**
  * On-the-wire formats for published package artifacts.
  */
@@ -10,15 +12,25 @@ export type ArtifactFormat = "tar.gz" | "zip";
 /** Every `ArtifactFormat` value, in schema order — for validation and pickers. */
 export const ARTIFACT_FORMAT_VALUES = ["tar.gz", "zip"] as const;
 
+export interface DetachedSignatureV1 {
+  readonly algorithm: string;
+  readonly key_id: string;
+  readonly signature_multibase: string;
+}
+
 export interface VersionMetadata {
   /** Absolute or registry-relative URL the artifact can be fetched from. */
   readonly download_url: string;
   readonly format?: ArtifactFormat;
+  /** Alternate fetch locations (public R2, GitHub Release) so a client that already has this metadata can retry without the registry host. Empty when the publisher did not advertise mirrors; clients still guess standard GitHub/R2 paths from `org`/`name`/`vcs_tag`. */
+  readonly mirrors?: readonly MirrorDescriptorV1[];
   readonly name: string;
   readonly org: string;
   /** RFC 3339 timestamp. */
   readonly published_at: string;
   readonly sha256: string;
+  /** Detached signatures over the version attestation. Empty when the publisher did not sign; frozen installs still work from the lock digest. */
+  readonly signatures?: readonly DetachedSignatureV1[];
   readonly size: number;
   readonly vcs_commit?: string | null;
   readonly vcs_tag: string;

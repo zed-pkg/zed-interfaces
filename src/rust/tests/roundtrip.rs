@@ -107,6 +107,30 @@ fn gitmodules_consumption_is_typed_and_roundtrips() {
 }
 
 #[test]
+fn package_artifacts_roundtrip_and_validate() {
+    let src = format!(
+        "{SAMPLE}\n[package.artifacts]\nr2_public_base = \"https://cdn.zpkg.net\"\nr2_key = \"vendor/{{org}}/{{name}}/{{version}}.{{ext}}\"\n"
+    );
+    let m = Manifest::parse(&src).unwrap();
+    assert_eq!(
+        m.package.artifacts.r2_public_base.as_deref(),
+        Some("https://cdn.zpkg.net")
+    );
+    assert_eq!(
+        m.package.artifacts.r2_key.as_deref(),
+        Some("vendor/{org}/{name}/{version}.{ext}")
+    );
+    let reparsed = Manifest::parse(&m.to_toml_string().unwrap()).unwrap();
+    assert_eq!(m, reparsed);
+
+    let escaped = format!("{SAMPLE}\n[package.artifacts]\nr2_key = \"../etc/passwd\"\n");
+    assert!(matches!(
+        Manifest::parse(&escaped),
+        Err(ManifestError::InvalidArtifacts(_))
+    ));
+}
+
+#[test]
 fn install_dir_defaults_and_overrides() {
     // No [install] section -> the default dep dir.
     assert_eq!(
@@ -167,6 +191,9 @@ fn lockfile_roundtrip() {
         vcs_tag: "v1.2.0".into(),
         vcs_commit: Some("deadbeef".into()),
         source: "https://registry.zed-pkg.dev".into(),
+        mirrors: Vec::new(),
+        signed_by: None,
+        signing_key: None,
     });
 
     let text = lock.to_toml_string().unwrap();

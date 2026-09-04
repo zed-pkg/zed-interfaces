@@ -70,6 +70,30 @@ export interface BinarySourceProvenanceV1 {
   readonly vcs_tag: string;
 }
 
+export interface MirrorDescriptorV1 {
+  readonly alternate_urls?: readonly string[];
+  readonly asset_prefix?: string | null;
+  readonly branch?: string | null;
+  readonly id?: string | null;
+  readonly kind?: MirrorKindV1;
+  readonly path?: string | null;
+  readonly priority?: number | null;
+  readonly repository?: string | null;
+  readonly serves?: MirrorServesV1;
+  readonly url?: string | null;
+}
+
+export type MirrorKindV1 = "zed-registry" | "object-store" | "directory" | "github-release" | "github-raw";
+
+/** Every `MirrorKindV1` value, in schema order — for validation and pickers. */
+export const MIRROR_KIND_V1_VALUES = ["zed-registry", "object-store", "directory", "github-release", "github-raw"] as const;
+
+export interface MirrorServesV1 {
+  readonly artifacts?: boolean;
+  readonly index?: boolean;
+  readonly metadata?: boolean;
+}
+
 export interface PackageSummary {
   readonly description?: string | null;
   readonly latest?: string | null;
@@ -78,6 +102,27 @@ export interface PackageSummary {
   /** Free-form tags for filtering/discovery. */
   readonly tags?: readonly string[];
 }
+
+export type PublicIntakeInterestV1 = "package_publishing" | "private_registry" | "supply_chain_security" | "enterprise_support" | "developer_experience" | "migration" | "compliance" | "self_hosted" | "air_gapped";
+
+/** Every `PublicIntakeInterestV1` value, in schema order — for validation and pickers. */
+export const PUBLIC_INTAKE_INTEREST_V1_VALUES = ["package_publishing", "private_registry", "supply_chain_security", "enterprise_support", "developer_experience", "migration", "compliance", "self_hosted", "air_gapped"] as const;
+
+/**
+ * A single-variant enum makes the schema marker closed in Rust, JSON Schema, Dart, and TypeScript instead of accepting an arbitrary version string.
+ */
+export type PublicIntakeSchemaV1 = "zed.public-intake.v1";
+
+/** Every `PublicIntakeSchemaV1` value, in schema order — for validation and pickers. */
+export const PUBLIC_INTAKE_SCHEMA_V1_VALUES = ["zed.public-intake.v1"] as const;
+
+/**
+ * Public browser roles admitted by the v1 contract. The domain layer also checks that an individual request uses `user.zpkg.net` and an organization request uses `org.zpkg.net`; this enum prevents nonstandard hostnames from entering the shared wire model at all.
+ */
+export type PublicIntakeSourceHostV1 = "user.zpkg.net" | "org.zpkg.net";
+
+/** Every `PublicIntakeSourceHostV1` value, in schema order — for validation and pickers. */
+export const PUBLIC_INTAKE_SOURCE_HOST_V1_VALUES = ["user.zpkg.net", "org.zpkg.net"] as const;
 
 /**
  * Evidence or authority a provider requires before ownership can be asserted.

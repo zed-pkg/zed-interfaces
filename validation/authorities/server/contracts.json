@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zed-pkg/zed-interfaces/validation/authorities/server/contracts.json",
+  "title": "Zed private server persistence contracts",
+  "contractVersion": "ores.validation.v2",
+  "visibility": "server",
+  "type": "object",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/RegistryPackageRow"
+    },
+    {
+      "$ref": "#/$defs/RegistryVersionRow"
+    },
+    {
+      "$ref": "#/$defs/RegistryLeaseRow"
+    }
+  ],
+  "$defs": {
+    "RegistryPackageRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "namespace",
+        "name",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "namespace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "RegistryVersionRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "packageId",
+        "version",
+        "artifactSha256",
+        "artifactSizeBytes",
+        "yanked",
+        "publishedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "packageId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "artifactSha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "artifactSizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "yanked": {
+          "type": "boolean",
+          "default": false
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "RegistryLeaseRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resourceKey",
+        "holderId",
+        "fencingToken",
+        "acquiredAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "resourceKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "holderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "fencingToken": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "acquiredAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "x-orm": {
+    "schema": "zed_pkg",
+    "models": {
+      "RegistryPackageRow": {
+        "table": "packages",
+        "primaryKey": [
+          "id"
+        ],
+        "unique": [
+          {
+            "name": "packages_namespace_name_key",
+            "columns": [
+              "namespace",
+              "name"
+            ]
+          }
+        ],
+        "foreignKeys": [],
+        "indexes": [
+          {
+            "name": "packages_updated_at_idx",
+            "columns": [
+              "updatedAt"
+            ]
+          }
+        ]
+      },
+      "RegistryVersionRow": {
+        "table": "package_versions",
+        "primaryKey": [
+          "id"
+        ],
+        "unique": [
+          {
+            "name": "package_versions_package_version_key",
+            "columns": [
+              "packageId",
+              "version"
+            ]
+          }
+        ],
+        "foreignKeys": [
+          {
+            "name": "package_versions_package_id_fkey",
+            "columns": [
+              "packageId"
+            ],
+            "references": {
+              "table": "packages",
+              "columns": [
+                "id"
+              ]
+            },
+            "onDelete": "cascade"
+          }
+        ],
+        "indexes": [
+          {
+            "name": "package_versions_published_at_idx",
+            "columns": [
+              "publishedAt"
+            ]
+          },
+          {
+            "name": "package_versions_artifact_sha256_idx",
+            "columns": [
+              "artifactSha256"
+            ]
+          }
+        ]
+      },
+      "RegistryLeaseRow": {
+        "table": "registry_leases",
+        "primaryKey": [
+          "resourceKey"
+        ],
+        "unique": [],
+        "foreignKeys": [],
+        "indexes": [
+          {
+            "name": "registry_leases_expires_at_idx",
+            "columns": [
+              "expiresAt"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

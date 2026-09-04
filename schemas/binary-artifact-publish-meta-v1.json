@@ -1,5 +1,31 @@
 {
   "$defs": {
+    "ArtifactsSection": {
+      "description": "Optional `[package.artifacts]` table. Omit the whole table and clients\nguess GitHub + R2 paths from `[package.repository]` and `org`/`name`.",
+      "properties": {
+        "github_packages": {
+          "description": "Push (and later fetch) a packed OCI artifact on GitHub Packages / GHCR.\nDefaults to true when `repository.url` is a github.com repo. This is\nwhat makes a Zed package show up on github.com/orgs/{org}/packages\nuntil GitHub hosts a native Zed registry there.",
+          "type": "boolean"
+        },
+        "github_release": {
+          "description": "Attach (and later fetch) a packed GitHub Release asset. Defaults to\ntrue when `repository.url` is a github.com repo.",
+          "type": "boolean"
+        },
+        "r2_key": {
+          "description": "Full object key, possibly with `{org}`, `{name}`, `{version}`, `{tag}`,\n`{sha256}`, `{ext}`, `{github_owner}`, `{github_repo}` placeholders.\nUse this when the artifact is not at a standard guessed path.",
+          "type": "string"
+        },
+        "r2_prefix": {
+          "description": "Directory prefix in the bucket; the file name\n`{name}-{version}.{ext}` is appended. Ignored when `r2_key` is set.",
+          "type": "string"
+        },
+        "r2_public_base": {
+          "description": "Public HTTPS origin for this package's R2/CDN objects. When omitted,\nclients use `ZED_PKG_R2_PUBLIC_BASE`, then `ZED_PKG_R2_PUBLIC_KEY`,\nthen [`DEFAULT_R2_PUBLIC_BASE`].",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "BinaryArchiveFormatV1": {
       "description": "Binary artifacts use ZIP exclusively in v1. ZIP is portable to Windows,\npreserves POSIX executable bits when present, and supports safe central-\ndirectory inspection before extraction.",
       "enum": [
@@ -341,6 +367,17 @@
           "$ref": "#/$defs/InteropSection",
           "description": "Explicit interoperability intent for external package and environment\nmanagers. Detection alone never grants Zed permission to consume\nanother tool's metadata."
         },
+        "lifecycle": {
+          "$ref": "#/$defs/ProjectLifecycleSection",
+          "description": "Root-project lifecycle hooks around Zed operations. These belong to the\nreviewed checkout and are distinct from dependency package install\nhooks, which retain their separate consent and staging boundary."
+        },
+        "mirrors": {
+          "description": "Explicit public mirrors this package publishes with. Combined with\nguessed GitHub/R2 locations from `[package.repository]` and\n`[package.artifacts]` by [`Manifest::resolved_mirrors`].",
+          "items": {
+            "$ref": "#/$defs/MirrorDescriptorV1"
+          },
+          "type": "array"
+        },
         "native-dependencies": {
           "additionalProperties": {
             "items": {
@@ -373,6 +410,10 @@
             "test": null
           }
         },
+        "signing": {
+          "$ref": "#/$defs/SigningSection",
+          "description": "Optional `[signing]` table. Declares which publisher key this package\nuses so `zed publish` can sign version metadata for registry-down\nrange resolution."
+        },
         "targets": {
           "additionalProperties": {
             "$ref": "#/$defs/TargetSection"
@@ -388,6 +429,79 @@
       "required": [
         "package"
       ],
+      "type": "object"
+    },
+    "MirrorDescriptorV1": {
+      "properties": {
+        "alternate_urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "asset_prefix": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/MirrorKindV1",
+          "default": "object-store"
+        },
+        "path": {
+          "type": "string"
+        },
+        "priority": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "serves": {
+          "$ref": "#/$defs/MirrorServesV1",
+          "default": {
+            "artifacts": true,
+            "index": true,
+            "metadata": true
+          }
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "MirrorKindV1": {
+      "enum": [
+        "zed-registry",
+        "object-store",
+        "directory",
+        "github-release",
+        "github-raw"
+      ],
+      "type": "string"
+    },
+    "MirrorServesV1": {
+      "properties": {
+        "artifacts": {
+          "default": true,
+          "type": "boolean"
+        },
+        "index": {
+          "default": true,
+          "type": "boolean"
+        },
+        "metadata": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
       "type": "object"
     },
     "NativeRegistry": {
@@ -527,6 +641,10 @@
     },
     "PackageSection": {
       "properties": {
+        "artifacts": {
+          "$ref": "#/$defs/ArtifactsSection",
+          "description": "Public artifact locations used when `registry.zpkg.net` is unreachable.\nOmit the table and clients guess GitHub Release / R2 / GHCR paths from\n`[package.repository]` and `org`/`name`. Declare `r2_key` only when\nthe object is not at a standard guessed path."
+        },
         "description": {
           "type": "string"
         },
@@ -577,6 +695,107 @@
         "version",
         "repository"
       ],
+      "type": "object"
+    },
+    "ProjectLifecycleHook": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectLifecycleHookConfig"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        }
+      ],
+      "description": "One lifecycle phase accepts a full configuration or the documented string,\nstring-array, and boolean shorthands."
+    },
+    "ProjectLifecycleHookConfig": {
+      "additionalProperties": false,
+      "description": "Explicit configuration for one root-project lifecycle phase.",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "commands": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "mode": {
+          "$ref": "#/$defs/ProjectLifecycleMode"
+        },
+        "shell": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ProjectLifecycleMode": {
+      "description": "Ordering policy for explicit root-project hooks relative to convention\nfiles discovered under `.zed/` and `.zpkg/`.",
+      "enum": [
+        "append",
+        "prepend",
+        "replace",
+        "disable"
+      ],
+      "type": "string"
+    },
+    "ProjectLifecycleSection": {
+      "additionalProperties": false,
+      "description": "Typed vocabulary for every root-project lifecycle phase recognized by Zed.\nKeeping these as fields instead of an open map makes misspelled phases fail\nduring TOML parsing and gives the generated JSON Schema the same boundary.",
+      "properties": {
+        "post-build": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "post-install": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "post-pack": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "post-publish": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "post-test": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "post-uninstall": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-build": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-install": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-pack": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-publish": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-test": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        },
+        "pre-uninstall": {
+          "$ref": "#/$defs/ProjectLifecycleHook"
+        }
+      },
       "type": "object"
     },
     "PublishSection": {
@@ -664,6 +883,15 @@
         "test": {
           "default": null,
           "description": "Test command run from the repository (not from published artifacts;\ntests are stripped at publish time).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SigningSection": {
+      "description": "Optional `[signing]` table on `.zpkg.toml`.",
+      "properties": {
+        "key_id": {
           "type": "string"
         }
       },

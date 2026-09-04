@@ -1,0 +1,118 @@
+{
+  "models": {
+    "RegistryLeaseRow": {
+      "closed": true,
+      "fields": {
+        "acquiredAt": {
+          "format": "date-time",
+          "kind": "string",
+          "required": true
+        },
+        "expiresAt": {
+          "format": "date-time",
+          "kind": "string",
+          "required": true
+        },
+        "fencingToken": {
+          "kind": "integer",
+          "minimum": 1,
+          "required": true
+        },
+        "holderId": {
+          "kind": "string",
+          "maxLength": 128,
+          "minLength": 1,
+          "required": true
+        },
+        "resourceKey": {
+          "kind": "string",
+          "maxLength": 256,
+          "minLength": 1,
+          "required": true
+        }
+      }
+    },
+    "RegistryPackageRow": {
+      "closed": true,
+      "fields": {
+        "createdAt": {
+          "format": "date-time",
+          "kind": "string",
+          "required": true
+        },
+        "description": {
+          "kind": "string",
+          "maxLength": 4096,
+          "required": false
+        },
+        "id": {
+          "format": "uuid",
+          "kind": "string",
+          "required": true
+        },
+        "name": {
+          "kind": "string",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "required": true
+        },
+        "namespace": {
+          "kind": "string",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "required": true
+        },
+        "updatedAt": {
+          "format": "date-time",
+          "kind": "string",
+          "required": true
+        }
+      }
+    },
+    "RegistryVersionRow": {
+      "closed": true,
+      "fields": {
+        "artifactSha256": {
+          "kind": "string",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "required": true
+        },
+        "artifactSizeBytes": {
+          "kind": "integer",
+          "minimum": 0,
+          "required": true
+        },
+        "id": {
+          "format": "uuid",
+          "kind": "string",
+          "required": true
+        },
+        "packageId": {
+          "format": "uuid",
+          "kind": "string",
+          "required": true
+        },
+        "publishedAt": {
+          "format": "date-time",
+          "kind": "string",
+          "required": true
+        },
+        "version": {
+          "kind": "string",
+          "maxLength": 128,
+          "minLength": 1,
+          "required": true
+        },
+        "yanked": {
+          "default": false,
+          "kind": "boolean",
+          "required": true
+        }
+      }
+    }
+  }
+}

@@ -16,6 +16,9 @@ fn package(revision: Option<&str>) -> LockedPackage {
         vcs_tag: "v1.2.3".to_string(),
         vcs_commit: revision.map(str::to_string),
         source: "file:///tmp/registry".to_string(),
+        mirrors: Vec::new(),
+        signed_by: None,
+        signing_key: None,
     }
 }
 

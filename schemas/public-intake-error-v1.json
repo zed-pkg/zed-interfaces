@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PublicIntakeErrorV1",
+  "description": "Closed public error categories. No arbitrary detail or reflected input is\npresent in the wire shape; operational detail belongs only in redacted\ninternal telemetry keyed by a server-generated trace identifier.",
+  "type": "object",
+  "properties": {
+    "code": {
+      "$ref": "#/$defs/PublicIntakeErrorCodeV1"
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "schema": {
+      "$ref": "#/$defs/PublicIntakeSchemaV1"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "code",
+    "retryable"
+  ],
+  "$defs": {
+    "PublicIntakeErrorCodeV1": {
+      "type": "string",
+      "enum": [
+        "invalid_request",
+        "unsupported_media_type",
+        "payload_too_large",
+        "abuse_challenge_failed",
+        "rate_limited",
+        "temporarily_unavailable"
+      ]
+    },
+    "PublicIntakeSchemaV1": {
+      "description": "A single-variant enum makes the schema marker closed in Rust, JSON Schema,\nDart, and TypeScript instead of accepting an arbitrary version string.",
+      "type": "string",
+      "enum": [
+        "zed.public-intake.v1"
+      ]
+    }
+  }
+}

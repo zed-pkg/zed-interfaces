@@ -2,13 +2,17 @@
 // Regenerate with `npm run codegen` after changing the Rust types.
 // Source: schemas/package-metadata.json
 
+import 'common.dart';
+
 class PackageMetadata {
   const PackageMetadata({
     this.description,
     this.latest,
+    this.mirrors,
     required this.name,
     required this.org,
     required this.repoUrl,
+    this.signingKeys,
     this.tags,
     required this.vcs,
     this.versionScheme,
@@ -18,9 +22,11 @@ class PackageMetadata {
   factory PackageMetadata.fromJson(Map<String, dynamic> json) => PackageMetadata(
     description: json['description'] as String?,
     latest: json['latest'] as String?,
+    mirrors: (json['mirrors'] as List<dynamic>?)?.map((e) => MirrorDescriptorV1.fromJson(e as Map<String, dynamic>)).toList(),
     name: json['name'] as String,
     org: json['org'] as String,
     repoUrl: json['repo_url'] as String,
+    signingKeys: (json['signing_keys'] as List<dynamic>?)?.map((e) => PublisherKeyV1.fromJson(e as Map<String, dynamic>)).toList(),
     tags: (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList(),
     vcs: Vcs.fromJson(json['vcs'] as String),
     versionScheme: VersionScheme.maybeFromJson(json['version_scheme'] as String?),
@@ -31,11 +37,17 @@ class PackageMetadata {
 
   final String? latest;
 
+  /// Package-level public mirrors advertised by the publisher.
+  final List<MirrorDescriptorV1>? mirrors;
+
   final String name;
 
   final String org;
 
   final String repoUrl;
+
+  /// Publisher keys consumers pin on first resolve.
+  final List<PublisherKeyV1>? signingKeys;
 
   /// Free-form tags for filtering/discovery (multi-tag lookup).
   final List<String>? tags;
@@ -51,13 +63,79 @@ class PackageMetadata {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'description': description,
     'latest': latest,
+    'mirrors': mirrors?.map((e) => e.toJson()).toList(),
     'name': name,
     'org': org,
     'repo_url': repoUrl,
+    'signing_keys': signingKeys?.map((e) => e.toJson()).toList(),
     'tags': tags,
     'vcs': vcs.toJson(),
     'version_scheme': versionScheme?.toJson(),
     'versions': versions,
+  };
+}
+
+enum PublisherKeyStateV1 {
+  active('active'),
+  retired('retired'),
+  revoked('revoked');
+
+  const PublisherKeyStateV1(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static PublisherKeyStateV1 fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown PublisherKeyStateV1: $value'),
+  );
+
+  static PublisherKeyStateV1? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
+class PublisherKeyV1 {
+  const PublisherKeyV1({
+    required this.algorithm,
+    this.enrolledAt,
+    required this.keyId,
+    required this.publicKeyMultibase,
+    this.revokedReason,
+    required this.state,
+  });
+
+  factory PublisherKeyV1.fromJson(Map<String, dynamic> json) => PublisherKeyV1(
+    algorithm: json['algorithm'] as String,
+    enrolledAt: json['enrolled_at'] as String?,
+    keyId: json['key_id'] as String,
+    publicKeyMultibase: json['public_key_multibase'] as String,
+    revokedReason: json['revoked_reason'] as String?,
+    state: PublisherKeyStateV1.fromJson(json['state'] as String),
+  );
+
+  final String algorithm;
+
+  final String? enrolledAt;
+
+  final String keyId;
+
+  final String publicKeyMultibase;
+
+  final String? revokedReason;
+
+  final PublisherKeyStateV1 state;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'algorithm': algorithm,
+    'enrolled_at': enrolledAt,
+    'key_id': keyId,
+    'public_key_multibase': publicKeyMultibase,
+    'revoked_reason': revokedReason,
+    'state': state.toJson(),
   };
 }
 
