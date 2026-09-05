@@ -25,10 +25,65 @@ enum ArtifactFormat {
   String toJson() => wire;
 }
 
+/// One concrete fetch location for a published artifact.
+class ArtifactLocator {
+  const ArtifactLocator({
+    required this.kind,
+    required this.url,
+  });
+
+  factory ArtifactLocator.fromJson(Map<String, dynamic> json) => ArtifactLocator(
+    kind: ArtifactSourceKind.fromJson(json['kind'] as String),
+    url: json['url'] as String,
+  );
+
+  final ArtifactSourceKind kind;
+
+  final String url;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'kind': kind.toJson(),
+    'url': url,
+  };
+}
+
+/// Where a published artifact can be fetched from when the primary registry host is down.
+/// Order in [`artifact_locators`] is the client retry order.
+enum ArtifactSourceKind {
+  /// `zed-api-server` (`/v1/artifacts/<sha256>` or a presigned redirect).
+  registry('registry'),
+  /// Direct GET against the public R2/CDN origin.
+  r2('r2'),
+  /// Packed tarball attached to a GitHub Release.
+  githubRelease('github-release'),
+  /// Source archive of the tagged commit. Last resort: the bytes are the VCS tree, not the
+  /// pruned publish artifact, so a lockfile sha256 will not match unless the client re-packs
+  /// with the same rules.
+  githubArchive('github-archive');
+
+  const ArtifactSourceKind(this.wire);
+
+  /// The value as it appears in JSON.
+  final String wire;
+
+  /// Throws [FormatException] on a value this build does not know — an
+  /// unrecognized variant is a version skew, not something to decode past.
+  static ArtifactSourceKind fromJson(String value) => values.firstWhere(
+    (candidate) => candidate.wire == value,
+    orElse: () => throw FormatException('unknown ArtifactSourceKind: $value'),
+  );
+
+  static ArtifactSourceKind? maybeFromJson(String? value) =>
+      value == null ? null : fromJson(value);
+
+  String toJson() => wire;
+}
+
 class VersionMetadata {
   const VersionMetadata({
     required this.downloadUrl,
     this.format = ArtifactFormat.tarGz,
+    this.mirrors,
     required this.name,
     required this.org,
     required this.publishedAt,
@@ -45,6 +100,7 @@ class VersionMetadata {
     format: json['format'] == null
         ? ArtifactFormat.tarGz
         : ArtifactFormat.fromJson(json['format'] as String),
+    mirrors: (json['mirrors'] as List<dynamic>?)?.map((e) => ArtifactLocator.fromJson(e as Map<String, dynamic>)).toList(),
     name: json['name'] as String,
     org: json['org'] as String,
     publishedAt: json['published_at'] as String,
@@ -62,6 +118,11 @@ class VersionMetadata {
   final String downloadUrl;
 
   final ArtifactFormat format;
+
+  /// Alternate fetch locations (public R2, GitHub Release) so a client that already has this
+  /// metadata can retry without the registry host. Empty when the publisher did not advertise
+  /// mirrors; clients still guess standard GitHub/R2 paths from `org`/`name`/`vcs_tag`.
+  final List<ArtifactLocator>? mirrors;
 
   final String name;
 
@@ -85,6 +146,7 @@ class VersionMetadata {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'download_url': downloadUrl,
     'format': format.toJson(),
+    'mirrors': mirrors?.map((e) => e.toJson()).toList(),
     'name': name,
     'org': org,
     'published_at': publishedAt,
