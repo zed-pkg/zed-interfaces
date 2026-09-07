@@ -1,0 +1,61 @@
+name: DEN-2050 flags-2-env generated schema closure
+
+on:
+  push:
+    branches: [DEN-2050-flags2env-cli-contract]
+    paths:
+      - '.github/workflows/den-2050-flags2env-schema-closure.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-2050-flags2env-schema-closure
+  cancel-in-progress: false
+
+jobs:
+  close-generated-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: DEN-2050-flags2env-cli-contract
+          persist-credentials: true
+          show-progress: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          components: rustfmt,clippy
+
+      - name: Regenerate the complete public contract closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo run --locked --example generate_schemas
+          node codegen/generate.mjs
+
+      - name: Verify regenerated contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked
+          cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Commit every generated projection changed by the manifest type
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- schemas src/ts src/dart
+          if git diff --cached --quiet; then
+            echo 'Generated contract closure is already complete.'
+            exit 0
+          fi
+          git diff --cached --stat
+          git commit -m 'build(DEN-2050): close generated manifest schema projections'
+          git push origin HEAD:refs/heads/DEN-2050-flags2env-cli-contract
