@@ -35,6 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import re
           from pathlib import Path
           from textwrap import dedent
 
@@ -48,28 +49,30 @@ jobs:
 
           manifest = Path('src/rust/manifest.rs')
           text = manifest.read_text()
-          old = '''            if let Some(build) = &self.build {
-              if !build.outputs.is_empty()
-                  && !build.outputs.iter().any(|output| output == config)
-              {
-                  return Err(ManifestError::InvalidFlags2EnvInterop(format!(
-                      "build.outputs must retain flags contract `{config}`"
-                  )));
-              }
-          }
-          '''
-          new = '''            if self.build.as_ref().is_some_and(|build| {
+          pattern = re.compile(
+              r'''            if let Some\(build\) = &self\.build \{\s+
+              if !build\.outputs\.is_empty\(\)\s+
+                  && !build\.outputs\.iter\(\)\.any\(\|output\| output == config\)\s+
+              \{\s+
+                  return Err\(ManifestError::InvalidFlags2EnvInterop\(format!\(\s+
+                      "build\.outputs must retain flags contract `\{config\}`"\s+
+                  \)\)\);\s+
+              \}\s+
+          \}''',
+              re.VERBOSE,
+          )
+          replacement = '''            if self.build.as_ref().is_some_and(|build| {
               !build.outputs.is_empty()
                   && !build.outputs.iter().any(|output| output == config)
           }) {
               return Err(ManifestError::InvalidFlags2EnvInterop(format!(
                   "build.outputs must retain flags contract `{config}`"
               )));
-          }
-          '''
-          if old not in text:
-              raise SystemExit('Clippy normalization anchor not found')
-          manifest.write_text(text.replace(old, new, 1))
+          }'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'expected one Clippy normalization target, found {count}')
+          manifest.write_text(text)
           PY
 
       - name: Format and regenerate public contracts
