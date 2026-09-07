@@ -1,0 +1,73 @@
+name: Peer authority wire acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'schema-authority-canary/**'
+      - '.github/workflows/peer-wire-cases.yml'
+  push:
+    branches: [main, dev]
+    paths:
+      - 'schema-authority-canary/**'
+      - '.github/workflows/peer-wire-cases.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wire-cases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      # Isolated test runner; existing Contract IR admission policy is unchanged.
+      # Same immutable validator revision exercised by Claritas renderer tests.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ORESoftware/typespec-json-schema-validator
+          ref: 22d66b53d2cb5b99f78bbd16c2f235e3defde0f3
+          path: tmp/tsjsv
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.16.0
+      - name: Verify exact sources and install the pinned compiler
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git -C tmp/tsjsv rev-parse HEAD)" = '22d66b53d2cb5b99f78bbd16c2f235e3defde0f3'
+          mkdir -p tmp/peer-wire
+          git rev-parse HEAD > tmp/peer-wire/source-commit.txt
+          git -C tmp/tsjsv rev-parse HEAD > tmp/peer-wire/validator-commit.txt
+          node --version > tmp/peer-wire/node-version.txt
+          sha256sum schema-authority-canary/main.tsp schema-authority-canary/authored.schema.json > tmp/peer-wire/authority-inputs.sha256
+          npm ci --prefix tmp/tsjsv
+      - name: Execute every expected verdict against both authorities without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap schema-authority-canary/peer-wire.test.mjs | tee tmp/peer-wire/tests.tap
+          sha256sum --check tmp/peer-wire/authority-inputs.sha256
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const tap = readFileSync('tmp/peer-wire/tests.tap', 'utf8');
+          for (const [key, value] of [['tests',57], ['pass',57], ['fail',0], ['skipped',0]]) {
+            assert.match(tap, new RegExp(`^# ${key} ${value}$`, 'm'), `missing complete ${key} evidence`);
+          }
+          NODE
+      - name: Retain test results, source hashes, and official compiler witness
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: peer-wire-${{ github.event.repository.name }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: tmp/peer-wire/
+          if-no-files-found: error
+          retention-days: 30
