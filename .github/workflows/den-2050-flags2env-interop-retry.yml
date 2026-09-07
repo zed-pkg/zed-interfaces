@@ -35,7 +35,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import re
           from pathlib import Path
           from textwrap import dedent
 
@@ -48,31 +47,44 @@ jobs:
           exec(compile(dedent(script), '<flags2env-manifest-patch>', 'exec'), {})
 
           manifest = Path('src/rust/manifest.rs')
-          text = manifest.read_text()
-          pattern = re.compile(
-              r'''            if let Some\(build\) = &self\.build \{\s+
-              if !build\.outputs\.is_empty\(\)\s+
-                  && !build\.outputs\.iter\(\)\.any\(\|output\| output == config\)\s+
-              \{\s+
-                  return Err\(ManifestError::InvalidFlags2EnvInterop\(format!\(\s+
-                      "build\.outputs must retain flags contract `\{config\}`"\s+
-                  \)\)\);\s+
-              \}\s+
-          \}''',
-              re.VERBOSE,
+          lines = manifest.read_text().splitlines()
+          block_start = next(
+              (
+                  index
+                  for index, line in enumerate(lines)
+                  if line.strip() == 'if let Some(build) = &self.build {'
+                  and any(
+                      'build.outputs must retain flags contract' in candidate
+                      for candidate in lines[index:index + 12]
+                  )
+              ),
+              None,
           )
-          replacement = '''            if self.build.as_ref().is_some_and(|build| {
-              !build.outputs.is_empty()
-                  && !build.outputs.iter().any(|output| output == config)
-          }) {
-              return Err(ManifestError::InvalidFlags2EnvInterop(format!(
-                  "build.outputs must retain flags contract `{config}`"
-              )));
-          }'''
-          text, count = pattern.subn(replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'expected one Clippy normalization target, found {count}')
-          manifest.write_text(text)
+          if block_start is None:
+              raise SystemExit('generated build-output validation block not found')
+          indent = lines[block_start][:-len(lines[block_start].lstrip())]
+          block_end = next(
+              (
+                  index
+                  for index in range(block_start + 1, len(lines))
+                  if lines[index] == f'{indent}}}'
+              ),
+              None,
+          )
+          if block_end is None:
+              raise SystemExit('generated build-output validation block did not close')
+          replacement = [
+              f'{indent}if self.build.as_ref().is_some_and(|build| {{',
+              f'{indent}    !build.outputs.is_empty()',
+              f'{indent}        && !build.outputs.iter().any(|output| output == config)',
+              f'{indent}}}) {{',
+              f'{indent}    return Err(ManifestError::InvalidFlags2EnvInterop(format!(',
+              f'{indent}        "build.outputs must retain flags contract `{{config}}`"',
+              f'{indent}    )));',
+              f'{indent}}}',
+          ]
+          lines[block_start:block_end + 1] = replacement
+          manifest.write_text('\n'.join(lines) + '\n')
           PY
 
       - name: Format and regenerate public contracts
