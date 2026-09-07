@@ -63,7 +63,7 @@ jobs:
               #[serde(skip_serializing_if = "GitInteropSection::is_empty")]
               pub git: GitInteropSection,
               /// Bind installed CLI entry points to one package-owned flags-2-env contract.
-              /// Zed must use this explicit path rather than discovering configuration from
+              /// Zed uses this explicit path rather than discovering configuration from
               /// the consumer's working directory.
               #[serde(
                   rename = "flags-2-env",
@@ -103,27 +103,8 @@ jobs:
                   raise SystemExit('InteropSection anchor not found')
               text = text.replace(old, new, 1)
 
-              old = '''        for (bin_name, target) in &self.bin {
-              if bin_name.is_empty()
-                  || bin_name.starts_with('.')
-                  || bin_name
-                      .chars()
-                      .any(|c| !(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'))
-              {
-                  return Err(ManifestError::InvalidBin(
-                      bin_name.clone(),
-                      "names use [A-Za-z0-9._-] and cannot start with `.`".to_string(),
-                  ));
-              }
-              if !is_safe_relative_path(target) {
-                  return Err(ManifestError::InvalidBin(
-                      bin_name.clone(),
-                      format!("target `{target}` must be a relative path without `..`"),
-                  ));
-              }
-          }
-          '''
-              new = old + '''        if !self.interop.flags_2_env.is_empty() {
+              marker = '        let overriding = self.overrides.build.values();\n'
+              validation = '''        if !self.interop.flags_2_env.is_empty() {
               let interop = &self.interop.flags_2_env;
               let config = interop
                   .config
@@ -158,19 +139,20 @@ jobs:
                       )));
                   }
               }
-              if let Some(build) = &self.build
-                  && !build.outputs.is_empty()
-                  && !build.outputs.iter().any(|output| output == config)
-              {
-                  return Err(ManifestError::InvalidFlags2EnvInterop(format!(
-                      "build.outputs must retain flags contract `{config}`"
-                  )));
+              if let Some(build) = &self.build {
+                  if !build.outputs.is_empty()
+                      && !build.outputs.iter().any(|output| output == config)
+                  {
+                      return Err(ManifestError::InvalidFlags2EnvInterop(format!(
+                          "build.outputs must retain flags contract `{config}`"
+                      )));
+                  }
               }
           }
           '''
-              if old not in text:
-                  raise SystemExit('bin validation anchor not found')
-              text = text.replace(old, new, 1)
+              if marker not in text:
+                  raise SystemExit('build-validation insertion marker not found')
+              text = text.replace(marker, validation + marker, 1)
 
               old = '''    #[error("invalid bin entry `{0}`: {1}")]
               InvalidBin(String, String),
@@ -203,7 +185,10 @@ jobs:
                   manifest.interop.flags_2_env.config.as_deref(),
                   Some(".cli-flags.toml")
               );
-              assert_eq!(manifest.interop.flags_2_env.bins, ["tjsv", "tsjsv"]);
+              assert_eq!(
+                  manifest.interop.flags_2_env.bins,
+                  vec!["tjsv".to_owned(), "tsjsv".to_owned()]
+              );
               let serialized = manifest.to_toml_string().expect("serialize manifest");
               assert!(serialized.contains("[interop.flags-2-env]"));
               assert_eq!(Manifest::parse(&serialized).unwrap(), manifest);
