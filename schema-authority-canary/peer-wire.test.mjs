@@ -8,9 +8,9 @@ import { emitTypeSpecJsonSchema, SchemaResolver, validateInstance } from '../tmp
 const registration = () => ({ repository: 'fixture/interfaces', authority: 'typespec', generatedWitnessOnly: true });
 const cases = [];
 const add = (name, declaration, instance, expected) => cases.push({ name, declaration, instance, expected });
-for (const value of ['typespec', 'json-schema']) add(`authority accepts ${value}`, 'AuthorityKind', value, true);
+for (const value of ['typespec', 'json-schema']) add(`AuthorityKind accepts ${value}`, 'AuthorityKind', value, true);
 for (const value of ['', 'TypeSpec', 'protobuf', null, false, 0, [], {}]) {
-  add(`authority rejects ${JSON.stringify(value)}`, 'AuthorityKind', value, false);
+  add(`AuthorityKind rejects ${JSON.stringify(value)}`, 'AuthorityKind', value, false);
 }
 for (const authority of ['typespec', 'json-schema']) {
   for (const generatedWitnessOnly of [true, false]) {
