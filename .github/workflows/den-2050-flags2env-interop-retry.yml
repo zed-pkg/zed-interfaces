@@ -45,6 +45,31 @@ jobs:
               raise SystemExit('embedded patch start marker not found')
           script = workflow.split(start, 1)[1].split(end, 1)[0]
           exec(compile(dedent(script), '<flags2env-manifest-patch>', 'exec'), {})
+
+          manifest = Path('src/rust/manifest.rs')
+          text = manifest.read_text()
+          old = '''            if let Some(build) = &self.build {
+              if !build.outputs.is_empty()
+                  && !build.outputs.iter().any(|output| output == config)
+              {
+                  return Err(ManifestError::InvalidFlags2EnvInterop(format!(
+                      "build.outputs must retain flags contract `{config}`"
+                  )));
+              }
+          }
+          '''
+          new = '''            if self.build.as_ref().is_some_and(|build| {
+              !build.outputs.is_empty()
+                  && !build.outputs.iter().any(|output| output == config)
+          }) {
+              return Err(ManifestError::InvalidFlags2EnvInterop(format!(
+                  "build.outputs must retain flags contract `{config}`"
+              )));
+          }
+          '''
+          if old not in text:
+              raise SystemExit('Clippy normalization anchor not found')
+          manifest.write_text(text.replace(old, new, 1))
           PY
 
       - name: Format and regenerate public contracts
