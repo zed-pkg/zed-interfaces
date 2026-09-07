@@ -9,6 +9,8 @@ on:
       - src/**
       - src/rust/examples/**
       - schemas/**
+      - validation/**
+      - scripts/check-validation-contract.py
       - flake.nix
       - flake.lock
       - .nix/**
@@ -22,6 +24,8 @@ on:
       - src/**
       - src/rust/examples/**
       - schemas/**
+      - validation/**
+      - scripts/check-validation-contract.py
       - flake.nix
       - flake.lock
       - .nix/**
@@ -42,17 +46,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Check out repository
+      - name: Check out reviewed head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           show-progress: false
-
+      - name: Verify reviewed revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Install Nix
         uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-
       - name: Run pinned contract checks
         run: nix develop --no-update-lock-file -c agent-check
