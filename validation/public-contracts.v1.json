@@ -42,6 +42,13 @@
         "detail": {"type": "string", "maxLength": 4096},
         "requestId": {"type": "string", "minLength": 1, "maxLength": 128}
       }
+    },
+    "PublicValidationContract": {
+      "oneOf": [
+        {"$ref": "#/$defs/RequestMeta"},
+        {"$ref": "#/$defs/PageQuery"},
+        {"$ref": "#/$defs/ProblemDetails"}
+      ]
     }
   },
   "x-ores-routeBindings": []
