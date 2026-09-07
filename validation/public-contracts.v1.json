@@ -13,6 +13,7 @@
   ],
   "$defs": {
     "RequestMeta": {
+      "$id": "RequestMeta",
       "type": "object",
       "additionalProperties": false,
       "required": ["requestId", "traceId"],
@@ -23,6 +24,7 @@
       }
     },
     "PageQuery": {
+      "$id": "PageQuery",
       "type": "object",
       "additionalProperties": false,
       "required": ["limit"],
@@ -32,6 +34,7 @@
       }
     },
     "ProblemDetails": {
+      "$id": "ProblemDetails",
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "title", "status", "requestId"],
@@ -42,6 +45,14 @@
         "detail": {"type": "string", "maxLength": 4096},
         "requestId": {"type": "string", "minLength": 1, "maxLength": 128}
       }
+    },
+    "PublicValidationContract": {
+      "$id": "PublicValidationContract",
+      "oneOf": [
+        {"$ref": "RequestMeta"},
+        {"$ref": "PageQuery"},
+        {"$ref": "ProblemDetails"}
+      ]
     }
   },
   "x-ores-routeBindings": []

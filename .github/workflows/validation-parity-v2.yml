@@ -23,23 +23,40 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Verify reviewed source revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: ORESoftware/api-docs
           ref: c75c3924847a42d8d2854eb78c85f330ea726bef
           path: .deps/api-docs
           persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ORESoftware/typespec-json-schema-validator
+          ref: c745036456dd80408b83217118b8563edb8f6abd
+          path: .deps/typespec-json-schema-validator
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22.16.0"
-      - name: Self-test peer-authority comparators
+      - name: Install locked compiler and canonical CLI native addon
+        run: npm ci --prefix .deps/typespec-json-schema-validator
+      - name: Admit the actual public contracts with recorded behavioral evidence
+        run: node validation/compiler/public-parity.mjs
+      - name: Reject source drift and wrong recorded expectations
+        run: node --test validation/compiler/public-parity.test.mjs
+      - name: Self-test existing peer-authority comparators
         run: |
           node validation/parity/orm-annotation-check.mjs --self-test
           node .deps/api-docs/tools/validation-parity/parity-tool.mjs --self-test
       - name: Verify private ORM annotations
         run: node validation/parity/orm-annotation-check.mjs --check
-      - name: Verify TypeSpec and JSON Schema parity
+      - name: Verify existing generated runtime types and parity receipts
         run: node .deps/api-docs/tools/validation-parity/parity-tool.mjs --check
       - name: Assert browser and edge exports exclude server models
         shell: bash
