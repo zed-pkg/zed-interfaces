@@ -16,3 +16,6 @@ node_modules/
 src/dart/.dart_tool/
 src/dart/pubspec.lock
 src/dart/build/
+
+# Disposable peer-authority receipts, IR, and comparison witnesses.
+.typespec-json-schema-validator/
