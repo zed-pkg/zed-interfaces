@@ -118,7 +118,15 @@ pub const DEFAULT_CDN_URL: &str = "https://cdn.zpkg.net";
 /// down at once. A `workers.dev` hostname resolves through a zone zed does not
 /// own and cannot break, in front of the same bucket. It is the route that
 /// survives losing `zpkg.net` entirely.
-pub const DEFAULT_CDN_ALTERNATE_URL: &str = "https://zpkg-cdn.zed-pkg.workers.dev";
+///
+/// The subdomain is the *account's* workers.dev subdomain, not the org name:
+/// Cloudflare assigns one per account and it is `alexander-d-mills`, so
+/// `zpkg-cdn.zed-pkg.workers.dev` — which this constant claimed until the
+/// Worker was actually deployed on 2026-08-29 — never resolved. A fallback
+/// nobody has resolved is not a fallback, which is exactly the failure this
+/// constant exists to prevent; the live-edge gate in `zed-e2e`
+/// (`suites/proof`, gate L3) now fetches it so it cannot rot again silently.
+pub const DEFAULT_CDN_ALTERNATE_URL: &str = "https://zpkg-cdn.alexander-d-mills.workers.dev";
 
 /// Mirrors every client knows about without configuring anything.
 ///
