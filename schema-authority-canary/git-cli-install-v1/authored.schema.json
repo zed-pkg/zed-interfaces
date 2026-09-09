@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "authored.git-cli-install-receipt-v1.schema.json",
+  "$defs": {
+    "GitCliInstallReceiptV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "GitCliInstallReceiptV1",
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "source": { "type": "string" },
+        "revision": { "type": "string" },
+        "binary": { "type": "string" },
+        "installed_path": { "type": "string" },
+        "sha256": { "type": "string" },
+        "manifest": { "type": "string" },
+        "flags_contract": { "type": ["string", "null"] }
+      },
+      "required": [
+        "schema_version",
+        "source",
+        "revision",
+        "binary",
+        "installed_path",
+        "sha256",
+        "manifest",
+        "flags_contract"
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}
