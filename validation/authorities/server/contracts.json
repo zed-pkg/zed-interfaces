@@ -19,7 +19,7 @@
   "$defs": {
     "RegistryPackageRow": {
       "type": "object",
-      "additionalProperties": false,
+      "unevaluatedProperties": false,
       "required": [
         "id",
         "namespace",
@@ -60,7 +60,7 @@
     },
     "RegistryVersionRow": {
       "type": "object",
-      "additionalProperties": false,
+      "unevaluatedProperties": false,
       "required": [
         "id",
         "packageId",
@@ -106,7 +106,7 @@
     },
     "RegistryLeaseRow": {
       "type": "object",
-      "additionalProperties": false,
+      "unevaluatedProperties": false,
       "required": [
         "resourceKey",
         "holderId",
