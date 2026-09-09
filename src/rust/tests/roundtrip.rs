@@ -107,6 +107,48 @@ fn gitmodules_consumption_is_typed_and_roundtrips() {
 }
 
 #[test]
+fn flags2env_cli_interop_is_typed_and_fail_closed() {
+    let valid = format!(
+        "{SAMPLE}\n[bin]\ntjsv = \"bin/tjsv\"\ntsjsv = \"bin/tjsv\"\n\n[interop.flags-2-env]\nconfig = \".cli-flags.toml\"\nbins = [\"tjsv\", \"tsjsv\"]\n"
+    );
+    let manifest = Manifest::parse(&valid).expect("valid flags2env interop");
+    assert_eq!(
+        manifest.interop.flags_2_env.config.as_deref(),
+        Some(".cli-flags.toml")
+    );
+    assert_eq!(
+        manifest.interop.flags_2_env.bins,
+        vec!["tjsv".to_owned(), "tsjsv".to_owned()]
+    );
+    let serialized = manifest.to_toml_string().expect("serialize manifest");
+    assert!(serialized.contains("[interop.flags-2-env]"));
+    assert_eq!(Manifest::parse(&serialized).unwrap(), manifest);
+
+    for invalid in [
+        format!(
+            "{SAMPLE}\n[bin]\ntjsv = \"bin/tjsv\"\n\n[interop.flags-2-env]\nbins = [\"tjsv\"]\n"
+        ),
+        format!(
+            "{SAMPLE}\n[bin]\ntjsv = \"bin/tjsv\"\n\n[interop.flags-2-env]\nconfig = \"../.cli-flags.toml\"\nbins = [\"tjsv\"]\n"
+        ),
+        format!(
+            "{SAMPLE}\n[bin]\ntjsv = \"bin/tjsv\"\n\n[interop.flags-2-env]\nconfig = \".cli-flags.toml\"\nbins = [\"missing\"]\n"
+        ),
+        format!(
+            "{SAMPLE}\n[bin]\ntjsv = \"bin/tjsv\"\n\n[interop.flags-2-env]\nconfig = \".cli-flags.toml\"\nbins = [\"tjsv\", \"tjsv\"]\n"
+        ),
+        format!(
+            "{SAMPLE}\n[build]\ncommand = \"cargo build\"\noutputs = [\"target/release/tjsv\"]\n\n[bin]\ntjsv = \"target/release/tjsv\"\n\n[interop.flags-2-env]\nconfig = \".cli-flags.toml\"\nbins = [\"tjsv\"]\n"
+        ),
+    ] {
+        assert!(matches!(
+            Manifest::parse(&invalid),
+            Err(ManifestError::InvalidFlags2EnvInterop(_))
+        ));
+    }
+}
+
+#[test]
 fn package_artifacts_roundtrip_and_validate() {
     let src = format!(
         "{SAMPLE}\n[package.artifacts]\nr2_public_base = \"https://cdn.zpkg.net\"\nr2_key = \"vendor/{{org}}/{{name}}/{{version}}.{{ext}}\"\n"

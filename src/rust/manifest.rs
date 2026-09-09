@@ -295,11 +295,38 @@ impl InstallSection {
 pub struct InteropSection {
     #[serde(skip_serializing_if = "GitInteropSection::is_empty")]
     pub git: GitInteropSection,
+    /// Bind installed CLI entry points to one package-owned flags-2-env contract.
+    /// Zed uses this explicit path rather than discovering configuration from
+    /// the consumer's working directory.
+    #[serde(
+        rename = "flags-2-env",
+        alias = "flags2env",
+        skip_serializing_if = "Flags2EnvInteropSection::is_empty"
+    )]
+    pub flags_2_env: Flags2EnvInteropSection,
 }
 
 impl InteropSection {
     pub fn is_empty(&self) -> bool {
-        self.git.is_empty()
+        self.git.is_empty() && self.flags_2_env.is_empty()
+    }
+}
+
+/// Explicit flags-2-env binding for binaries exposed by this package.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct Flags2EnvInteropSection {
+    /// Path to the package-owned `.cli-flags.toml`, relative to the package root.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<String>,
+    /// `[bin]` entries whose execution must receive `FLAGS2ENV_CONFIG`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub bins: Vec<String>,
+}
+
+impl Flags2EnvInteropSection {
+    pub fn is_empty(&self) -> bool {
+        self.config.is_none() && self.bins.is_empty()
     }
 }
 
@@ -1479,6 +1506,8 @@ pub enum ManifestError {
     InvalidArtifacts(String),
     #[error("invalid bin entry `{0}`: {1}")]
     InvalidBin(String, String),
+    #[error("invalid [interop.flags-2-env] section: {0}")]
+    InvalidFlags2EnvInterop(String),
     #[error("invalid build section: {0}")]
     InvalidBuild(String),
     #[error("invalid native dependency declaration for `{0}`: {1}")]
@@ -1967,6 +1996,49 @@ impl Manifest {
                     bin_name.clone(),
                     format!("target `{target}` must be a relative path without `..`"),
                 ));
+            }
+        }
+        if !self.interop.flags_2_env.is_empty() {
+            let interop = &self.interop.flags_2_env;
+            let config = interop
+                .config
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    ManifestError::InvalidFlags2EnvInterop(
+                        "config must name the package-owned flags contract".to_string(),
+                    )
+                })?;
+            if !is_safe_relative_path(config) {
+                return Err(ManifestError::InvalidFlags2EnvInterop(format!(
+                    "config `{config}` must be a relative path without `..`"
+                )));
+            }
+            if interop.bins.is_empty() {
+                return Err(ManifestError::InvalidFlags2EnvInterop(
+                    "bins must explicitly name at least one [bin] entry".to_string(),
+                ));
+            }
+            let mut bound = BTreeSet::new();
+            for bin in &interop.bins {
+                if !bound.insert(bin.as_str()) {
+                    return Err(ManifestError::InvalidFlags2EnvInterop(format!(
+                        "bin `{bin}` is listed more than once"
+                    )));
+                }
+                if !self.bin.contains_key(bin) {
+                    return Err(ManifestError::InvalidFlags2EnvInterop(format!(
+                        "bin `{bin}` is not declared in [bin]"
+                    )));
+                }
+            }
+            if self.build.as_ref().is_some_and(|build| {
+                !build.outputs.is_empty() && !build.outputs.iter().any(|output| output == config)
+            }) {
+                return Err(ManifestError::InvalidFlags2EnvInterop(format!(
+                    "build.outputs must retain flags contract `{config}`"
+                )));
             }
         }
         let overriding = self.overrides.build.values();
