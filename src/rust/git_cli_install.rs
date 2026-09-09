@@ -71,7 +71,9 @@ impl GitCliInstallReceiptV1 {
             .as_deref()
             .is_some_and(|value| value.trim().is_empty())
         {
-            return Err("Git CLI install receipt flags_contract must be null or non-empty".to_owned());
+            return Err(
+                "Git CLI install receipt flags_contract must be null or non-empty".to_owned(),
+            );
         }
         Ok(())
     }
@@ -108,8 +110,7 @@ mod tests {
             revision: "387bce152d9572c014710d68062f979c3614276d".to_owned(),
             binary: "ores-cli".to_owned(),
             installed_path: "/home/alex/.local/bin/ores-cli".to_owned(),
-            sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-                .to_owned(),
+            sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_owned(),
             manifest: ".zpkg.toml".to_owned(),
             flags_contract: Some(".cli-flags.toml".to_owned()),
         }
