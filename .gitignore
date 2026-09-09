@@ -9,6 +9,8 @@ tmp
 temp
 tmp/worktrees
 temp/worktrees
+tmp/
+temp/
 
 # Language-slice tooling state. The slices themselves are generated and
 # committed; their toolchains' scratch dirs are not.
