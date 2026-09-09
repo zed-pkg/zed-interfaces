@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
-export const VALIDATOR_REVISION = 'c745036456dd80408b83217118b8563edb8f6abd';
+export const VALIDATOR_REVISION = '4473504c4c9d2831d825919f70c03994d8ce01d2';
 export const PUBLIC_MODELS = Object.freeze(['RequestMeta', 'PageQuery', 'ProblemDetails']);
 export const DECLARATIONS = Object.freeze([...PUBLIC_MODELS, 'PublicValidationContract']);
 const here = resolve(import.meta.dirname, '../..');
@@ -43,10 +43,6 @@ function deepFreeze(value) {
   return value;
 }
 
-/** Run the real compiler over existing production authorities, not a canary.
- * Each call owns a fresh disposable workspace. No previous receipt is reused.
- * The returned evidence is immutable and valid only for this exact checked input.
- */
 export async function checkPublicParity({ repositoryRoot = here,
   validatorRoot = join(here, '.deps/typespec-json-schema-validator') } = {}) {
   const root = resolve(repositoryRoot);
@@ -77,7 +73,6 @@ export async function checkPublicParity({ repositoryRoot = here,
       `--instances=${instances}`, `--output-dir=${generated}`, `--report=${reportPath}`,
       `--contract-ir=${irPath}`, '--seal-object-schemas=false', '--probes=true',
       '--max-probes=64', '--format-assertion=true', '--quiet'];
-    // No receipt-selected program/path, shell interpolation, or ambient TSJSV policy.
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('TSJSV_')));
     try {
       await exec(process.execPath, [join(tool, 'bin/typespec-json-schema-validator.mjs'), ...args],
