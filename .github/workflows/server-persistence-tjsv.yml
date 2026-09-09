@@ -62,9 +62,12 @@ jobs:
           const report = JSON.parse(readFileSync('.typespec-json-schema-validator/server/report.json', 'utf8'));
           const contractIr = JSON.parse(readFileSync('.typespec-json-schema-validator/server/contract-ir.json', 'utf8'));
 
+          assert.equal(report.status, 'passed', 'TJSV report must pass');
           assert.equal(report.zeroUnexplainedFindings, true, 'TJSV must report zero unexplained findings');
-          assert.equal(contractIr.admissible, true, 'Contract IR must be admissible');
+          assert.deepEqual(report.findings, [], 'TJSV finding list must be empty');
           assert.equal(contractIr.schema, 'ores.typespec-json-schema-validator.contract-ir/v1');
+          assert.equal(contractIr.status, 'passed', 'Contract IR must pass');
+          assert.equal(contractIr.admissible, true, 'Contract IR must be admissible');
           NODE
 
       - name: Preserve authored peer authorities
