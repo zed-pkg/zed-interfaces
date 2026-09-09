@@ -1,0 +1,55 @@
+name: TJSV peer-authority convergence
+
+on:
+  pull_request:
+    paths:
+      - "validation/authorities/server/**"
+      - ".github/workflows/tjsv-peer-authority.yml"
+  push:
+    branches: [main]
+    paths:
+      - "validation/authorities/server/**"
+      - ".github/workflows/tjsv-peer-authority.yml"
+
+permissions:
+  contents: read
+
+env:
+  TJSV_SHA: 2281843126ab644607b11cf8281d84f382d68dfc
+
+jobs:
+  server-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned TJSV
+        uses: actions/checkout@v4
+        with:
+          repository: ORESoftware/typespec-json-schema-validator
+          ref: ${{ env.TJSV_SHA }}
+          path: .tjsv
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.11.0
+          cache: npm
+          cache-dependency-path: .tjsv/package-lock.json
+      - name: Install TJSV lockfile
+        working-directory: .tjsv
+        run: npm ci --ignore-scripts
+      - name: Enforce independently authored peer contracts
+        run: |
+          mkdir -p artifacts/tjsv
+          node .tjsv/bin/typespec-json-schema-validator.mjs check \
+            --typespec=validation/authorities/server/contracts.tsp \
+            --schema=validation/authorities/server/contracts.json \
+            --report=artifacts/tjsv/server-contracts.json
+      - name: Retain deterministic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tjsv-zed-server-contracts-${{ github.sha }}
+          path: artifacts/tjsv/server-contracts.json
+          if-no-files-found: ignore
+          retention-days: 30
