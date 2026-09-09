@@ -89,11 +89,32 @@ function typeSpecAuthority(source) {
   return sort({ schema, models });
 }
 
+function isFalseSchema(value) {
+  return (
+    value === false ||
+    (value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.keys(value).length === 1 &&
+      value.not &&
+      typeof value.not === "object" &&
+      !Array.isArray(value.not) &&
+      Object.keys(value.not).length === 0)
+  );
+}
+
+function rejectsAdditionalProperties(definition) {
+  return (
+    definition.additionalProperties === false ||
+    isFalseSchema(definition.unevaluatedProperties)
+  );
+}
+
 function columnsFor(document, model) {
   const definition = document.$defs?.[model];
   fail(definition?.type === "object", `missing JSON Schema model ${model}`);
   fail(
-    definition.additionalProperties === false,
+    rejectsAdditionalProperties(definition),
     `${model} must reject additional properties`,
   );
   return new Set(Object.keys(definition.properties ?? {}));
@@ -257,7 +278,7 @@ function selfTest() {
     $defs: {
       Row: {
         type: "object",
-        additionalProperties: false,
+        unevaluatedProperties: false,
         required: ["id"],
         properties: { id: { type: "string" } },
       },
@@ -281,6 +302,25 @@ function selfTest() {
     "model Row { id: string; }",
   ].join("\n");
   compare(document, source);
+
+  const legacyClosed = structuredClone(document);
+  delete legacyClosed.$defs.Row.unevaluatedProperties;
+  legacyClosed.$defs.Row.additionalProperties = false;
+  compare(legacyClosed, source);
+
+  const emitterClosed = structuredClone(document);
+  emitterClosed.$defs.Row.unevaluatedProperties = { not: {} };
+  compare(emitterClosed, source);
+
+  const openDocument = structuredClone(document);
+  delete openDocument.$defs.Row.unevaluatedProperties;
+  let openRejected = false;
+  try {
+    compare(openDocument, source);
+  } catch {
+    openRejected = true;
+  }
+  fail(openRejected, "self-test accepted an open ORM model");
 
   const drifted = source.replace('"table":"rows"', '"table":"other_rows"');
   let rejected = false;
