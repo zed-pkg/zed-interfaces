@@ -1,0 +1,82 @@
+name: Zed server persistence TJSV parity
+
+on:
+  pull_request:
+    paths:
+      - "validation/authorities/server/**"
+      - ".github/workflows/server-persistence-tjsv.yml"
+  push:
+    branches: [main]
+    paths:
+      - "validation/authorities/server/**"
+      - ".github/workflows/server-persistence-tjsv.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-persistence-tjsv-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact source revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+
+      - name: Enforce independent server TypeSpec and JSON Schema authorities
+        uses: ORESoftware/typespec-json-schema-validator@03ccc0ecdfc70f9198c3ccf80718910961d3fde1
+        with:
+          typespec: validation/authorities/server/contracts.tsp
+          schema: validation/authorities/server/contracts.json
+          report: .typespec-json-schema-validator/server/report.json
+          sarif: .typespec-json-schema-validator/server/report.sarif
+          contract_ir: .typespec-json-schema-validator/server/contract-ir.json
+          output_dir: .typespec-json-schema-validator/server/generated
+          max_probes: "96"
+          seal_object_schemas: "true"
+          quiet: "false"
+
+      - name: Require admissible zero-drift Contract IR
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+
+          const report = JSON.parse(readFileSync('.typespec-json-schema-validator/server/report.json', 'utf8'));
+          const contractIr = JSON.parse(readFileSync('.typespec-json-schema-validator/server/contract-ir.json', 'utf8'));
+
+          assert.equal(report.zeroUnexplainedFindings, true, 'TJSV must report zero unexplained findings');
+          assert.equal(contractIr.admissible, true, 'Contract IR must be admissible');
+          assert.equal(contractIr.schema, 'ores.typespec-json-schema-validator.contract-ir/v1');
+          NODE
+
+      - name: Preserve authored peer authorities
+        shell: bash
+        run: git diff --exit-code -- validation/authorities/server
+
+      - name: Retain TJSV report, SARIF, Contract IR, and generated witness
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-persistence-tjsv-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .typespec-json-schema-validator/server/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
