@@ -1,7 +1,7 @@
 // Generated only after independent JSON Schema and TypeSpec agreement. DO NOT EDIT.
 import gleam/option.{type Option}
 
-pub const contract_version="ores.validation.v2"
+pub const contract_version = "ores.validation.v2"
 
 pub type RegistryLeaseRow {
   RegistryLeaseRow(

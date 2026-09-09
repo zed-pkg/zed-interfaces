@@ -12,7 +12,7 @@ pub struct ProblemDetails {
     pub request_id: String,
     pub status: i64,
     pub title: String,
-    pub type: String,
+    pub r#type: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
