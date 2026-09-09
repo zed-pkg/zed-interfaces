@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: 2281843126ab644607b11cf8281d84f382d68dfc
+          ref: d60d0d79d83e075077382623ec9e23a401ab601f
           path: .deps/typespec-json-schema-validator
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -48,7 +48,7 @@ jobs:
         run: |
           test "$(git -C .deps/api-docs rev-parse HEAD)" = 76c6b2e293168b5033c6ef344730951d4427be9f
           git -C .deps/api-docs diff --exit-code HEAD
-          test "$(git -C .deps/typespec-json-schema-validator rev-parse HEAD)" = 2281843126ab644607b11cf8281d84f382d68dfc
+          test "$(git -C .deps/typespec-json-schema-validator rev-parse HEAD)" = d60d0d79d83e075077382623ec9e23a401ab601f
           git -C .deps/typespec-json-schema-validator diff --exit-code HEAD
           npm ci --prefix .deps/typespec-json-schema-validator
       - name: Admit the actual public contracts with recorded behavioral evidence
