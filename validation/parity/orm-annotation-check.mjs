@@ -89,12 +89,20 @@ function typeSpecAuthority(source) {
   return sort({ schema, models });
 }
 
+function isClosedObject(definition) {
+  return (
+    definition?.type === "object" &&
+    (definition.additionalProperties === false ||
+      definition.unevaluatedProperties === false)
+  );
+}
+
 function columnsFor(document, model) {
   const definition = document.$defs?.[model];
   fail(definition?.type === "object", `missing JSON Schema model ${model}`);
   fail(
-    definition.additionalProperties === false,
-    `${model} must reject additional properties`,
+    isClosedObject(definition),
+    `${model} must reject unevaluated/additional properties`,
   );
   return new Set(Object.keys(definition.properties ?? {}));
 }
@@ -116,10 +124,16 @@ function validate(document, metadata) {
   const modelNames = Object.keys(metadata.models ?? {});
   fail(modelNames.length > 0, "ORM metadata has no models");
 
-  const definitionNames = Object.keys(document.$defs ?? {}).sort();
+  // `$defs` may also contain aggregate unions/envelopes used by the wire
+  // contract. Only concrete object definitions represent database rows that
+  // require x-orm metadata.
+  const definitionNames = Object.entries(document.$defs ?? {})
+    .filter(([, definition]) => definition?.type === "object")
+    .map(([name]) => name)
+    .sort();
   fail(
     canonical(modelNames.sort()) === canonical(definitionNames),
-    "every server model must have exactly one ORM annotation",
+    "every concrete server row model must have exactly one ORM annotation",
   );
 
   const tables = new Map();
@@ -257,9 +271,12 @@ function selfTest() {
     $defs: {
       Row: {
         type: "object",
-        additionalProperties: false,
+        unevaluatedProperties: false,
         required: ["id"],
         properties: { id: { type: "string" } },
+      },
+      Aggregate: {
+        anyOf: [{ $ref: "#/$defs/Row" }],
       },
     },
     "x-orm": {
@@ -279,6 +296,7 @@ function selfTest() {
     "// @orm-schema {\"schema\":\"example\"}",
     "// @orm {\"foreignKeys\":[],\"indexes\":[],\"model\":\"Row\",\"primaryKey\":[\"id\"],\"table\":\"rows\",\"unique\":[]}",
     "model Row { id: string; }",
+    "union Aggregate { row: Row }",
   ].join("\n");
   compare(document, source);
 
@@ -290,6 +308,16 @@ function selfTest() {
     rejected = true;
   }
   fail(rejected, "self-test failed to detect annotation drift");
+
+  const openDocument = structuredClone(document);
+  delete openDocument.$defs.Row.unevaluatedProperties;
+  rejected = false;
+  try {
+    compare(openDocument, source);
+  } catch {
+    rejected = true;
+  }
+  fail(rejected, "self-test failed to reject an open persistence row");
   console.log("ORM annotation parity self-tests passed");
 }
 
