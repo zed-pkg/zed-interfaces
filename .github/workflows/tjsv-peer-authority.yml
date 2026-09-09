@@ -24,7 +24,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Verify reviewed source revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Checkout pinned TJSV
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,9 +43,11 @@ jobs:
           node-version: 22.16.0
           cache: npm
           cache-dependency-path: .tjsv/package-lock.json
-      - name: Install TJSV lockfile
-        working-directory: .tjsv
-        run: npm ci --ignore-scripts
+      - name: Verify and install TJSV lockfile
+        run: |
+          test "$(git -C .tjsv rev-parse HEAD)" = "$TJSV_SHA"
+          git -C .tjsv diff --exit-code HEAD
+          npm ci --prefix .tjsv
       - name: Enforce independently authored peer contracts
         run: |
           mkdir -p artifacts/tjsv
@@ -48,11 +55,15 @@ jobs:
             --typespec=validation/authorities/server/contracts.tsp \
             --schema=validation/authorities/server/contracts.json \
             --report=artifacts/tjsv/server-contracts.json
+      - name: Preserve authority and validator sources
+        run: |
+          git diff --exit-code -- validation/authorities/server/
+          git -C .tjsv diff --exit-code HEAD
       - name: Retain deterministic report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: tjsv-zed-server-contracts-${{ github.sha }}
+          name: tjsv-zed-server-contracts-${{ github.event.pull_request.head.sha || github.sha }}
           path: artifacts/tjsv/server-contracts.json
           if-no-files-found: ignore
           retention-days: 30
