@@ -61,6 +61,20 @@ jobs:
         run: node validation/parity/orm-annotation-check.mjs --check
       - name: Verify existing generated runtime types and parity receipts
         run: node .deps/api-docs/tools/validation-parity/parity-tool.mjs --check
+      - name: Generate parity candidates after a drift failure
+        if: ${{ failure() }}
+        run: node .deps/api-docs/tools/validation-parity/parity-tool.mjs --write
+      - name: Retain generated parity candidates for review
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: parity-candidates-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            generated/final/
+            generated/candidates/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
       - name: Assert browser and edge exports exclude server models
         shell: bash
         run: |
