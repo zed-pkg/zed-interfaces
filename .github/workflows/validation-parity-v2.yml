@@ -38,14 +38,17 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: c745036456dd80408b83217118b8563edb8f6abd
+          ref: 2281843126ab644607b11cf8281d84f382d68dfc
           path: .deps/typespec-json-schema-validator
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22.16.0"
-      - name: Install locked compiler and canonical CLI native addon
-        run: npm ci --prefix .deps/typespec-json-schema-validator
+      - name: Verify and install locked compiler and canonical CLI native addon
+        run: |
+          test "$(git -C .deps/typespec-json-schema-validator rev-parse HEAD)" = 2281843126ab644607b11cf8281d84f382d68dfc
+          git -C .deps/typespec-json-schema-validator diff --exit-code HEAD
+          npm ci --prefix .deps/typespec-json-schema-validator
       - name: Admit the actual public contracts with recorded behavioral evidence
         run: node validation/compiler/public-parity.mjs
       - name: Reject source drift and wrong recorded expectations
@@ -69,3 +72,7 @@ jobs:
               exit 1
             fi
           done
+      - name: Preserve validator and authored sources
+        run: |
+          git -C .deps/typespec-json-schema-validator diff --exit-code HEAD
+          git diff --exit-code -- validation/typespec validation/public-contracts.v1.json validation/compiler/cases.json
