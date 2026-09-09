@@ -1,0 +1,92 @@
+name: Git CLI install peer-authority contract
+
+on:
+  pull_request:
+    paths:
+      - "schema-authority-canary/git-cli-install-v1/**"
+      - "src/rust/git_cli_install.rs"
+      - "src/rust/lib.rs"
+      - ".github/workflows/git-cli-install-contract.yml"
+  push:
+    branches: [main, dev]
+    paths:
+      - "schema-authority-canary/git-cli-install-v1/**"
+      - "src/rust/git_cli_install.rs"
+      - "src/rust/lib.rs"
+      - ".github/workflows/git-cli-install-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: git-cli-install-contract-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  peer-authority:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify checked-out revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Compare independent TypeSpec and JSON Schema authorities
+        uses: ORESoftware/typespec-json-schema-validator@2281843126ab644607b11cf8281d84f382d68dfc
+        with:
+          typespec: schema-authority-canary/git-cli-install-v1/main.tsp
+          schema: schema-authority-canary/git-cli-install-v1/authored.schema.json
+          instances: schema-authority-canary/git-cli-install-v1/instances
+          report: .typespec-json-schema-validator/git-cli-install/report.json
+          sarif: .typespec-json-schema-validator/git-cli-install/report.sarif
+          contract_ir: .typespec-json-schema-validator/git-cli-install/contract-ir.json
+          output_dir: .typespec-json-schema-validator/git-cli-install/generated
+          max_probes: "64"
+      - name: Require canonical consumer admission refusals
+        uses: ORESoftware/typespec-json-schema-validator/actions/test-consumer-admission@2281843126ab644607b11cf8281d84f382d68dfc
+        with:
+          contract_ir: .typespec-json-schema-validator/git-cli-install/contract-ir.json
+          report: .typespec-json-schema-validator/git-cli-install/report.json
+          typespec: schema-authority-canary/git-cli-install-v1/main.tsp
+          schema: schema-authority-canary/git-cli-install-v1/authored.schema.json
+          generated_schema: .typespec-json-schema-validator/git-cli-install/generated/typespec.generated.schema.json
+          expected_declarations: '["ZedGitCliInstall.GitCliInstallReceiptV1"]'
+          verification: .typespec-json-schema-validator/git-cli-install/consumer-verification.json
+      - name: Retain parity and admission evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: git-cli-install-contract-${{ github.run_id }}
+          path: .typespec-json-schema-validator/git-cli-install/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
+
+  rust-runtime:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.95.0
+      - name: Execute shared receipt contract tests
+        run: cargo test -p zed-interfaces git_cli_install --locked
