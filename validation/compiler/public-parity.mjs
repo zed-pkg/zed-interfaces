@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
-export const VALIDATOR_REVISION = '2281843126ab644607b11cf8281d84f382d68dfc';
+export const VALIDATOR_REVISION = '03ccc0ecdfc70f9198c3ccf80718910961d3fde1';
 export const PUBLIC_MODELS = Object.freeze(['RequestMeta', 'PageQuery', 'ProblemDetails']);
 export const DECLARATIONS = Object.freeze([...PUBLIC_MODELS, 'PublicValidationContract']);
 const here = resolve(import.meta.dirname, '../..');
