@@ -1,0 +1,103 @@
+name: private-registry-sql-admission
+on:
+  pull_request:
+    paths:
+      - 'validation/authorities/server/**'
+      - 'validation/compiler/registry-*'
+      - '.github/workflows/private-registry-sql-admission.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'validation/authorities/server/**'
+      - 'validation/compiler/registry-*'
+      - '.github/workflows/private-registry-sql-admission.yml'
+permissions:
+  contents: read
+concurrency:
+  group: private-registry-admission-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  peer-authorities:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.16.0'
+      - name: Compile and compare the actual private authorities
+        uses: ORESoftware/typespec-json-schema-validator@2281843126ab644607b11cf8281d84f382d68dfc
+        with:
+          typespec: validation/authorities/server/contracts.tsp
+          schema: validation/authorities/server/contracts.json
+          report: .artifacts/private-parity/report.json
+          sarif: .artifacts/private-parity/report.sarif
+          contract_ir: .artifacts/private-parity/contract-ir.json
+          output_dir: .artifacts/private-parity/generated
+          max_probes: '64'
+      - name: Retain actual compiler evidence, including failures
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: private-registry-peer-evidence
+          path: .artifacts/private-parity/
+          include-hidden-files: true
+          if-no-files-found: warn
+  sql-placement:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: admission_test
+          POSTGRES_PASSWORD: disposable-ci-only
+          POSTGRES_DB: registry_admission_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U admission_test -d registry_admission_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: admission_test
+      PGPASSWORD: disposable-ci-only
+      PGDATABASE: registry_admission_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: zed-pkg/zed-lib-core
+          ref: 24b8ea796c051a0c6d576ef24c9e57a3bfa8f557
+          path: .deps/zed-lib-core
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.16.0'
+      - name: Test the inventory gate, including adversarial inputs
+        run: node --test validation/compiler/registry-sql-admission.test.mjs
+      - name: Materialize the actual owned PostgreSQL schema
+        run: psql -X -v ON_ERROR_STOP=1 -f .deps/zed-lib-core/src/rust-orm/sql/registry.sql
+      - name: Capture the database catalog without application data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts
+          psql -X -qAt -f validation/compiler/registry-catalog.sql > .artifacts/registry-catalog.json
+      - name: Refuse schema, table, column, and requested-entity coverage drift
+        run: node validation/compiler/registry-sql-admission.mjs
+      - name: Retain catalog and admission findings
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: private-registry-sql-evidence
+          path: .artifacts/
+          include-hidden-files: true
+          if-no-files-found: warn

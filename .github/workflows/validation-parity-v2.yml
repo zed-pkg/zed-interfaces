@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: c745036456dd80408b83217118b8563edb8f6abd
+          ref: 2281843126ab644607b11cf8281d84f382d68dfc
           path: .deps/typespec-json-schema-validator
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
