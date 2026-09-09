@@ -168,12 +168,13 @@ mod tests {
 
     #[test]
     fn semantic_identity_and_digest_checks_fail_closed() {
-        for mutate in [
-            |receipt: &mut GitCliInstallReceiptV1| receipt.schema_version = 2,
-            |receipt: &mut GitCliInstallReceiptV1| receipt.revision = "main".to_owned(),
-            |receipt: &mut GitCliInstallReceiptV1| receipt.binary = "../ores-cli".to_owned(),
-            |receipt: &mut GitCliInstallReceiptV1| receipt.sha256 = "ABCDEF".repeat(10),
-        ] {
+        let mutations: [fn(&mut GitCliInstallReceiptV1); 4] = [
+            |receipt| receipt.schema_version = 2,
+            |receipt| receipt.revision = "main".to_owned(),
+            |receipt| receipt.binary = "../ores-cli".to_owned(),
+            |receipt| receipt.sha256 = "ABCDEF".repeat(10),
+        ];
+        for mutate in mutations {
             let mut receipt = fixture();
             mutate(&mut receipt);
             assert!(receipt.validate().is_err());
