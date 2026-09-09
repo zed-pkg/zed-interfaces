@@ -64,6 +64,7 @@ jobs:
           node .tjsv/bin/typespec-json-schema-validator.mjs check \
             --typespec=validation/authorities/server/contracts.tsp \
             --schema=validation/authorities/server/contracts.json \
+            --mapping=validation/authorities/server/tjsv.mapping.json \
             --report=tmp/tjsv/server-contracts.json \
             --quiet
           node - <<'NODE'
@@ -72,8 +73,9 @@ jobs:
           if (report.schema !== 'ores.typespec-json-schema-validator.report/v1') throw new Error('unexpected TJSV report schema');
           if (report.status !== 'passed') throw new Error(`TJSV status is ${report.status}`);
           if (!report.differential || report.differential.disabled) throw new Error('differential evidence must be enabled');
+          if (report.counts?.findings !== 0) throw new Error(`TJSV retained ${report.counts?.findings} findings`);
           NODE
-      - name: Preserve both authored authorities and validator source
+      - name: Preserve both authored authorities, reviewed mapping, and validator source
         run: |
           set -euo pipefail
           git diff --exit-code -- validation/authorities/server/
