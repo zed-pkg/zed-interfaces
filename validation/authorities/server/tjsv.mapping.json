@@ -1,0 +1,27 @@
+{
+  "schema": "ores.typespec-json-schema-validator.mapping/v1",
+  "declarations": [
+    {
+      "typespec": "Zed.Validation.Server.RegistryPackageRow",
+      "generated": "RegistryPackageRow",
+      "authored": "RegistryPackageRow"
+    },
+    {
+      "typespec": "Zed.Validation.Server.RegistryVersionRow",
+      "generated": "RegistryVersionRow",
+      "authored": "RegistryVersionRow"
+    },
+    {
+      "typespec": "Zed.Validation.Server.RegistryLeaseRow",
+      "generated": "RegistryLeaseRow",
+      "authored": "RegistryLeaseRow"
+    }
+  ],
+  "ignore": {
+    "typespec": [
+      "Zed.Validation.Server.ServerPersistenceContract"
+    ],
+    "generated": [],
+    "authored": []
+  }
+}
