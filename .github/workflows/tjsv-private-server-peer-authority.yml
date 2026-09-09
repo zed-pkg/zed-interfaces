@@ -1,0 +1,88 @@
+name: TJSV private server peer-authority
+
+on:
+  pull_request:
+    paths:
+      - "validation/authorities/server/**"
+      - ".github/workflows/tjsv-private-server-peer-authority.yml"
+  push:
+    branches: [main]
+    paths:
+      - "validation/authorities/server/**"
+      - ".github/workflows/tjsv-private-server-peer-authority.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TJSV_SHA: 2281843126ab644607b11cf8281d84f382d68dfc
+
+jobs:
+  server-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify reviewed source revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          ! git grep -nE '^(<<<<<<<|=======|>>>>>>>)' -- .
+      - name: Checkout pinned TypeSpec JSON Schema validator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/typespec-json-schema-validator
+          ref: ${{ env.TJSV_SHA }}
+          path: .tjsv
+          persist-credentials: false
+      - name: Set up Node.js 22.16
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.16.0
+          cache: npm
+          cache-dependency-path: .tjsv/package-lock.json
+      - name: Verify and install the immutable validator
+        run: |
+          set -euo pipefail
+          test "$(git -C .tjsv rev-parse HEAD)" = "$TJSV_SHA"
+          git -C .tjsv diff --exit-code HEAD
+          npm ci --prefix .tjsv
+      - name: Enforce independent private server TypeSpec and JSON Schema peers
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/tjsv
+          node .tjsv/bin/typespec-json-schema-validator.mjs check \
+            --typespec=validation/authorities/server/contracts.tsp \
+            --schema=validation/authorities/server/contracts.json \
+            --report=tmp/tjsv/server-contracts.json \
+            --quiet
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('tmp/tjsv/server-contracts.json', 'utf8'));
+          if (report.schema !== 'ores.typespec-json-schema-validator.report/v1') throw new Error('unexpected TJSV report schema');
+          if (report.status !== 'passed') throw new Error(`TJSV status is ${report.status}`);
+          if (!report.differential || report.differential.disabled) throw new Error('differential evidence must be enabled');
+          NODE
+      - name: Preserve both authored authorities and validator source
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- validation/authorities/server/
+          git -C .tjsv diff --exit-code HEAD
+      - name: Retain deterministic TJSV report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tjsv-zed-private-server-${{ github.event.pull_request.head.sha || github.sha }}
+          path: tmp/tjsv/server-contracts.json
+          if-no-files-found: ignore
+          retention-days: 30
