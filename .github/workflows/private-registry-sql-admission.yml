@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: '22.16.0'
       - name: Compile and compare the actual private authorities
-        uses: ORESoftware/typespec-json-schema-validator@c745036456dd80408b83217118b8563edb8f6abd
+        uses: ORESoftware/typespec-json-schema-validator@2281843126ab644607b11cf8281d84f382d68dfc
         with:
           typespec: validation/authorities/server/contracts.tsp
           schema: validation/authorities/server/contracts.json
@@ -75,7 +75,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: zed-pkg/zed-lib-core
-          ref: bf67d6ea1cdbb90617e556ba35afefb2fcfe36a9
+          ref: 24b8ea796c051a0c6d576ef24c9e57a3bfa8f557
           path: .deps/zed-lib-core
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
