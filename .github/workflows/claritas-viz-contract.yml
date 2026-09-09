@@ -1,0 +1,60 @@
+name: Claritas Viz peer contract
+on:
+  pull_request:
+    paths: ['validation/claritas-viz/**', '.github/workflows/claritas-viz-contract.yml']
+  push:
+    branches: [main, dev]
+    paths: ['validation/claritas-viz/**', '.github/workflows/claritas-viz-contract.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: claritas-viz-contract-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact consumer revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.16.0
+      - name: Compare independently authored Claritas binding authorities
+        uses: ORESoftware/typespec-json-schema-validator@2281843126ab644607b11cf8281d84f382d68dfc
+        with:
+          typespec: validation/claritas-viz/typespec/main.tsp
+          schema: validation/claritas-viz/json-schema/contract.schema.json
+          instances: validation/claritas-viz/instances
+          report: tmp/claritas-viz-contract/report.json
+          sarif: tmp/claritas-viz-contract/report.sarif
+          contract_ir: tmp/claritas-viz-contract/contract-ir.json
+          output_dir: tmp/claritas-viz-contract/generated
+          max_probes: '64'
+      - name: Require complete current Claritas contract evidence and nineteen refusals
+        uses: ORESoftware/typespec-json-schema-validator/actions/test-consumer-admission@2281843126ab644607b11cf8281d84f382d68dfc
+        with:
+          contract_ir: tmp/claritas-viz-contract/contract-ir.json
+          report: tmp/claritas-viz-contract/report.json
+          typespec: validation/claritas-viz/typespec/main.tsp
+          schema: validation/claritas-viz/json-schema/contract.schema.json
+          generated_schema: tmp/claritas-viz-contract/generated/typespec.generated.schema.json
+          expected_declarations: '["Zed.Claritas.ClaritasProvider","Zed.Claritas.VisualizationPurpose","Zed.Claritas.ClaritasCapability","Zed.Claritas.VisualizationRuntime","Zed.Claritas.ClaritasVisualizationBinding"]'
+          verification: tmp/claritas-viz-contract/verification.json
+      - name: Preserve both authored authorities and recorded expectations
+        if: ${{ always() }}
+        run: git diff --exit-code -- validation/claritas-viz/
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: ${{ always() }}
+        with:
+          name: claritas-viz-contract-${{ github.event.pull_request.head.sha || github.sha }}
+          path: tmp/claritas-viz-contract/
+          if-no-files-found: error
+          retention-days: 14
