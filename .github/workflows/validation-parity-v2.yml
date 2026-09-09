@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: ORESoftware/api-docs
-          ref: c75c3924847a42d8d2854eb78c85f330ea726bef
+          ref: 76c6b2e293168b5033c6ef344730951d4427be9f
           path: .deps/api-docs
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -44,8 +44,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22.16.0"
-      - name: Verify and install locked compiler and canonical CLI native addon
+      - name: Verify and install locked compiler and canonical parity tools
         run: |
+          test "$(git -C .deps/api-docs rev-parse HEAD)" = 76c6b2e293168b5033c6ef344730951d4427be9f
+          git -C .deps/api-docs diff --exit-code HEAD
           test "$(git -C .deps/typespec-json-schema-validator rev-parse HEAD)" = 2281843126ab644607b11cf8281d84f382d68dfc
           git -C .deps/typespec-json-schema-validator diff --exit-code HEAD
           npm ci --prefix .deps/typespec-json-schema-validator
@@ -74,5 +76,6 @@ jobs:
           done
       - name: Preserve validator and authored sources
         run: |
+          git -C .deps/api-docs diff --exit-code HEAD
           git -C .deps/typespec-json-schema-validator diff --exit-code HEAD
           git diff --exit-code -- validation/typespec validation/public-contracts.v1.json validation/compiler/cases.json
