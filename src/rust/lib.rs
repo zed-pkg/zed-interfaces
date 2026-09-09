@@ -14,6 +14,7 @@ pub mod environment;
 pub mod environment_lock;
 pub mod environment_v2;
 pub mod excludes;
+pub mod git_cli_install;
 pub mod inspection;
 pub mod language;
 pub mod lockfile;
@@ -81,6 +82,9 @@ pub use environment_lock::{
 pub use environment_v2::{
     EnvironmentPlanV2, EnvironmentPlanV2Error, EnvironmentValue, SystemPackageSpec,
     TaskConfirmation, TaskGroup, TaskInvocation, TaskSpec, TaskStep, ToolSpec, ToolVersion,
+};
+pub use git_cli_install::{
+    GIT_CLI_INSTALL_RECEIPT_SCHEMA_VERSION_V1, GitCliInstallReceiptV1,
 };
 pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile, LockfileError};
