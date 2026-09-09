@@ -32,22 +32,25 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: ORESoftware/api-docs
-          ref: 113c450f35c54638defc655fda368fd927968f85
+          ref: 9dd5f6310df252c7b4970ba53c2aad5e30e9cf6b
           path: .deps/api-docs
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: 4473504c4c9d2831d825919f70c03994d8ce01d2
+          ref: 03ccc0ecdfc70f9198c3ccf80718910961d3fde1
           path: .deps/typespec-json-schema-validator
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22.16.0"
-      - name: Verify and install locked compiler and canonical CLI native addon
+      - name: Audit and install the locked canonical compiler and CLI native addon
+        env:
+          TSJSV_NPM_AUDIT_RECEIPT: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
         run: |
-          test "$(git -C .deps/typespec-json-schema-validator rev-parse HEAD)" = 4473504c4c9d2831d825919f70c03994d8ce01d2
+          test "$(git -C .deps/typespec-json-schema-validator rev-parse HEAD)" = 03ccc0ecdfc70f9198c3ccf80718910961d3fde1
           git -C .deps/typespec-json-schema-validator diff --exit-code HEAD
+          node .deps/typespec-json-schema-validator/scripts/npm-audit-gate.mjs
           npm ci --prefix .deps/typespec-json-schema-validator
       - name: Admit the actual public contracts with recorded behavioral evidence
         run: node validation/compiler/public-parity.mjs
