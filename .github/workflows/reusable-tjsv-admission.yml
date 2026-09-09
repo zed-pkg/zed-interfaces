@@ -1,0 +1,30 @@
+name: Reusable TJSV production public admission
+
+on:
+  pull_request:
+    paths:
+      - 'validation/typespec/validation.tsp'
+      - 'validation/public-contracts.v1.json'
+      - '.github/workflows/reusable-tjsv-admission.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'validation/typespec/validation.tsp'
+      - 'validation/public-contracts.v1.json'
+      - '.github/workflows/reusable-tjsv-admission.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  admission:
+    uses: zed-pkg/.github/.github/workflows/reusable-tjsv-admission.yml@984924ead3a222a0e99928b2bcdbd87664745acf
+    with:
+      typespec: validation/typespec/validation.tsp
+      schema: validation/public-contracts.v1.json
+      seal_object_schemas: "false"
+      expected_declarations: '["Zed.Validation.RequestMeta","Zed.Validation.PageQuery","Zed.Validation.ProblemDetails","Zed.Validation.PublicValidationContract"]'
+      artifact_name: zed-interfaces-reusable-public-tjsv
+
+# DEN-3828 / zed-pkg/.github#67. Additive migration evidence only.
+# Existing recorded-corpus parity, api-docs, ORM annotation, Nix and native gates remain.
