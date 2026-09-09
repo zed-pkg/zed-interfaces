@@ -4,22 +4,11 @@
   "title": "Zed private server persistence contracts",
   "contractVersion": "ores.validation.v2",
   "visibility": "server",
-  "type": "object",
-  "oneOf": [
-    {
-      "$ref": "#/$defs/RegistryPackageRow"
-    },
-    {
-      "$ref": "#/$defs/RegistryVersionRow"
-    },
-    {
-      "$ref": "#/$defs/RegistryLeaseRow"
-    }
-  ],
+  "$ref": "#/$defs/ServerPersistenceContract",
   "$defs": {
     "RegistryPackageRow": {
       "type": "object",
-      "additionalProperties": false,
+      "unevaluatedProperties": false,
       "required": [
         "id",
         "namespace",
@@ -60,7 +49,7 @@
     },
     "RegistryVersionRow": {
       "type": "object",
-      "additionalProperties": false,
+      "unevaluatedProperties": false,
       "required": [
         "id",
         "packageId",
@@ -106,7 +95,7 @@
     },
     "RegistryLeaseRow": {
       "type": "object",
-      "additionalProperties": false,
+      "unevaluatedProperties": false,
       "required": [
         "resourceKey",
         "holderId",
@@ -138,6 +127,19 @@
           "format": "date-time"
         }
       }
+    },
+    "ServerPersistenceContract": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RegistryPackageRow"
+        },
+        {
+          "$ref": "#/$defs/RegistryVersionRow"
+        },
+        {
+          "$ref": "#/$defs/RegistryLeaseRow"
+        }
+      ]
     }
   },
   "x-orm": {
