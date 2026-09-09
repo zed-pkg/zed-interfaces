@@ -229,6 +229,26 @@
         }
       ]
     },
+    "Flags2EnvInteropSection": {
+      "description": "Explicit flags-2-env binding for binaries exposed by this package.",
+      "type": "object",
+      "properties": {
+        "bins": {
+          "description": "`[bin]` entries whose execution must receive `FLAGS2ENV_CONFIG`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "config": {
+          "description": "Path to the package-owned `.cli-flags.toml`, relative to the package root.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
     "ForgeRegistry": {
       "description": "A multi-format registry that re-serves a canonical registry's wire protocol\nat its own base URL: a source forge's package registry, or an enterprise\nbinary repository that proxies public registries and hosts private ones.\n\nThese add no protocol of their own, which is why they are a separate axis\nfrom [`NativeRegistry`] — an org proxying npm through Artifactory needs a\ndifferent URL and credential, not a different client.",
       "type": "string",
@@ -302,6 +322,10 @@
       "description": "Opt-in interoperability with repository-local metadata owned by other tools.",
       "type": "object",
       "properties": {
+        "flags-2-env": {
+          "description": "Bind installed CLI entry points to one package-owned flags-2-env contract.\nZed uses this explicit path rather than discovering configuration from\nthe consumer's working directory.",
+          "$ref": "#/$defs/Flags2EnvInteropSection"
+        },
         "git": {
           "$ref": "#/$defs/GitInteropSection"
         }
