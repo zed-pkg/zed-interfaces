@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source": "https://github.com/ORESoftware/ores-cli.git",
+  "revision": "387bce152d9572c014710d68062f979c3614276d",
+  "binary": "ores-cli",
+  "installed_path": "/home/alex/.local/bin/ores-cli",
+  "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "manifest": ".zpkg.toml",
+  "flags_contract": ".cli-flags.toml",
+  "credential": "must-never-be-admitted"
+}
