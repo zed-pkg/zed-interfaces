@@ -43,10 +43,6 @@ function deepFreeze(value) {
   return value;
 }
 
-/** Run the real compiler over existing production authorities, not a canary.
- * Each call owns a fresh disposable workspace. No previous receipt is reused.
- * The returned evidence is immutable and valid only for this exact checked input.
- */
 export async function checkPublicParity({ repositoryRoot = here,
   validatorRoot = join(here, '.deps/typespec-json-schema-validator') } = {}) {
   const root = resolve(repositoryRoot);
