@@ -5,7 +5,7 @@ namespace Zed.Validation.Server;
 // @orm {"foreignKeys":[],"indexes":[{"columns":["updatedAt"],"name":"packages_updated_at_idx"}],"model":"RegistryPackageRow","primaryKey":["id"],"table":"packages","unique":[{"columns":["namespace","name"],"name":"packages_namespace_name_key"}]}
 model RegistryPackageRow {
   @format("uuid") id: string;
-  @minLength(1) @maxLength(128) @pattern("^[a-z0-9][a-z0-9._-]*$") namespace: string;
+  @minLength(1) @maxLength(128) @pattern("^[a-z0-9][a-z0-9._-]*$") `namespace`: string;
   @minLength(1) @maxLength(128) @pattern("^[a-z0-9][a-z0-9._-]*$") name: string;
   @maxLength(4096) description?: string;
   @format("date-time") createdAt: string;
