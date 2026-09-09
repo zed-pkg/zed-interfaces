@@ -129,7 +129,7 @@
       }
     },
     "ServerPersistenceContract": {
-      "oneOf": [
+      "anyOf": [
         {
           "$ref": "#/$defs/RegistryPackageRow"
         },
