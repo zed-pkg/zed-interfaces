@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: ORESoftware/api-docs
-          ref: 9dd5f6310df252c7b4970ba53c2aad5e30e9cf6b
+          ref: 41fb8561b1195c01a59cc92f2fb608fe796cef52
           path: .deps/api-docs
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

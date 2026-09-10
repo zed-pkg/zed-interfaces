@@ -32,5 +32,8 @@ model RegistryLeaseRow {
   @format("date-time") expiresAt: string;
 }
 
-alias ServerPersistenceContract =
-  RegistryPackageRow | RegistryVersionRow | RegistryLeaseRow;
+union ServerPersistenceContract {
+  package: RegistryPackageRow,
+  version: RegistryVersionRow,
+  lease: RegistryLeaseRow,
+}
