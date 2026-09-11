@@ -37,58 +37,149 @@ jobs:
           path = Path('src/rust/source.rs')
           text = path.read_text(encoding='utf-8')
 
-          old = '''    keys.push(format!(
+          function_start = text.index('/// Standard object keys inside the R2 bucket')
+          function_end = text.index('\n\n/// GitHub Release asset file names', function_start)
+          desired_function = '''/// Standard object keys reachable through the Cloudflare CDN origin.
+          ///
+          /// When the registry supplies a digest, the immutable content-addressed R2
+          /// object is always first. Declared and coordinate aliases follow because the
+          /// CDN `/github/*` and `/packages/*` routes may prove and proxy a public
+          /// upstream rather than read the private bucket directly.
+          pub fn r2_object_keys(query: &ArtifactQuery<'_>) -> Vec<String> {
+              let ext = query.format.extension();
+              let github = query
+                  .repo_url
+                  .and_then(parse_github_identity)
+                  .unwrap_or_else(|| GithubIdentity::guessed_from_package(query.org, query.name));
+              let artifacts = query.artifacts.unwrap_or(&ArtifactsSection::EMPTY);
+              let mut keys = Vec::new();
+              let mut push_unique = |key: String| {
+                  if !keys.contains(&key) {
+                      keys.push(key);
+                  }
+              };
+
+              if let Some(sha256) = query.sha256.filter(|digest| !digest.is_empty()) {
+                  push_unique(format!("{R2_CONTENT_PREFIX}/{sha256}.{ext}"));
+              }
+
+              if let Some(template) = artifacts
+                  .r2_key
+                  .as_deref()
+                  .map(str::trim)
+                  .filter(|s| !s.is_empty())
+              {
+                  push_unique(expand_key_template(template, query, &github, ext));
+              } else if let Some(prefix) = artifacts
+                  .r2_prefix
+                  .as_deref()
+                  .map(str::trim)
+                  .filter(|s| !s.is_empty())
+              {
+                  let prefix = prefix.trim_matches('/');
+                  push_unique(format!("{prefix}/{}-{}.{}", query.name, query.version, ext));
+              }
+
+              push_unique(format!(
                   "{R2_GITHUB_PREFIX}/{}/{}/{}/{}-{}.{}",
                   github.owner, github.repo, query.vcs_tag, query.name, query.version, ext
               ));
-              keys.push(format!(
+              push_unique(format!(
                   "{R2_PACKAGE_PREFIX}/{}/{}/{}/{}-{}.{}",
                   query.org, query.name, query.version, query.name, query.version, ext
               ));
-              if let Some(sha256) = query.sha256.filter(|digest| !digest.is_empty()) {
-                  keys.push(format!("{R2_CONTENT_PREFIX}/{sha256}.{ext}"));
-              }
-          '''
-          new = '''    // A digest-qualified R2 object is independently safe to expose and must
-              // win before coordinate aliases. The `/github/*` custom-domain route is a
-              // Cloudflare proxy that can fetch GitHub Release bytes, so placing it first
-              // would turn GitHub into the primary source even when our R2 copy exists.
-              if let Some(sha256) = query.sha256.filter(|digest| !digest.is_empty()) {
-                  keys.push(format!("{R2_CONTENT_PREFIX}/{sha256}.{ext}"));
-              }
-              keys.push(format!(
-                  "{R2_GITHUB_PREFIX}/{}/{}/{}/{}-{}.{}",
-                  github.owner, github.repo, query.vcs_tag, query.name, query.version, ext
-              ));
-              keys.push(format!(
-                  "{R2_PACKAGE_PREFIX}/{}/{}/{}/{}-{}.{}",
-                  query.org, query.name, query.version, query.name, query.version, ext
-              ));
-          '''
-          if text.count(old) != 1:
-              raise SystemExit(f'expected one locator block, found {text.count(old)}')
-          text = text.replace(old, new, 1)
+              keys
+          }'''
+          text = text[:function_start] + desired_function + text[function_end:]
 
-          old_expected = '''            vec![
+          def replace_test(source: str, name: str, next_name: str, replacement: str) -> str:
+              start = source.index(f'    #[test]\n    fn {name}')
+              end = source.index(f'    #[test]\n    fn {next_name}', start)
+              return source[:start] + replacement + '\n\n' + source[end:]
+
+          text = replace_test(
+              text,
+              'guessed_keys_cover_github_package_and_content_layouts()',
+              'declared_r2_key_wins_and_expands_placeholders()',
+              '''    #[test]
+              fn guessed_keys_cover_github_package_and_content_layouts() {
+                  let sha = "ab".repeat(32);
+                  let q = ArtifactQuery {
+                      org: "acme",
+                      name: "http-kit",
+                      version: "1.2.0",
+                      vcs_tag: "v1.2.0",
+                      sha256: Some(sha.as_str()),
+                      format: ArtifactFormat::TarGz,
+                      repo_url: Some("https://github.com/acme/http-kit"),
+                      artifacts: None,
+                      registry_base: None,
+                      r2_public_base: None,
+                      r2_public_key: None,
+                  };
+                  let keys = r2_object_keys(&q);
+                  assert_eq!(
+                      keys,
+                      vec![
+                          format!("artifacts/{sha}.tar.gz"),
                           "github/acme/http-kit/v1.2.0/http-kit-1.2.0.tar.gz".to_string(),
                           "packages/acme/http-kit/1.2.0/http-kit-1.2.0.tar.gz".to_string(),
-                          format!("artifacts/{sha}.tar.gz"),
                       ]
-          '''
-          new_expected = '''            vec![
-                          format!("artifacts/{sha}.tar.gz"),
-                          "github/acme/http-kit/v1.2.0/http-kit-1.2.0.tar.gz".to_string(),
-                          "packages/acme/http-kit/1.2.0/http-kit-1.2.0.tar.gz".to_string(),
-                      ]
-          '''
-          if text.count(old_expected) != 1:
-              raise SystemExit(f'expected one key-order fixture, found {text.count(old_expected)}')
-          text = text.replace(old_expected, new_expected, 1)
+                  );
+              }''',
+          )
 
-          marker = '''        assert_eq!(urls[0].0, ArtifactSourceKind::Registry);
-                  assert!(urls[0].1.ends_with(&format!("/v1/artifacts/{sha}")));
-          '''
-          addition = '''        assert_eq!(urls[0].0, ArtifactSourceKind::Registry);
+          text = replace_test(
+              text,
+              'declared_r2_key_wins_and_expands_placeholders()',
+              'public_key_becomes_r2_dev_origin()',
+              '''    #[test]
+              fn content_addressed_r2_precedes_declared_alias() {
+                  let artifacts = ArtifactsSection {
+                      r2_key: Some("vendor/{github_owner}/{name}/{version}/pkg.{ext}".into()),
+                      ..ArtifactsSection::EMPTY
+                  };
+                  let sha = "ab".repeat(32);
+                  let q = ArtifactQuery {
+                      sha256: Some(sha.as_str()),
+                      artifacts: Some(&artifacts),
+                      ..query("https://github.com/acme/http-kit", Some(&artifacts))
+                  };
+                  let keys = r2_object_keys(&q);
+                  assert_eq!(keys[0], format!("artifacts/{sha}.tar.gz"));
+                  assert_eq!(keys[1], "vendor/acme/http-kit/1.2.0/pkg.tar.gz");
+              }
+
+              #[test]
+              fn declared_r2_key_wins_without_digest() {
+                  let artifacts = ArtifactsSection {
+                      r2_key: Some("vendor/{github_owner}/{name}/{version}/pkg.{ext}".into()),
+                      ..ArtifactsSection::EMPTY
+                  };
+                  let q = query("https://github.com/acme/http-kit", Some(&artifacts));
+                  assert_eq!(
+                      r2_object_keys(&q)[0],
+                      "vendor/acme/http-kit/1.2.0/pkg.tar.gz"
+                  );
+              }''',
+          )
+
+          text = replace_test(
+              text,
+              'locators_try_registry_then_r2_then_github()',
+              'git_tags_round_trip_with_and_without_v_prefix()',
+              '''    #[test]
+              fn locators_try_registry_then_r2_then_github() {
+                  let sha = "ab".repeat(32);
+                  let q = ArtifactQuery {
+                      sha256: Some(sha.as_str()),
+                      ..query("https://github.com/acme/http-kit", None)
+                  };
+                  let urls: Vec<_> = artifact_locators(&q)
+                      .into_iter()
+                      .map(|locator| (locator.kind, locator.url))
+                      .collect();
+                  assert_eq!(urls[0].0, ArtifactSourceKind::Registry);
                   assert!(urls[0].1.ends_with(&format!("/v1/artifacts/{sha}")));
                   assert_eq!(
                       urls[1],
@@ -97,11 +188,18 @@ jobs:
                           format!("https://cdn.zpkg.net/artifacts/{sha}.tar.gz"),
                       )
                   );
-                  let last_r2 = urls
+                  let cloudflare_github = urls
+                      .iter()
+                      .position(|(_, url)| {
+                          url == "https://cdn.zpkg.net/github/acme/http-kit/v1.2.0/http-kit-1.2.0.tar.gz"
+                      })
+                      .expect("Cloudflare GitHub proxy locator");
+                  assert!(cloudflare_github > 1);
+                  let last_cloudflare = urls
                       .iter()
                       .rposition(|(kind, _)| *kind == ArtifactSourceKind::R2)
-                      .expect("R2 locator");
-                  let first_github = urls
+                      .expect("Cloudflare locator");
+                  let first_direct_github = urls
                       .iter()
                       .position(|(kind, _)| {
                           matches!(
@@ -111,12 +209,32 @@ jobs:
                                   | ArtifactSourceKind::GithubArchive
                           )
                       })
-                      .expect("GitHub locator");
-                  assert!(last_r2 < first_github, "every R2 locator must precede GitHub");
-          '''
-          if text.count(marker) != 1:
-              raise SystemExit(f'expected one locator assertion marker, found {text.count(marker)}')
-          text = text.replace(marker, addition, 1)
+                      .expect("direct GitHub locator");
+                  assert!(
+                      last_cloudflare < first_direct_github,
+                      "all Cloudflare locators must precede direct GitHub"
+                  );
+                  assert!(urls.iter().any(|(kind, url)| {
+                      *kind == ArtifactSourceKind::GithubRelease
+                          && url.ends_with(
+                              "/releases/download/v1.2.0/zpkg-acme-http-kit-1.2.0.tar.gz",
+                          )
+                  }));
+                  assert!(urls.iter().any(|(kind, url)| {
+                      *kind == ArtifactSourceKind::GithubPackages
+                          && url == "https://ghcr.io/v2/acme/http-kit/manifests/v1.2.0"
+                  }));
+                  assert!(urls.iter().any(|(kind, url)| {
+                      *kind == ArtifactSourceKind::GithubPackages
+                          && *url == format!("https://ghcr.io/v2/acme/http-kit/blobs/sha256:{sha}")
+                  }));
+                  assert_eq!(
+                      urls.last().map(|row| row.0),
+                      Some(ArtifactSourceKind::GithubArchive)
+                  );
+              }''',
+          )
+
           path.write_text(text, encoding='utf-8')
           PY
 
@@ -125,6 +243,8 @@ jobs:
           set -euo pipefail
           cargo fmt --all --manifest-path src/rust/Cargo.toml
           cargo test --locked --manifest-path src/rust/Cargo.toml guessed_keys_cover_github_package_and_content_layouts
+          cargo test --locked --manifest-path src/rust/Cargo.toml content_addressed_r2_precedes_declared_alias
+          cargo test --locked --manifest-path src/rust/Cargo.toml declared_r2_key_wins_without_digest
           cargo test --locked --manifest-path src/rust/Cargo.toml locators_try_registry_then_r2_then_github
           cargo fmt --all --check --manifest-path src/rust/Cargo.toml
           git diff --check
