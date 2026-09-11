@@ -40,59 +40,25 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-
-          manifest = Path('src/rust/manifest.rs')
+          old = bytes.fromhex("20202020202020202020202069662073656c662e6275696c642e61735f72656628292e69735f736f6d655f616e64287c6275696c647c207b0a20202020202020202020202020202020216275696c642e6f7574707574732e69735f656d707479282920262620216275696c642e6f7574707574732e6974657228292e616e79287c6f75747075747c206f7574707574203d3d20636f6e666967290a2020202020202020202020207d29207b0a2020202020202020202020202020202072657475726e20457272284d616e69666573744572726f723a3a496e76616c6964466c61677332456e76496e7465726f7028666f726d617421280a2020202020202020202020202020202020202020226275696c642e6f757470757473206d7573742072657461696e20666c61677320636f6e747261637420607b636f6e6669677d60220a202020202020202020202020202020202929293b0a2020202020202020202020207d0a").decode()
+          new = bytes.fromhex("2020202020202020202020206c6574206275696c64203d2073656c662e6275696c642e61735f72656628292e6f6b5f6f725f656c7365287c7c207b0a202020202020202020202020202020204d616e69666573744572726f723a3a496e76616c6964466c61677332456e76496e7465726f70280a2020202020202020202020202020202020202020226275696c642073656374696f6e20697320726571756972656420746f2072657461696e2074686520666c61677320636f6e7472616374222e746f5f737472696e6728292c0a20202020202020202020202020202020290a2020202020202020202020207d293f3b0a2020202020202020202020206966206275696c642e6f7574707574732e69735f656d7074792829207c7c20216275696c642e6f7574707574732e6974657228292e616e79287c6f75747075747c206f7574707574203d3d20636f6e66696729207b0a2020202020202020202020202020202072657475726e20457272284d616e69666573744572726f723a3a496e76616c6964466c61677332456e76496e7465726f7028666f726d617421280a2020202020202020202020202020202020202020226275696c642e6f757470757473206d757374206265206e6f6e656d70747920616e642072657461696e20666c61677320636f6e747261637420607b636f6e6669677d60220a202020202020202020202020202020202929293b0a2020202020202020202020207d0a").decode()
+          manifest = Path("src/rust/manifest.rs")
           text = manifest.read_text()
-          old = '''            if self.build.as_ref().is_some_and(|build| {
-                !build.outputs.is_empty() && !build.outputs.iter().any(|output| output == config)
-            }) {
-                return Err(ManifestError::InvalidFlags2EnvInterop(format!(
-                    "build.outputs must retain flags contract `{config}`"
-                )));
-            }
-'''
-          new = '''            let build = self.build.as_ref().ok_or_else(|| {
-                ManifestError::InvalidFlags2EnvInterop(
-                    "build section is required to retain the flags contract".to_string(),
-                )
-            })?;
-            if build.outputs.is_empty() || !build.outputs.iter().any(|output| output == config) {
-                return Err(ManifestError::InvalidFlags2EnvInterop(format!(
-                    "build.outputs must be nonempty and retain flags contract `{config}`"
-                )));
-            }
-'''
           if text.count(old) != 1:
-              raise SystemExit(f'expected exactly one validator target, found {text.count(old)}')
+              raise SystemExit(f"expected exactly one validator target, found {text.count(old)}")
           manifest.write_text(text.replace(old, new, 1))
 
-          tests = Path('src/rust/tests/roundtrip.rs')
+          old_valid = bytes.fromhex("202020206c65742076616c6964203d20666f726d617421280a2020202020202020227b53414d504c457d5c6e5b62696e5d5c6e746a7376203d205c2262696e2f746a73765c225c6e74736a7376203d205c2262696e2f746a73765c225c6e5c6e5b696e7465726f702e666c6167732d322d656e765d5c6e636f6e666967203d205c222e636c692d666c6167732e746f6d6c5c225c6e62696e73203d205b5c22746a73765c222c205c2274736a73765c225d5c6e220a20202020293b0a").decode()
+          new_valid = bytes.fromhex("202020206c65742076616c6964203d20666f726d617421280a2020202020202020227b53414d504c457d5c6e5b6275696c645d5c6e636f6d6d616e64203d205c22636172676f206275696c645c225c6e6f757470757473203d205b5c222e636c692d666c6167732e746f6d6c5c222c205c2262696e2f746a73765c225d5c6e5c6e5b62696e5d5c6e746a7376203d205c2262696e2f746a73765c225c6e74736a7376203d205c2262696e2f746a73765c225c6e5c6e5b696e7465726f702e666c6167732d322d656e765d5c6e636f6e666967203d205c222e636c692d666c6167732e746f6d6c5c225c6e62696e73203d205b5c22746a73765c222c205c2274736a73765c225d5c6e220a20202020293b0a").decode()
+          marker = bytes.fromhex("2020202020202020666f726d617421280a202020202020202020202020227b53414d504c457d5c6e5b6275696c645d5c6e636f6d6d616e64203d205c22636172676f206275696c645c225c6e6f757470757473203d205b5c227461726765742f72656c656173652f746a73765c225d5c6e5c6e5b62696e5d5c6e746a7376203d205c227461726765742f72656c656173652f746a73765c225c6e5c6e5b696e7465726f702e666c6167732d322d656e765d5c6e636f6e666967203d205c222e636c692d666c6167732e746f6d6c5c225c6e62696e73203d205b5c22746a73765c225d5c6e220a2020202020202020292c0a").decode()
+          extra = bytes.fromhex("2020202020202020666f726d617421280a202020202020202020202020227b53414d504c457d5c6e5b62696e5d5c6e746a7376203d205c2262696e2f746a73765c225c6e5c6e5b696e7465726f702e666c6167732d322d656e765d5c6e636f6e666967203d205c222e636c692d666c6167732e746f6d6c5c225c6e62696e73203d205b5c22746a73765c225d5c6e220a2020202020202020292c0a2020202020202020666f726d617421280a202020202020202020202020227b53414d504c457d5c6e5b6275696c645d5c6e636f6d6d616e64203d205c22636172676f206275696c645c225c6e6f757470757473203d205b5d5c6e5c6e5b62696e5d5c6e746a7376203d205c2262696e2f746a73765c225c6e5c6e5b696e7465726f702e666c6167732d322d656e765d5c6e636f6e666967203d205c222e636c692d666c6167732e746f6d6c5c225c6e62696e73203d205b5c22746a73765c225d5c6e220a2020202020202020292c0a").decode()
+          tests = Path("src/rust/tests/roundtrip.rs")
           text = tests.read_text()
-          old_valid = '''    let valid = format!(
-        "{SAMPLE}\\n[bin]\\ntjsv = \\"bin/tjsv\\"\\ntsjsv = \\"bin/tjsv\\"\\n\\n[interop.flags-2-env]\\nconfig = \\".cli-flags.toml\\"\\nbins = [\\"tjsv\\", \\"tsjsv\\"]\\n"
-    );
-'''
-          new_valid = '''    let valid = format!(
-        "{SAMPLE}\\n[build]\\ncommand = \\"cargo build\\"\\noutputs = [\\".cli-flags.toml\\", \\"bin/tjsv\\"]\\n\\n[bin]\\ntjsv = \\"bin/tjsv\\"\\ntsjsv = \\"bin/tjsv\\"\\n\\n[interop.flags-2-env]\\nconfig = \\".cli-flags.toml\\"\\nbins = [\\"tjsv\\", \\"tsjsv\\"]\\n"
-    );
-'''
           if text.count(old_valid) != 1:
-              raise SystemExit(f'expected exactly one valid fixture target, found {text.count(old_valid)}')
+              raise SystemExit(f"expected exactly one valid fixture target, found {text.count(old_valid)}")
           text = text.replace(old_valid, new_valid, 1)
-
-          marker = '''        format!(
-            "{SAMPLE}\\n[build]\\ncommand = \\"cargo build\\"\\noutputs = [\\"target/release/tjsv\\"]\\n\\n[bin]\\ntjsv = \\"target/release/tjsv\\"\\n\\n[interop.flags-2-env]\\nconfig = \\".cli-flags.toml\\"\\nbins = [\\"tjsv\\"]\\n"
-        ),
-'''
-          extra = '''        format!(
-            "{SAMPLE}\\n[bin]\\ntjsv = \\"bin/tjsv\\"\\n\\n[interop.flags-2-env]\\nconfig = \\".cli-flags.toml\\"\\nbins = [\\"tjsv\\"]\\n"
-        ),
-        format!(
-            "{SAMPLE}\\n[build]\\ncommand = \\"cargo build\\"\\noutputs = []\\n\\n[bin]\\ntjsv = \\"bin/tjsv\\"\\n\\n[interop.flags-2-env]\\nconfig = \\".cli-flags.toml\\"\\nbins = [\\"tjsv\\"]\\n"
-        ),
-'''
           if text.count(marker) != 1:
-              raise SystemExit(f'expected exactly one missing-config-output fixture target, found {text.count(marker)}')
+              raise SystemExit(f"expected exactly one missing-output fixture target, found {text.count(marker)}")
           tests.write_text(text.replace(marker, extra + marker, 1))
           PY
 
