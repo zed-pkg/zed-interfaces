@@ -124,7 +124,7 @@ mod tests {
         let content_key = format!("{R2_CONTENT_PREFIX}/{sha}.{ext}");
         assert_eq!(
             keys,
-            vec![github_key.clone(), package_key.clone(), content_key.clone()]
+            vec![content_key.clone(), github_key.clone(), package_key.clone()]
         );
         assert_eq!(
             expand(

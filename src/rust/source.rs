@@ -251,7 +251,12 @@ pub fn resolve_r2_public_base(
     DEFAULT_R2_PUBLIC_BASE.to_string()
 }
 
-/// Standard object keys inside the R2 bucket, declared key first.
+/// Standard object keys reachable through the Cloudflare CDN origin.
+///
+/// When the registry supplies a digest, the immutable content-addressed R2
+/// object is always first. Declared and coordinate aliases follow because the
+/// CDN `/github/*` and `/packages/*` routes may prove and proxy a public
+/// upstream rather than read the private bucket directly.
 pub fn r2_object_keys(query: &ArtifactQuery<'_>) -> Vec<String> {
     let ext = query.format.extension();
     let github = query
@@ -260,6 +265,15 @@ pub fn r2_object_keys(query: &ArtifactQuery<'_>) -> Vec<String> {
         .unwrap_or_else(|| GithubIdentity::guessed_from_package(query.org, query.name));
     let artifacts = query.artifacts.unwrap_or(&ArtifactsSection::EMPTY);
     let mut keys = Vec::new();
+    let mut push_unique = |key: String| {
+        if !keys.contains(&key) {
+            keys.push(key);
+        }
+    };
+
+    if let Some(sha256) = query.sha256.filter(|digest| !digest.is_empty()) {
+        push_unique(format!("{R2_CONTENT_PREFIX}/{sha256}.{ext}"));
+    }
 
     if let Some(template) = artifacts
         .r2_key
@@ -267,7 +281,7 @@ pub fn r2_object_keys(query: &ArtifactQuery<'_>) -> Vec<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        keys.push(expand_key_template(template, query, &github, ext));
+        push_unique(expand_key_template(template, query, &github, ext));
     } else if let Some(prefix) = artifacts
         .r2_prefix
         .as_deref()
@@ -275,20 +289,17 @@ pub fn r2_object_keys(query: &ArtifactQuery<'_>) -> Vec<String> {
         .filter(|s| !s.is_empty())
     {
         let prefix = prefix.trim_matches('/');
-        keys.push(format!("{prefix}/{}-{}.{}", query.name, query.version, ext));
+        push_unique(format!("{prefix}/{}-{}.{}", query.name, query.version, ext));
     }
 
-    keys.push(format!(
+    push_unique(format!(
         "{R2_GITHUB_PREFIX}/{}/{}/{}/{}-{}.{}",
         github.owner, github.repo, query.vcs_tag, query.name, query.version, ext
     ));
-    keys.push(format!(
+    push_unique(format!(
         "{R2_PACKAGE_PREFIX}/{}/{}/{}/{}-{}.{}",
         query.org, query.name, query.version, query.name, query.version, ext
     ));
-    if let Some(sha256) = query.sha256.filter(|digest| !digest.is_empty()) {
-        keys.push(format!("{R2_CONTENT_PREFIX}/{sha256}.{ext}"));
-    }
     keys
 }
 
@@ -736,15 +747,15 @@ mod tests {
         assert_eq!(
             keys,
             vec![
+                format!("artifacts/{sha}.tar.gz"),
                 "github/acme/http-kit/v1.2.0/http-kit-1.2.0.tar.gz".to_string(),
                 "packages/acme/http-kit/1.2.0/http-kit-1.2.0.tar.gz".to_string(),
-                format!("artifacts/{sha}.tar.gz"),
             ]
         );
     }
 
     #[test]
-    fn declared_r2_key_wins_and_expands_placeholders() {
+    fn content_addressed_r2_precedes_declared_alias() {
         let artifacts = ArtifactsSection {
             r2_key: Some("vendor/{github_owner}/{name}/{version}/pkg.{ext}".into()),
             ..ArtifactsSection::EMPTY
@@ -755,6 +766,18 @@ mod tests {
             artifacts: Some(&artifacts),
             ..query("https://github.com/acme/http-kit", Some(&artifacts))
         };
+        let keys = r2_object_keys(&q);
+        assert_eq!(keys[0], format!("artifacts/{sha}.tar.gz"));
+        assert_eq!(keys[1], "vendor/acme/http-kit/1.2.0/pkg.tar.gz");
+    }
+
+    #[test]
+    fn declared_r2_key_wins_without_digest() {
+        let artifacts = ArtifactsSection {
+            r2_key: Some("vendor/{github_owner}/{name}/{version}/pkg.{ext}".into()),
+            ..ArtifactsSection::EMPTY
+        };
+        let q = query("https://github.com/acme/http-kit", Some(&artifacts));
         assert_eq!(
             r2_object_keys(&q)[0],
             "vendor/acme/http-kit/1.2.0/pkg.tar.gz"
@@ -794,10 +817,39 @@ mod tests {
             .collect();
         assert_eq!(urls[0].0, ArtifactSourceKind::Registry);
         assert!(urls[0].1.ends_with(&format!("/v1/artifacts/{sha}")));
-        assert!(urls.iter().any(|(kind, url)| {
-            *kind == ArtifactSourceKind::R2
-                && url == "https://cdn.zpkg.net/github/acme/http-kit/v1.2.0/http-kit-1.2.0.tar.gz"
-        }));
+        assert_eq!(
+            urls[1],
+            (
+                ArtifactSourceKind::R2,
+                format!("https://cdn.zpkg.net/artifacts/{sha}.tar.gz"),
+            )
+        );
+        let cloudflare_github = urls
+            .iter()
+            .position(|(_, url)| {
+                url == "https://cdn.zpkg.net/github/acme/http-kit/v1.2.0/http-kit-1.2.0.tar.gz"
+            })
+            .expect("Cloudflare GitHub proxy locator");
+        assert!(cloudflare_github > 1);
+        let last_cloudflare = urls
+            .iter()
+            .rposition(|(kind, _)| *kind == ArtifactSourceKind::R2)
+            .expect("Cloudflare locator");
+        let first_direct_github = urls
+            .iter()
+            .position(|(kind, _)| {
+                matches!(
+                    kind,
+                    ArtifactSourceKind::GithubRelease
+                        | ArtifactSourceKind::GithubPackages
+                        | ArtifactSourceKind::GithubArchive
+                )
+            })
+            .expect("direct GitHub locator");
+        assert!(
+            last_cloudflare < first_direct_github,
+            "all Cloudflare locators must precede direct GitHub"
+        );
         assert!(urls.iter().any(|(kind, url)| {
             *kind == ArtifactSourceKind::GithubRelease
                 && url.ends_with("/releases/download/v1.2.0/zpkg-acme-http-kit-1.2.0.tar.gz")
