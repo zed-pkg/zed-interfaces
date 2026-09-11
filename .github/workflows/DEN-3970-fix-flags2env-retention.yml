@@ -1,0 +1,106 @@
+name: DEN-3970 one-shot flags2env retention repair
+
+on:
+  push:
+    branches:
+      - fix/DEN-3970-flags2env-build-output-retention
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact repair branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: fix/DEN-3970-flags2env-build-output-retention
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          components: rustfmt, clippy
+      - name: Patch exact reviewed validator and regression corpus
+        shell: python
+        run: |
+          from pathlib import Path
+
+          manifest = Path('src/rust/manifest.rs')
+          text = manifest.read_text()
+          old = '''            if self.build.as_ref().is_some_and(|build| {
+              !build.outputs.is_empty() && !build.outputs.iter().any(|output| output == config)
+            }) {
+                return Err(ManifestError::InvalidFlags2EnvInterop(format!(
+                    "build.outputs must retain flags contract `{config}`"
+                )));
+            }
+'''
+          # Keep the exact source indentation from main; fail instead of fuzzy-editing.
+          old = old.replace('              !build', '                !build')
+          new = '''            let build = self.build.as_ref().ok_or_else(|| {
+                ManifestError::InvalidFlags2EnvInterop(
+                    "build section is required to retain the flags contract".to_string(),
+                )
+            })?;
+            if build.outputs.is_empty() || !build.outputs.iter().any(|output| output == config) {
+                return Err(ManifestError::InvalidFlags2EnvInterop(format!(
+                    "build.outputs must be nonempty and retain flags contract `{config}`"
+                )));
+            }
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one validator target, found {text.count(old)}')
+          manifest.write_text(text.replace(old, new, 1))
+
+          tests = Path('src/rust/tests/roundtrip.rs')
+          text = tests.read_text()
+          old_valid = '''    let valid = format!(
+        "{SAMPLE}\\n[bin]\\ntjsv = \\"bin/tjsv\\"\\ntsjsv = \\"bin/tjsv\\"\\n\\n[interop.flags-2-env]\\nconfig = \\".cli-flags.toml\\"\\nbins = [\\"tjsv\\", \\"tsjsv\\"]\\n"
+    );
+'''
+          new_valid = '''    let valid = format!(
+        "{SAMPLE}\\n[build]\\ncommand = \\"cargo build\\"\\noutputs = [\\".cli-flags.toml\\", \\"bin/tjsv\\"]\\n\\n[bin]\\ntjsv = \\"bin/tjsv\\"\\ntsjsv = \\"bin/tjsv\\"\\n\\n[interop.flags-2-env]\\nconfig = \\".cli-flags.toml\\"\\nbins = [\\"tjsv\\", \\"tsjsv\\"]\\n"
+    );
+'''
+          if text.count(old_valid) != 1:
+              raise SystemExit(f'expected exactly one valid fixture target, found {text.count(old_valid)}')
+          text = text.replace(old_valid, new_valid, 1)
+
+          marker = '''        format!(
+            "{SAMPLE}\\n[build]\\ncommand = \\"cargo build\\"\\noutputs = [\\"target/release/tjsv\\"]\\n\\n[bin]\\ntjsv = \\"target/release/tjsv\\"\\n\\n[interop.flags-2-env]\\nconfig = \\".cli-flags.toml\\"\\nbins = [\\"tjsv\\"]\\n"
+        ),
+'''
+          extra = '''        format!(
+            "{SAMPLE}\\n[bin]\\ntjsv = \\"bin/tjsv\\"\\n\\n[interop.flags-2-env]\\nconfig = \\".cli-flags.toml\\"\\nbins = [\\"tjsv\\"]\\n"
+        ),
+        format!(
+            "{SAMPLE}\\n[build]\\ncommand = \\"cargo build\\"\\noutputs = []\\n\\n[bin]\\ntjsv = \\"bin/tjsv\\"\\n\\n[interop.flags-2-env]\\nconfig = \\".cli-flags.toml\\"\\nbins = [\\"tjsv\\"]\\n"
+        ),
+'''
+          if text.count(marker) != 1:
+              raise SystemExit(f'expected exactly one missing-config-output fixture target, found {text.count(marker)}')
+          tests.write_text(text.replace(marker, extra + marker, 1))
+      - name: Format and test exact semantic fix
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          cargo test --locked flags2env_cli_interop_is_typed_and_fail_closed -- --nocapture
+          cargo test --locked
+          cargo clippy --locked --all-targets -- -D warnings
+      - name: Prove generated schema shape did not drift
+        run: |
+          set -euo pipefail
+          cargo run --locked --example generate_schemas
+          unexpected="$(git diff --name-only | grep -v -E '^(src/rust/manifest.rs|src/rust/tests/roundtrip.rs)$' || true)"
+          test -z "$unexpected" || { printf 'unexpected generated/source drift:\n%s\n' "$unexpected" >&2; exit 1; }
+      - name: Commit tested source fix and remove one-shot workflow
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/DEN-3970-fix-flags2env-retention.yml
+          git add src/rust/manifest.rs src/rust/tests/roundtrip.rs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(DEN-3970): require flags2env build output retention'
+          git push origin HEAD:fix/DEN-3970-flags2env-build-output-retention
