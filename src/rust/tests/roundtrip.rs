@@ -109,7 +109,7 @@ fn gitmodules_consumption_is_typed_and_roundtrips() {
 #[test]
 fn flags2env_cli_interop_is_typed_and_fail_closed() {
     let valid = format!(
-        "{SAMPLE}\n[bin]\ntjsv = \"bin/tjsv\"\ntsjsv = \"bin/tjsv\"\n\n[interop.flags-2-env]\nconfig = \".cli-flags.toml\"\nbins = [\"tjsv\", \"tsjsv\"]\n"
+        "{SAMPLE}\n[build]\ncommand = \"cargo build\"\noutputs = [\".cli-flags.toml\", \"bin/tjsv\"]\n\n[bin]\ntjsv = \"bin/tjsv\"\ntsjsv = \"bin/tjsv\"\n\n[interop.flags-2-env]\nconfig = \".cli-flags.toml\"\nbins = [\"tjsv\", \"tsjsv\"]\n"
     );
     let manifest = Manifest::parse(&valid).expect("valid flags2env interop");
     assert_eq!(
@@ -136,6 +136,12 @@ fn flags2env_cli_interop_is_typed_and_fail_closed() {
         ),
         format!(
             "{SAMPLE}\n[bin]\ntjsv = \"bin/tjsv\"\n\n[interop.flags-2-env]\nconfig = \".cli-flags.toml\"\nbins = [\"tjsv\", \"tjsv\"]\n"
+        ),
+        format!(
+            "{SAMPLE}\n[bin]\ntjsv = \"bin/tjsv\"\n\n[interop.flags-2-env]\nconfig = \".cli-flags.toml\"\nbins = [\"tjsv\"]\n"
+        ),
+        format!(
+            "{SAMPLE}\n[build]\ncommand = \"cargo build\"\noutputs = []\n\n[bin]\ntjsv = \"bin/tjsv\"\n\n[interop.flags-2-env]\nconfig = \".cli-flags.toml\"\nbins = [\"tjsv\"]\n"
         ),
         format!(
             "{SAMPLE}\n[build]\ncommand = \"cargo build\"\noutputs = [\"target/release/tjsv\"]\n\n[bin]\ntjsv = \"target/release/tjsv\"\n\n[interop.flags-2-env]\nconfig = \".cli-flags.toml\"\nbins = [\"tjsv\"]\n"

@@ -2033,11 +2033,14 @@ impl Manifest {
                     )));
                 }
             }
-            if self.build.as_ref().is_some_and(|build| {
-                !build.outputs.is_empty() && !build.outputs.iter().any(|output| output == config)
-            }) {
+            let build = self.build.as_ref().ok_or_else(|| {
+                ManifestError::InvalidFlags2EnvInterop(
+                    "build section is required to retain the flags contract".to_string(),
+                )
+            })?;
+            if build.outputs.is_empty() || !build.outputs.iter().any(|output| output == config) {
                 return Err(ManifestError::InvalidFlags2EnvInterop(format!(
-                    "build.outputs must retain flags contract `{config}`"
+                    "build.outputs must be nonempty and retain flags contract `{config}`"
                 )));
             }
         }
