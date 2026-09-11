@@ -123,9 +123,10 @@ jobs:
       - name: Verify focused contract
         run: |
           set -euo pipefail
-          cargo fmt --all --check --manifest-path src/rust/Cargo.toml
+          cargo fmt --all --manifest-path src/rust/Cargo.toml
           cargo test --locked --manifest-path src/rust/Cargo.toml guessed_keys_cover_github_package_and_content_layouts
           cargo test --locked --manifest-path src/rust/Cargo.toml locators_try_registry_then_r2_then_github
+          cargo fmt --all --check --manifest-path src/rust/Cargo.toml
           git diff --check
 
       - name: Commit verified repair
