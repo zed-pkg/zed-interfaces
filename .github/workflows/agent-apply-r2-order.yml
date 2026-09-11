@@ -38,16 +38,16 @@ jobs:
           text = path.read_text(encoding='utf-8')
 
           old = '''    keys.push(format!(
-              "{R2_GITHUB_PREFIX}/{}/{}/{}/{}-{}.{}",
-              github.owner, github.repo, query.vcs_tag, query.name, query.version, ext
-          ));
-          keys.push(format!(
-              "{R2_PACKAGE_PREFIX}/{}/{}/{}/{}-{}.{}",
-              query.org, query.name, query.version, query.name, query.version, ext
-          ));
-          if let Some(sha256) = query.sha256.filter(|digest| !digest.is_empty()) {
-              keys.push(format!("{R2_CONTENT_PREFIX}/{sha256}.{ext}"));
-          }
+                  "{R2_GITHUB_PREFIX}/{}/{}/{}/{}-{}.{}",
+                  github.owner, github.repo, query.vcs_tag, query.name, query.version, ext
+              ));
+              keys.push(format!(
+                  "{R2_PACKAGE_PREFIX}/{}/{}/{}/{}-{}.{}",
+                  query.org, query.name, query.version, query.name, query.version, ext
+              ));
+              if let Some(sha256) = query.sha256.filter(|digest| !digest.is_empty()) {
+                  keys.push(format!("{R2_CONTENT_PREFIX}/{sha256}.{ext}"));
+              }
           '''
           new = '''    // A digest-qualified R2 object is independently safe to expose and must
               // win before coordinate aliases. The `/github/*` custom-domain route is a
@@ -64,7 +64,7 @@ jobs:
                   "{R2_PACKAGE_PREFIX}/{}/{}/{}/{}-{}.{}",
                   query.org, query.name, query.version, query.name, query.version, ext
               ));
-              '''
+          '''
           if text.count(old) != 1:
               raise SystemExit(f'expected one locator block, found {text.count(old)}')
           text = text.replace(old, new, 1)
