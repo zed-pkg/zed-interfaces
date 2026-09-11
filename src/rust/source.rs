@@ -278,6 +278,13 @@ pub fn r2_object_keys(query: &ArtifactQuery<'_>) -> Vec<String> {
         keys.push(format!("{prefix}/{}-{}.{}", query.name, query.version, ext));
     }
 
+    // A digest-qualified R2 object is independently safe to expose and must
+    // win before coordinate aliases. The `/github/*` custom-domain route is a
+    // Cloudflare proxy that can fetch GitHub Release bytes, so placing it first
+    // would turn GitHub into the primary source even when our R2 copy exists.
+    if let Some(sha256) = query.sha256.filter(|digest| !digest.is_empty()) {
+        keys.push(format!("{R2_CONTENT_PREFIX}/{sha256}.{ext}"));
+    }
     keys.push(format!(
         "{R2_GITHUB_PREFIX}/{}/{}/{}/{}-{}.{}",
         github.owner, github.repo, query.vcs_tag, query.name, query.version, ext
@@ -286,9 +293,6 @@ pub fn r2_object_keys(query: &ArtifactQuery<'_>) -> Vec<String> {
         "{R2_PACKAGE_PREFIX}/{}/{}/{}/{}-{}.{}",
         query.org, query.name, query.version, query.name, query.version, ext
     ));
-    if let Some(sha256) = query.sha256.filter(|digest| !digest.is_empty()) {
-        keys.push(format!("{R2_CONTENT_PREFIX}/{sha256}.{ext}"));
-    }
     keys
 }
 
@@ -736,9 +740,9 @@ mod tests {
         assert_eq!(
             keys,
             vec![
+                format!("artifacts/{sha}.tar.gz"),
                 "github/acme/http-kit/v1.2.0/http-kit-1.2.0.tar.gz".to_string(),
                 "packages/acme/http-kit/1.2.0/http-kit-1.2.0.tar.gz".to_string(),
-                format!("artifacts/{sha}.tar.gz"),
             ]
         );
     }
@@ -794,6 +798,32 @@ mod tests {
             .collect();
         assert_eq!(urls[0].0, ArtifactSourceKind::Registry);
         assert!(urls[0].1.ends_with(&format!("/v1/artifacts/{sha}")));
+        assert_eq!(
+            urls[1],
+            (
+                ArtifactSourceKind::R2,
+                format!("https://cdn.zpkg.net/artifacts/{sha}.tar.gz"),
+            )
+        );
+        let last_r2 = urls
+            .iter()
+            .rposition(|(kind, _)| *kind == ArtifactSourceKind::R2)
+            .expect("R2 locator");
+        let first_github = urls
+            .iter()
+            .position(|(kind, _)| {
+                matches!(
+                    kind,
+                    ArtifactSourceKind::GithubRelease
+                        | ArtifactSourceKind::GithubPackages
+                        | ArtifactSourceKind::GithubArchive
+                )
+            })
+            .expect("GitHub locator");
+        assert!(
+            last_r2 < first_github,
+            "every R2 locator must precede GitHub"
+        );
         assert!(urls.iter().any(|(kind, url)| {
             *kind == ArtifactSourceKind::R2
                 && url == "https://cdn.zpkg.net/github/acme/http-kit/v1.2.0/http-kit-1.2.0.tar.gz"
