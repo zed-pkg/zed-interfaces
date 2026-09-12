@@ -57,13 +57,13 @@ jobs:
           assert.equal(manifest.repositoryRole, "interfaces");
           assert.equal(manifest.canonicalAuthorityRepository, process.env.GITHUB_REPOSITORY);
           assert.equal(manifest.validator.repository, "ORESoftware/typespec-json-schema-validator");
-          assert.equal(manifest.validator.actionCommit, "2281843126ab644607b11cf8281d84f382d68dfc");
+          assert.equal(manifest.validator.actionCommit, "93dd73cb246a09b0a1c62d7192cc62ca6ecbe405");
           assert.equal(manifest.validator.contractIrSchema, "ores.typespec-json-schema-validator.contract-ir/v1");
           assert.equal(manifest.authorityModel.precedence, "none");
           assert.equal(manifest.admission.allowFallbackAuthority, false);
           NODE
       - name: Compare peer authorities and emit fresh Contract IR
-        uses: ORESoftware/typespec-json-schema-validator@2281843126ab644607b11cf8281d84f382d68dfc
+        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
         with:
           typespec: schema-authority-canary/main.tsp
           schema: schema-authority-canary/authored.schema.json
@@ -72,8 +72,28 @@ jobs:
           contract_ir: .typespec-json-schema-validator/contract-ir.json
           output_dir: .typespec-json-schema-validator/generated
           max_probes: "64"
-      - name: Require positive admission and nineteen canonical refusals
-        uses: ORESoftware/typespec-json-schema-validator/actions/test-consumer-admission@2281843126ab644607b11cf8281d84f382d68dfc
+      - name: Verify both authored authorities and generated comparison witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFileSync } from "node:fs";
+          const report = JSON.parse(readFileSync(".typespec-json-schema-validator/report.json", "utf8"));
+          const generated = JSON.parse(readFileSync(".typespec-json-schema-validator/generated/typespec.generated.schema.json", "utf8"));
+          assert.equal(report.status, "passed");
+          assert.equal(report.zeroUnexplainedFindings, true);
+          assert.equal(report.authorities.typespec.authority, "independently-authored");
+          assert.equal(report.authorities.typespec.generatedJsonSchemaRole, "comparison-evidence-only");
+          assert.equal(report.authorities.jsonSchema.authority, "independently-authored");
+          assert.equal(report.authorities.jsonSchema.dialect, "https://json-schema.org/draft/2020-12/schema");
+          assert.equal(report.authorities.precedence, "none");
+          assert.equal(report.coverage.typespecGeneratedJsonSchemaComparison, true);
+          assert.equal(report.coverage.differentialInstanceValidation, true);
+          assert.equal(generated.$schema, "https://json-schema.org/draft/2020-12/schema");
+          NODE
+      - name: Require positive admission and canonical refusals
+        uses: ORESoftware/typespec-json-schema-validator/actions/test-consumer-admission@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
         with:
           contract_ir: .typespec-json-schema-validator/contract-ir.json
           report: .typespec-json-schema-validator/report.json
@@ -84,6 +104,7 @@ jobs:
           verification: .typespec-json-schema-validator/consumer-verification.json
       - name: Retain receipt, Contract IR, SARIF, generated witness, and admission evidence
         if: ${{ always() }}
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: contract-ir-admission-${{ github.event.repository.name }}-${{ github.run_id }}
