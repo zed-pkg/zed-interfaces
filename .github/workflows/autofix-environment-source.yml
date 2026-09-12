@@ -1,42 +1,46 @@
-name: autofix environment source
+name: check environment source formatting
 
 on:
   pull_request:
     paths:
       - src/environment.rs
+      - rust-toolchain.toml
       - .github/workflows/autofix-environment-source.yml
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: environment-source-format-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  format-and-push:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+  format:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Check out pull-request branch
+      - name: Check out exact pull-request head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.head_ref }}
-          persist-credentials: true
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 1
           show-progress: false
 
-      - name: Install Rust formatter
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
-        with:
-          components: rustfmt
-
-      - name: Format and commit when needed
+      - name: Install committed Rust toolchain
         shell: bash
         run: |
           set -euo pipefail
-          cargo fmt
-          if git diff --quiet -- src/environment.rs; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/environment.rs
-          git commit -m "style(DEN-1438): format environment contract"
-          git push origin "HEAD:${GITHUB_HEAD_REF}"
+          expected="${{ github.event.pull_request.head.sha }}"
+          test "$(git rev-parse HEAD)" = "$expected"
+          toolchain="$(sed -n 's/^channel = "\([^"]*\)"/\1/p' rust-toolchain.toml)"
+          test -n "$toolchain"
+          rustup toolchain install "$toolchain" --profile minimal --component rustfmt --no-self-update
+          rustup default "$toolchain"
+
+      - name: Verify formatting without mutating the branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          git diff --exit-code -- .
