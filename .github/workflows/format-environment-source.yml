@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - src/environment.rs
+      - rust-toolchain.toml
       - .github/workflows/format-environment-source.yml
 
 permissions:
@@ -13,23 +14,32 @@ jobs:
   format:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           show-progress: false
 
-      - name: Install Rust formatter
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
-        with:
-          components: rustfmt
+      - name: Verify exact candidate and install committed formatter
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          toolchain="$(sed -n 's/^channel = "\([^"]*\)"/\1/p' rust-toolchain.toml)"
+          [[ "$toolchain" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          rustup toolchain install "$toolchain" --profile minimal --component rustfmt --no-self-update
+          rustup default "$toolchain"
+          test "$(rustc --version | awk '{print $2}')" = "$toolchain"
 
-      - name: Format source
-        run: cargo fmt
+      - name: Format source artifact
+        run: cargo fmt --all
 
       - name: Upload formatted source
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: formatted-environment-source
           path: src/environment.rs
