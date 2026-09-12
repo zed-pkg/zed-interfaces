@@ -1,0 +1,1 @@
+{"provider":"claritas-viz","purposes":["dependency-graph"],"capabilities":["resolve-package"],"runtimes":["rust"],"generatedWitnessOnly":true}
