@@ -105,10 +105,7 @@ fn environment_format_admission_is_read_only_and_exact_head() {
 
 #[test]
 fn formatted_environment_artifact_uses_committed_toolchain_and_exact_head() {
-    assert_committed_toolchain_exact_head(
-        ".github/workflows/format-environment-source.yml",
-        false,
-    );
+    assert_committed_toolchain_exact_head(".github/workflows/format-environment-source.yml", false);
 }
 
 #[test]
