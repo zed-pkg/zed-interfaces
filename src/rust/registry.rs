@@ -328,6 +328,7 @@ pub struct SemanticSearchResponse {
 
 /// Body of `PUT /v1/packages/{org}/{name}/embedding` — upsert a package's
 /// embedding for one model (re-embedding replaces in place).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct EmbeddingUpsertRequest {
     pub model: String,
     /// The embedding (native width; padded to 2050 server-side).
