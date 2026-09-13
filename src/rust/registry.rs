@@ -13,7 +13,7 @@ use crate::vcs::Vcs;
 /// Default public registry (production host: zpkg.net). Override with
 /// `--registry` / `ZED_PKG_REGISTRY`; self-hosted deployments point this at
 /// their own `zed-api-server`.
-pub const DEFAULT_REGISTRY_URL: &str = "https://registry.zpkg.net";
+pub const DEFAULT_REGISTRY_URL: &str = "https://zpkg.net";
 
 pub const API_V1: &str = "/v1";
 
