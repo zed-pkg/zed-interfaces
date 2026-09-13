@@ -13,7 +13,7 @@ use crate::vcs::Vcs;
 /// Default public registry (production host: zpkg.net). Override with
 /// `--registry` / `ZED_PKG_REGISTRY`; self-hosted deployments point this at
 /// their own `zed-api-server`.
-pub const DEFAULT_REGISTRY_URL: &str = "https://registry.zpkg.net";
+pub const DEFAULT_REGISTRY_URL: &str = "https://zpkg.net";
 
 pub const API_V1: &str = "/v1";
 
@@ -328,7 +328,6 @@ pub struct SemanticSearchResponse {
 
 /// Body of `PUT /v1/packages/{org}/{name}/embedding` — upsert a package's
 /// embedding for one model (re-embedding replaces in place).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct EmbeddingUpsertRequest {
     pub model: String,
     /// The embedding (native width; padded to 2050 server-side).
