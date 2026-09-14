@@ -25,15 +25,48 @@ if [[ -f Cargo.toml ]]; then
   if [[ -f Cargo.lock ]]; then zed develop --no-install -c 'cargo check --locked --all-targets'; else zed develop --no-install -c 'cargo check --all-targets'; fi
 fi
 if [[ -f go.mod ]]; then zed develop --no-install -c 'go test ./...'; fi
+
+node_compile_dir() {
+  local dir="$1"
+  local package_json="$dir/package.json"
+  local pm install_cmd script
+  [[ -f "$package_json" ]] || return 1
+
+  if node -e 'const p=require(process.argv[1]); process.exit(p.scripts && p.scripts.typecheck ? 0 : 1)' "./$package_json"; then
+    script=typecheck
+  elif node -e 'const p=require(process.argv[1]); process.exit(p.scripts && p.scripts.build ? 0 : 1)' "./$package_json"; then
+    script=build
+  else
+    return 1
+  fi
+
+  if [[ -f "$dir/pnpm-lock.yaml" ]]; then
+    pm='corepack pnpm'
+    install_cmd='corepack pnpm install --frozen-lockfile'
+  elif [[ -f "$dir/package-lock.json" ]]; then
+    pm='npm'
+    install_cmd='npm ci'
+  elif [[ -f "$dir/yarn.lock" ]]; then
+    pm='corepack yarn'
+    install_cmd='corepack yarn install --immutable'
+  else
+    pm='npm'
+    install_cmd='npm install --ignore-scripts'
+  fi
+
+  printf 'checking Node/TypeScript package %s with %s\n' "$dir" "$script"
+  zed develop --no-install -c "cd '$dir' && $install_cmd && $pm run $script"
+}
+
 if [[ -f package.json ]]; then
-  if [[ -f pnpm-lock.yaml ]]; then pm='corepack pnpm'; install_cmd='corepack pnpm install --frozen-lockfile';
-  elif [[ -f package-lock.json ]]; then pm='npm'; install_cmd='npm ci';
-  elif [[ -f yarn.lock ]]; then pm='corepack yarn'; install_cmd='corepack yarn install --immutable';
-  else pm='npm'; install_cmd='npm install --ignore-scripts'; fi
-  if node -e 'const p=require("./package.json"); process.exit(p.scripts && p.scripts.typecheck ? 0 : 1)'; then script=typecheck;
-  elif node -e 'const p=require("./package.json"); process.exit(p.scripts && p.scripts.build ? 0 : 1)'; then script=build;
-  else echo 'package.json has neither a typecheck nor build script; refusing to claim Node compile coverage' >&2; exit 1; fi
-  zed develop --no-install -c "$install_cmd && $pm run $script"
+  if node_compile_dir .; then
+    :
+  elif node_compile_dir src/ts; then
+    :
+  else
+    echo 'no canonical Node/TypeScript package exposes a typecheck or build script; refusing to claim Node compile coverage' >&2
+    exit 1
+  fi
 fi
 if [[ -f pyproject.toml || -f setup.py ]]; then zed develop --no-install -c 'python3 -m compileall -q .'; fi
 if [[ -f pom.xml ]]; then zed develop --no-install -c 'mvn -B -DskipTests compile'; fi
