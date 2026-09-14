@@ -6,7 +6,7 @@
 //! failed, GitHub-owned sources are tried before Zed-operated R2/Cloudflare.
 //! This keeps public restore available during a total Zed control-plane outage.
 
-use crate::source::{artifact_locators, ArtifactLocator, ArtifactQuery, ArtifactSourceKind};
+use crate::source::{ArtifactLocator, ArtifactQuery, ArtifactSourceKind, artifact_locators};
 
 /// Return the retry chain for read-only artifact recovery after a registry
 /// failure.
@@ -65,13 +65,32 @@ mod tests {
         let artifacts = ArtifactsSection::EMPTY;
         let locators = artifact_recovery_locators(&query(&artifacts));
         assert!(!locators.is_empty());
-        assert!(locators.iter().all(|locator| locator.kind != ArtifactSourceKind::Registry));
+        assert!(
+            locators
+                .iter()
+                .all(|locator| locator.kind != ArtifactSourceKind::Registry)
+        );
 
-        let kinds = locators.iter().map(|locator| locator.kind).collect::<Vec<_>>();
-        let first_release = kinds.iter().position(|kind| *kind == ArtifactSourceKind::GithubRelease).unwrap();
-        let first_packages = kinds.iter().position(|kind| *kind == ArtifactSourceKind::GithubPackages).unwrap();
-        let first_archive = kinds.iter().position(|kind| *kind == ArtifactSourceKind::GithubArchive).unwrap();
-        let first_r2 = kinds.iter().position(|kind| *kind == ArtifactSourceKind::R2).unwrap();
+        let kinds = locators
+            .iter()
+            .map(|locator| locator.kind)
+            .collect::<Vec<_>>();
+        let first_release = kinds
+            .iter()
+            .position(|kind| *kind == ArtifactSourceKind::GithubRelease)
+            .unwrap();
+        let first_packages = kinds
+            .iter()
+            .position(|kind| *kind == ArtifactSourceKind::GithubPackages)
+            .unwrap();
+        let first_archive = kinds
+            .iter()
+            .position(|kind| *kind == ArtifactSourceKind::GithubArchive)
+            .unwrap();
+        let first_r2 = kinds
+            .iter()
+            .position(|kind| *kind == ArtifactSourceKind::R2)
+            .unwrap();
 
         assert!(first_release < first_packages);
         assert!(first_packages < first_archive);
