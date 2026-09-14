@@ -29,6 +29,7 @@ pub mod nix_plan;
 pub mod oci;
 pub mod paths;
 pub mod public_intake;
+pub mod recovery;
 pub mod registry;
 pub mod registry_protocol_v1;
 pub mod signing;
@@ -135,6 +136,7 @@ pub use oci::{
     ZED_OCI_MANIFEST_MEDIA_TYPE_V1, ZED_OCI_PACKAGE_TAR_GZ_MEDIA_TYPE_V1,
     ZED_OCI_PACKAGE_ZIP_MEDIA_TYPE_V1,
 };
+pub use recovery::artifact_recovery_locators;
 pub use registry_protocol_v1::{
     REGISTRY_ARCHIVE_MANIFEST_SCHEMA_V1, REGISTRY_CHECKPOINT_SCHEMA_V1,
     REGISTRY_DISCOVERY_SCHEMA_V1, REGISTRY_INDEX_RECORD_SCHEMA_V1,
