@@ -61,7 +61,9 @@ fn legacy_manifest_without_kind_remains_compatible() {
     assert_eq!(manifest.package.kind, None);
     assert_eq!(manifest.effective_target_kind("nodejs"), None);
 
-    let encoded = manifest.to_toml_string().expect("legacy manifest serializes");
+    let encoded = manifest
+        .to_toml_string()
+        .expect("legacy manifest serializes");
     assert!(!encoded.contains("kind ="));
 }
 
