@@ -57,6 +57,25 @@ pub struct Manifest {
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub build_dependencies: BTreeMap<String, String>,
+    /// Command-line tools this package needs **while it is being worked on** —
+    /// linters, formatters, codegen CLIs, test runners. They are declared here
+    /// so the required version is pinned, reviewable, and reproducible, but
+    /// they are deliberately *not* materialized into the project tree and not
+    /// inherited by consumers of this package.
+    ///
+    /// This is the npm `devDependencies`-for-a-CLI case without npm's cost: a
+    /// tool a hundred projects share is one central, version-keyed copy under
+    /// `<ZED_PKG_HOME>/global/profiles/<org>/<name>/<version>`, not a hundred
+    /// copies under a hundred `node_modules`. See zed-docs 36. Canonical TOML
+    /// key is `[tool-dependencies]`; the snake_case spelling is accepted on
+    /// read.
+    #[serde(
+        default,
+        rename = "tool-dependencies",
+        alias = "tool_dependencies",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub tool_dependencies: BTreeMap<String, String>,
     /// Host-native packages required before this package's install hooks or
     /// build step can run. Keys are supported package-manager names (`apt`,
     /// `apk`, `brew`, `nix`, ...); values are package specs passed as argv,
@@ -1500,6 +1519,10 @@ pub enum ManifestError {
     InvalidDependencyKey(String),
     #[error("invalid requirement `{1}` for dependency `{0}`: {2}")]
     InvalidDependencyReq(String, String, String),
+    #[error(
+        "`{0}` is declared in both [dependencies] and [tool-dependencies]: a package is either linked into this project or run from the central tool store, not both"
+    )]
+    ConflictingToolDependency(String),
     #[error("invalid repository url `{0}`: {1}")]
     InvalidRepositoryUrl(String, String),
     #[error("invalid [package.artifacts]: {0}")]
@@ -1789,7 +1812,12 @@ impl Manifest {
         if let Err(reason) = validate_artifacts_section(&self.package.artifacts) {
             return Err(ManifestError::InvalidArtifacts(reason));
         }
-        for (key, req) in self.dependencies.iter().chain(&self.build_dependencies) {
+        for (key, req) in self
+            .dependencies
+            .iter()
+            .chain(&self.build_dependencies)
+            .chain(&self.tool_dependencies)
+        {
             if !is_dependency_key(key) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
             }
@@ -1809,6 +1837,14 @@ impl Manifest {
                     req.clone(),
                     reason,
                 ));
+            }
+        }
+        // A package is either linked into the project or run from the central
+        // tool store — never both in one manifest. Allowing both would leave
+        // `zed run <name>` with two defensible answers.
+        for key in self.tool_dependencies.keys() {
+            if self.dependencies.contains_key(key) {
+                return Err(ManifestError::ConflictingToolDependency(key.clone()));
             }
         }
         let mut target_dirs = BTreeMap::<&str, &str>::new();
