@@ -49,7 +49,7 @@ dependencies = [
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
+checksum = "9ed9a281f7bc9b7570c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
 dependencies = [
  "block-buffer",
  "crypto-common",
@@ -81,7 +81,7 @@ dependencies = [
 name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+checksum = "ed5909b6e89a2a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
 
 [[package]]
 name = "hex"
@@ -279,7 +279,7 @@ dependencies = [
 name = "syn"
 version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3"
+checksum = "53e9bae58849f64dfa4fcaed14f99ada8ebed502eef533015095a07e3301d4c3c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -386,7 +386,7 @@ checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 
 [[package]]
 name = "zed-interfaces"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bs58",
  "hex",
