@@ -1,0 +1,176 @@
+name: one-shot codebase kind contract
+
+on:
+  push:
+    branches:
+      - feat/codebase-kind-contract-127
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-shot-codebase-kind-contract-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          show-progress: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          components: rustfmt,clippy
+
+      - name: Apply typed codebase-kind contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/rust/manifest.rs")
+          text = path.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one match, got {count}: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]\npub struct PackageSection {',
+              '''#[derive(\n    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,\n)]\n#[serde(rename_all = "kebab-case")]\npub enum CodebaseKind {\n    Contracts,\n    Lib,\n    Sdk,\n    Server,\n    Cli,\n}\n\nimpl CodebaseKind {\n    pub fn as_str(self) -> &'static str {\n        match self {\n            Self::Contracts => "contracts",\n            Self::Lib => "lib",\n            Self::Sdk => "sdk",\n            Self::Server => "server",\n            Self::Cli => "cli",\n        }\n    }\n}\n\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]\npub struct PackageSection {''',
+          )
+
+          replace_once(
+              '    pub name: String,\n    /// Version of this package, interpreted according to `version_scheme`',
+              '''    pub name: String,\n    /// Coarse codebase role used by package tooling and fleet policy. Optional\n    /// here for legacy/generated compatibility; authored-package enforcement\n    /// belongs at the CLI boundary.\n    #[serde(default, skip_serializing_if = "Option::is_none")]\n    pub kind: Option<CodebaseKind>,\n    /// Version of this package, interpreted according to `version_scheme`''',
+          )
+
+          replace_once(
+              '    pub dir: String,\n    /// Published package name for this target.',
+              '''    pub dir: String,\n    /// Optional role override for this polyglot slice. When absent, consumers\n    /// inherit `[package].kind`; use an override only when the target genuinely\n    /// serves a different role from the source package.\n    #[serde(default, skip_serializing_if = "Option::is_none")]\n    pub kind: Option<CodebaseKind>,\n    /// Published package name for this target.''',
+          )
+
+          replace_once(
+              'impl TargetSection {\n    /// The language this target ships, from its explicit key.',
+              '''impl TargetSection {\n    /// Effective role for this slice: its explicit override, otherwise the\n    /// package-level role.\n    pub fn effective_kind(&self, package_kind: Option<CodebaseKind>) -> Option<CodebaseKind> {\n        self.kind.or(package_kind)\n    }\n\n    /// The language this target ships, from its explicit key.''',
+          )
+
+          replace_once(
+              '        derived.package.name = name;\n        derived.package.description = Some(match &self.package.description {',
+              '''        derived.package.name = name;\n        derived.package.kind = section.effective_kind(self.package.kind);\n        derived.package.description = Some(match &self.package.description {''',
+          )
+
+          replace_once(
+              '''    pub fn is_polyglot(&self) -> bool {\n        !self.targets.is_empty()\n    }\n\n    /// The package name a target publishes under.''',
+              '''    pub fn is_polyglot(&self) -> bool {\n        !self.targets.is_empty()\n    }\n\n    /// Effective role for a selected polyglot target. Exact target names and\n    /// supported language synonyms resolve through the same path used by\n    /// installation; the target override wins over `[package].kind`.\n    pub fn effective_target_kind(&self, target: &str) -> Option<CodebaseKind> {\n        let key = self.resolve_target_key(target)?;\n        self.targets\n            .get(key)\n            .and_then(|section| section.effective_kind(self.package.kind))\n    }\n\n    /// The package name a target publishes under.''',
+          )
+
+          path.write_text(text)
+
+          test = Path("src/rust/tests/codebase_kind.rs")
+          test.write_text(r'''use zed_interfaces::manifest::{CodebaseKind, Manifest};
+
+fn manifest_with(package_kind: &str, target_kind: Option<&str>) -> String {
+    let target_kind = target_kind
+        .map(|kind| format!("kind = \"{kind}\"\n"))
+        .unwrap_or_default();
+    format!(
+        r#"[package]
+org = "acme"
+name = "polyglot-sdk"
+version = "1.2.3"
+kind = "{package_kind}"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/polyglot-sdk"
+
+[targets.nodejs]
+dir = "clients/node"
+{target_kind}"#
+    )
+}
+
+#[test]
+fn all_five_codebase_kinds_parse_and_round_trip() {
+    for (token, expected) in [
+        ("contracts", CodebaseKind::Contracts),
+        ("lib", CodebaseKind::Lib),
+        ("sdk", CodebaseKind::Sdk),
+        ("server", CodebaseKind::Server),
+        ("cli", CodebaseKind::Cli),
+    ] {
+        let manifest = Manifest::parse(&manifest_with(token, None)).expect("kind parses");
+        assert_eq!(manifest.package.kind, Some(expected));
+        assert_eq!(expected.as_str(), token);
+
+        let encoded = manifest.to_toml_string().expect("manifest serializes");
+        let decoded = Manifest::parse(&encoded).expect("round trip parses");
+        assert_eq!(decoded.package.kind, Some(expected));
+    }
+}
+
+#[test]
+fn unknown_codebase_kind_is_rejected() {
+    let error = Manifest::parse(&manifest_with("service", None)).expect_err("unknown kind fails");
+    assert!(error.to_string().contains("service"));
+}
+
+#[test]
+fn target_inherits_package_kind_when_no_override_exists() {
+    let manifest = Manifest::parse(&manifest_with("sdk", None)).expect("manifest parses");
+    assert_eq!(manifest.effective_target_kind("nodejs"), Some(CodebaseKind::Sdk));
+
+    let derived = manifest.manifest_for_target("nodejs").expect("target derives");
+    assert_eq!(derived.package.kind, Some(CodebaseKind::Sdk));
+}
+
+#[test]
+fn target_kind_override_wins_and_is_stamped_into_derived_manifest() {
+    let manifest = Manifest::parse(&manifest_with("sdk", Some("cli"))).expect("manifest parses");
+    assert_eq!(manifest.effective_target_kind("nodejs"), Some(CodebaseKind::Cli));
+    assert_eq!(manifest.effective_target_kind("node"), Some(CodebaseKind::Cli));
+
+    let derived = manifest.manifest_for_target("nodejs").expect("target derives");
+    assert_eq!(derived.package.kind, Some(CodebaseKind::Cli));
+}
+''')
+          PY
+
+      - name: Format source
+        run: cargo fmt --all
+
+      - name: Run focused contract tests
+        run: |
+          cargo test --locked --test codebase_kind
+          cargo test --locked --test manifest_schema_contract
+
+      - name: Regenerate Rust-authoritative schemas
+        run: cargo run --locked --example generate_schemas
+
+      - name: Recheck generated manifest schema contract
+        run: cargo test --locked --test manifest_schema_contract
+
+      - name: Verify no whitespace damage
+        run: git diff --check
+
+      - name: Commit generated contract and remove one-shot workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/one-shot-codebase-kind-contract.yml
+          git add src/rust/manifest.rs src/rust/tests/codebase_kind.rs schemas/manifest.json
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: add typed codebase kind manifest contract"
+          git push origin HEAD:feat/codebase-kind-contract-127
