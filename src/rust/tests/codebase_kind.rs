@@ -21,6 +21,21 @@ dir = "clients/node"
     )
 }
 
+fn manifest_without_kind() -> &'static str {
+    r#"[package]
+org = "acme"
+name = "legacy-lib"
+version = "1.2.3"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/legacy-lib"
+
+[targets.nodejs]
+dir = "clients/node"
+"#
+}
+
 #[test]
 fn all_five_codebase_kinds_parse_and_round_trip() {
     for (token, expected) in [
@@ -38,6 +53,16 @@ fn all_five_codebase_kinds_parse_and_round_trip() {
         let decoded = Manifest::parse(&encoded).expect("round trip parses");
         assert_eq!(decoded.package.kind, Some(expected));
     }
+}
+
+#[test]
+fn legacy_manifest_without_kind_remains_compatible() {
+    let manifest = Manifest::parse(manifest_without_kind()).expect("legacy manifest parses");
+    assert_eq!(manifest.package.kind, None);
+    assert_eq!(manifest.effective_target_kind("nodejs"), None);
+
+    let encoded = manifest.to_toml_string().expect("legacy manifest serializes");
+    assert!(!encoded.contains("kind ="));
 }
 
 #[test]
