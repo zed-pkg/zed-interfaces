@@ -1,0 +1,42 @@
+name: one-shot regenerate schemas 131
+
+on:
+  push:
+    branches:
+      - feat/codebase-kind-contract-127
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-shot-regenerate-schemas-131
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.98.1
+      - name: Regenerate every Rust-authoritative schema
+        run: cargo run --locked --example generate_schemas
+      - name: Verify focused contract
+        run: |
+          cargo test --locked --test codebase_kind
+          cargo test --locked --test manifest_schema_contract
+          git diff --check
+      - name: Commit generated outputs and remove one-shot workflow
+        run: |
+          git rm .github/workflows/one-shot-regenerate-schemas-131.yml
+          git add schemas fixtures/dependency-graph-v1/golden
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: regenerate schemas for codebase kind"
+          git push origin HEAD:feat/codebase-kind-contract-127
