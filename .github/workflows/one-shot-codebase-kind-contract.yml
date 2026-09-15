@@ -36,46 +36,30 @@ jobs:
           from base64 import b64decode
           from pathlib import Path
 
+          def d(value: str) -> str:
+              return b64decode(value).decode()
+
           path = Path("src/rust/manifest.rs")
           text = path.read_text()
-
-          def replace_once(old: str, new: str) -> None:
-              global text
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"expected exactly one match, got {count}: {old[:80]!r}")
+          replacements = [
+              ("I1tkZXJpdmUoRGVidWcsIENsb25lLCBQYXJ0aWFsRXEsIFNlcmlhbGl6ZSwgRGVzZXJpYWxpemUsIEpzb25TY2hlbWEpXQpwdWIgc3RydWN0IFBhY2thZ2VTZWN0aW9uIHs=", "I1tkZXJpdmUoCiAgICBEZWJ1ZywgQ2xvbmUsIENvcHksIFBhcnRpYWxFcSwgRXEsIFBhcnRpYWxPcmQsIE9yZCwgU2VyaWFsaXplLCBEZXNlcmlhbGl6ZSwgSnNvblNjaGVtYSwKKV0KI1tzZXJkZShyZW5hbWVfYWxsID0gImtlYmFiLWNhc2UiKV0KcHViIGVudW0gQ29kZWJhc2VLaW5kIHsKICAgIENvbnRyYWN0cywKICAgIExpYiwKICAgIFNkaywKICAgIFNlcnZlciwKICAgIENsaSwKfQoKaW1wbCBDb2RlYmFzZUtpbmQgewogICAgcHViIGZuIGFzX3N0cihzZWxmKSAtPiAmJ3N0YXRpYyBzdHIgewogICAgICAgIG1hdGNoIHNlbGYgewogICAgICAgICAgICBTZWxmOjpDb250cmFjdHMgPT4gImNvbnRyYWN0cyIsCiAgICAgICAgICAgIFNlbGY6OkxpYiA9PiAibGliIiwKICAgICAgICAgICAgU2VsZjo6U2RrID0+ICJzZGsiLAogICAgICAgICAgICBTZWxmOjpTZXJ2ZXIgPT4gInNlcnZlciIsCiAgICAgICAgICAgIFNlbGY6OkNsaSA9PiAiY2xpIiwKICAgICAgICB9CiAgICB9Cn0KCiNbZGVyaXZlKERlYnVnLCBDbG9uZSwgUGFydGlhbEVxLCBTZXJpYWxpemUsIERlc2VyaWFsaXplLCBKc29uU2NoZW1hKV0KcHViIHN0cnVjdCBQYWNrYWdlU2VjdGlvbiB7"),
+              ("ICAgIHB1YiBuYW1lOiBTdHJpbmcsCiAgICAvLy8gVmVyc2lvbiBvZiB0aGlzIHBhY2thZ2UsIGludGVycHJldGVkIGFjY29yZGluZyB0byBgdmVyc2lvbl9zY2hlbWVg", "ICAgIHB1YiBuYW1lOiBTdHJpbmcsCiAgICAvLy8gQ29hcnNlIGNvZGViYXNlIHJvbGUgdXNlZCBieSBwYWNrYWdlIHRvb2xpbmcgYW5kIGZsZWV0IHBvbGljeS4gT3B0aW9uYWwKICAgIC8vLyBoZXJlIGZvciBsZWdhY3kvZ2VuZXJhdGVkIGNvbXBhdGliaWxpdHk7IGF1dGhvcmVkLXBhY2thZ2UgZW5mb3JjZW1lbnQKICAgIC8vLyBiZWxvbmdzIGF0IHRoZSBDTEkgYm91bmRhcnkuCiAgICAjW3NlcmRlKGRlZmF1bHQsIHNraXBfc2VyaWFsaXppbmdfaWYgPSAiT3B0aW9uOjppc19ub25lIildCiAgICBwdWIga2luZDogT3B0aW9uPENvZGViYXNlS2luZD4sCiAgICAvLy8gVmVyc2lvbiBvZiB0aGlzIHBhY2thZ2UsIGludGVycHJldGVkIGFjY29yZGluZyB0byBgdmVyc2lvbl9zY2hlbWVg"),
+              ("ICAgIHB1YiBkaXI6IFN0cmluZywKICAgIC8vLyBQdWJsaXNoZWQgcGFja2FnZSBuYW1lIGZvciB0aGlzIHRhcmdldC4=", "ICAgIHB1YiBkaXI6IFN0cmluZywKICAgIC8vLyBPcHRpb25hbCByb2xlIG92ZXJyaWRlIGZvciB0aGlzIHBvbHlnbG90IHNsaWNlLiBXaGVuIGFic2VudCwgY29uc3VtZXJzCiAgICAvLy8gaW5oZXJpdCBgW3BhY2thZ2VdLmtpbmRgOyB1c2UgYW4gb3ZlcnJpZGUgb25seSB3aGVuIHRoZSB0YXJnZXQgZ2VudWluZWx5CiAgICAvLy8gc2VydmVzIGEgZGlmZmVyZW50IHJvbGUgZnJvbSB0aGUgc291cmNlIHBhY2thZ2UuCiAgICAjW3NlcmRlKGRlZmF1bHQsIHNraXBfc2VyaWFsaXppbmdfaWYgPSAiT3B0aW9uOjppc19ub25lIildCiAgICBwdWIga2luZDogT3B0aW9uPENvZGViYXNlS2luZD4sCiAgICAvLy8gUHVibGlzaGVkIHBhY2thZ2UgbmFtZSBmb3IgdGhpcyB0YXJnZXQu"),
+              ("aW1wbCBUYXJnZXRTZWN0aW9uIHsKICAgIC8vLyBUaGUgbGFuZ3VhZ2UgdGhpcyB0YXJnZXQgc2hpcHMsIGZyb20gaXRzIGV4cGxpY2l0IGtleS4=", "aW1wbCBUYXJnZXRTZWN0aW9uIHsKICAgIC8vLyBFZmZlY3RpdmUgcm9sZSBmb3IgdGhpcyBzbGljZTogaXRzIGV4cGxpY2l0IG92ZXJyaWRlLCBvdGhlcndpc2UgdGhlCiAgICAvLy8gcGFja2FnZS1sZXZlbCByb2xlLgogICAgcHViIGZuIGVmZmVjdGl2ZV9raW5kKCZzZWxmLCBwYWNrYWdlX2tpbmQ6IE9wdGlvbjxDb2RlYmFzZUtpbmQ+KSAtPiBPcHRpb248Q29kZWJhc2VLaW5kPiB7CiAgICAgICAgc2VsZi5raW5kLm9yKHBhY2thZ2Vfa2luZCkKICAgIH0KCiAgICAvLy8gVGhlIGxhbmd1YWdlIHRoaXMgdGFyZ2V0IHNoaXBzLCBmcm9tIGl0cyBleHBsaWNpdCBrZXku"),
+              ("ICAgICAgICBkZXJpdmVkLnBhY2thZ2UubmFtZSA9IG5hbWU7CiAgICAgICAgZGVyaXZlZC5wYWNrYWdlLmRlc2NyaXB0aW9uID0gU29tZShtYXRjaCAmc2VsZi5wYWNrYWdlLmRlc2NyaXB0aW9uIHs=", "ICAgICAgICBkZXJpdmVkLnBhY2thZ2UubmFtZSA9IG5hbWU7CiAgICAgICAgZGVyaXZlZC5wYWNrYWdlLmtpbmQgPSBzZWN0aW9uLmVmZmVjdGl2ZV9raW5kKHNlbGYucGFja2FnZS5raW5kKTsKICAgICAgICBkZXJpdmVkLnBhY2thZ2UuZGVzY3JpcHRpb24gPSBTb21lKG1hdGNoICZzZWxmLnBhY2thZ2UuZGVzY3JpcHRpb24gew=="),
+              ("ICAgIHB1YiBmbiBpc19wb2x5Z2xvdCgmc2VsZikgLT4gYm9vbCB7CiAgICAgICAgIXNlbGYudGFyZ2V0cy5pc19lbXB0eSgpCiAgICB9CgogICAgLy8vIFRoZSBwYWNrYWdlIG5hbWUgYSB0YXJnZXQgcHVibGlzaGVzIHVuZGVyLg==", "ICAgIHB1YiBmbiBpc19wb2x5Z2xvdCgmc2VsZikgLT4gYm9vbCB7CiAgICAgICAgIXNlbGYudGFyZ2V0cy5pc19lbXB0eSgpCiAgICB9CgogICAgLy8vIEVmZmVjdGl2ZSByb2xlIGZvciBhIHNlbGVjdGVkIHBvbHlnbG90IHRhcmdldC4gRXhhY3QgdGFyZ2V0IG5hbWVzIGFuZAogICAgLy8vIHN1cHBvcnRlZCBsYW5ndWFnZSBzeW5vbnltcyByZXNvbHZlIHRocm91Z2ggdGhlIHNhbWUgcGF0aCB1c2VkIGJ5CiAgICAvLy8gaW5zdGFsbGF0aW9uOyB0aGUgdGFyZ2V0IG92ZXJyaWRlIHdpbnMgb3ZlciBgW3BhY2thZ2VdLmtpbmRgLgogICAgcHViIGZuIGVmZmVjdGl2ZV90YXJnZXRfa2luZCgmc2VsZiwgdGFyZ2V0OiAmc3RyKSAtPiBPcHRpb248Q29kZWJhc2VLaW5kPiB7CiAgICAgICAgbGV0IGtleSA9IHNlbGYucmVzb2x2ZV90YXJnZXRfa2V5KHRhcmdldCk/OwogICAgICAgIHNlbGYudGFyZ2V0cwogICAgICAgICAgICAuZ2V0KGtleSkKICAgICAgICAgICAgLmFuZF90aGVuKHxzZWN0aW9ufCBzZWN0aW9uLmVmZmVjdGl2ZV9raW5kKHNlbGYucGFja2FnZS5raW5kKSkKICAgIH0KCiAgICAvLy8gVGhlIHBhY2thZ2UgbmFtZSBhIHRhcmdldCBwdWJsaXNoZXMgdW5kZXIu"),
+          ]
+          for old_b64, new_b64 in replacements:
+              old, new = d(old_b64), d(new_b64)
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected exactly one manifest anchor, got {text.count(old)}")
               text = text.replace(old, new, 1)
-
-          replace_once(
-              '#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]\\npub struct PackageSection {',
-              '#[derive(\\n    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,\\n)]\\n#[serde(rename_all = "kebab-case")]\\npub enum CodebaseKind {\\n    Contracts,\\n    Lib,\\n    Sdk,\\n    Server,\\n    Cli,\\n}\\n\\nimpl CodebaseKind {\\n    pub fn as_str(self) -> &\\'static str {\\n        match self {\\n            Self::Contracts => "contracts",\\n            Self::Lib => "lib",\\n            Self::Sdk => "sdk",\\n            Self::Server => "server",\\n            Self::Cli => "cli",\\n        }\\n    }\\n}\\n\\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]\\npub struct PackageSection {',
-          )
-          replace_once(
-              '    pub name: String,\\n    /// Version of this package, interpreted according to `version_scheme`',
-              '    pub name: String,\\n    /// Coarse codebase role used by package tooling and fleet policy. Optional\\n    /// here for legacy/generated compatibility; authored-package enforcement\\n    /// belongs at the CLI boundary.\\n    #[serde(default, skip_serializing_if = "Option::is_none")]\\n    pub kind: Option<CodebaseKind>,\\n    /// Version of this package, interpreted according to `version_scheme`',
-          )
-          replace_once(
-              '    pub dir: String,\\n    /// Published package name for this target.',
-              '    pub dir: String,\\n    /// Optional role override for this polyglot slice. When absent, consumers\\n    /// inherit `[package].kind`; use an override only when the target genuinely\\n    /// serves a different role from the source package.\\n    #[serde(default, skip_serializing_if = "Option::is_none")]\\n    pub kind: Option<CodebaseKind>,\\n    /// Published package name for this target.',
-          )
-          replace_once(
-              'impl TargetSection {\\n    /// The language this target ships, from its explicit key.',
-              'impl TargetSection {\\n    /// Effective role for this slice: its explicit override, otherwise the\\n    /// package-level role.\\n    pub fn effective_kind(&self, package_kind: Option<CodebaseKind>) -> Option<CodebaseKind> {\\n        self.kind.or(package_kind)\\n    }\\n\\n    /// The language this target ships, from its explicit key.',
-          )
-          replace_once(
-              '        derived.package.name = name;\\n        derived.package.description = Some(match &self.package.description {',
-              '        derived.package.name = name;\\n        derived.package.kind = section.effective_kind(self.package.kind);\\n        derived.package.description = Some(match &self.package.description {',
-          )
-          replace_once(
-              '    pub fn is_polyglot(&self) -> bool {\\n        !self.targets.is_empty()\\n    }\\n\\n    /// The package name a target publishes under.',
-              '    pub fn is_polyglot(&self) -> bool {\\n        !self.targets.is_empty()\\n    }\\n\\n    /// Effective role for a selected polyglot target. Exact target names and\\n    /// supported language synonyms resolve through the same path used by\\n    /// installation; the target override wins over `[package].kind`.\\n    pub fn effective_target_kind(&self, target: &str) -> Option<CodebaseKind> {\\n        let key = self.resolve_target_key(target)?;\\n        self.targets\\n            .get(key)\\n            .and_then(|section| section.effective_kind(self.package.kind))\\n    }\\n\\n    /// The package name a target publishes under.',
-          )
           path.write_text(text)
 
           lib = Path("src/rust/lib.rs")
           lib_text = lib.read_text()
-          old = 'pub use manifest::{\\n    GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,'
-          new = 'pub use manifest::{\\n    CodebaseKind, GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,'
+          old = d("cHViIHVzZSBtYW5pZmVzdDo6ewogICAgR2l0SW50ZXJvcFNlY3Rpb24sIEluc3RhbGxIb29rc1NlY3Rpb24sIEludGVyb3BTZWN0aW9uLCBNYW5pZmVzdCwgTWFuaWZlc3RFcnJvciw=")
+          new = d("cHViIHVzZSBtYW5pZmVzdDo6ewogICAgQ29kZWJhc2VLaW5kLCBHaXRJbnRlcm9wU2VjdGlvbiwgSW5zdGFsbEhvb2tzU2VjdGlvbiwgSW50ZXJvcFNlY3Rpb24sIE1hbmlmZXN0LCBNYW5pZmVzdEVycm9yLA==")
           if lib_text.count(old) != 1:
               raise SystemExit("expected manifest re-export anchor exactly once")
           lib.write_text(lib_text.replace(old, new, 1))
