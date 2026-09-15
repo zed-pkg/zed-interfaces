@@ -2,6 +2,7 @@
 org = "zed-pkg"
 name = "zed-interfaces"
 version = "0.1.0"
+kind = "contracts"
 description = "Core manifest, lockfile, registry, version, and package-model interfaces for zed-pkg"
 license = "MIT"
 keywords = ["package-manager", "interfaces", "manifest", "lockfile", "polyglot"]
@@ -16,7 +17,7 @@ url = "https://github.com/zed-pkg/zed-interfaces"
 [publish]
 include_readme = true
 tag_format = "v{version}"
-smoke_test = "test -f \"$ZED_PKG_TEST_TARGET/schemas/index.json\" && test -f \"$ZED_PKG_TEST_TARGET/src/rust/Cargo.toml\" && test -f \"$ZED_PKG_TEST_TARGET/src/dart/lib/zed_interfaces.dart\" && test -f \"$ZED_PKG_TEST_TARGET/src/ts/index.ts\""
+smoke_test = "sh \"$ZED_PKG_TEST_TARGET/scripts/tests/smoke-published-artifact.sh\""
 exclude = [
   ".env",
   ".env.*",
