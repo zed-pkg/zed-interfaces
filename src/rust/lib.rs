@@ -88,7 +88,7 @@ pub use git_cli_install::{GIT_CLI_INSTALL_RECEIPT_SCHEMA_VERSION_V1, GitCliInsta
 pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile, LockfileError};
 pub use manifest::{
-    GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,
+    CodebaseKind, GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,
     NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute, ProjectLifecycleHook,
     ProjectLifecycleHookConfig, ProjectLifecycleMode, ProjectLifecycleSection,
 };

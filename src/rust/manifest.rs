@@ -138,6 +138,30 @@ pub struct Manifest {
     pub targets: BTreeMap<String, TargetSection>,
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum CodebaseKind {
+    Contracts,
+    Lib,
+    Sdk,
+    Server,
+    Cli,
+}
+
+impl CodebaseKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Contracts => "contracts",
+            Self::Lib => "lib",
+            Self::Sdk => "sdk",
+            Self::Server => "server",
+            Self::Cli => "cli",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct PackageSection {
     /// Namespace the package is published under. Lowercase slug.
@@ -146,6 +170,11 @@ pub struct PackageSection {
     /// Package name, unique within the org. Lowercase slug.
     #[schemars(length(min = 1), regex(pattern = r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"))]
     pub name: String,
+    /// Coarse codebase role used by package tooling and fleet policy. Optional
+    /// here for legacy/generated compatibility; authored-package enforcement
+    /// belongs at the CLI boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<CodebaseKind>,
     /// Version of this package, interpreted according to `version_scheme`
     /// (semver by default).
     pub version: String,
@@ -368,6 +397,11 @@ pub struct TargetSection {
     /// `python` or `clients/go`. Must be a safe relative path (no leading `/`,
     /// no `..`) so a target can never escape the package.
     pub dir: String,
+    /// Optional role override for this polyglot slice. When absent, consumers
+    /// inherit `[package].kind`; use an override only when the target genuinely
+    /// serves a different role from the source package.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<CodebaseKind>,
     /// Published package name for this target. Non-root targets default to
     /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may
     /// override that convention here. A whole-repository target (`dir = "."`)
@@ -417,6 +451,12 @@ pub struct TargetSection {
 }
 
 impl TargetSection {
+    /// Effective role for this slice: its explicit override, otherwise the
+    /// package-level role.
+    pub fn effective_kind(&self, package_kind: Option<CodebaseKind>) -> Option<CodebaseKind> {
+        self.kind.or(package_kind)
+    }
+
     /// The language this target ships, from its explicit key. `universal` when
     /// the key is not a language zed knows — such a target still publishes and
     /// installs, it just is not ecosystem-gated.
@@ -2107,6 +2147,16 @@ impl Manifest {
         !self.targets.is_empty()
     }
 
+    /// Effective role for a selected polyglot target. Exact target names and
+    /// supported language synonyms resolve through the same path used by
+    /// installation; the target override wins over `[package].kind`.
+    pub fn effective_target_kind(&self, target: &str) -> Option<CodebaseKind> {
+        let key = self.resolve_target_key(target)?;
+        self.targets
+            .get(key)
+            .and_then(|section| section.effective_kind(self.package.kind))
+    }
+
     /// The package name a target publishes under. A whole-repository target
     /// (`dir = "."`) is the canonical root package and therefore uses
     /// `package.name`; non-root targets use their explicit `name` or the
@@ -2259,6 +2309,7 @@ impl Manifest {
         let section = self.targets.get(target)?;
         let mut derived = self.clone();
         derived.package.name = name;
+        derived.package.kind = section.effective_kind(self.package.kind);
         derived.package.description = Some(match &self.package.description {
             Some(base) => format!("{base} ({target})"),
             None => format!("{} ({target} client)", self.package.name),
