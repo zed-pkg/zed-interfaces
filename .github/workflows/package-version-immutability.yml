@@ -1,0 +1,56 @@
+name: Zed package version immutability
+
+on:
+  pull_request:
+    paths:
+      - '.zpkg.toml'
+      - 'Cargo.lock'
+      - 'src/**'
+      - 'schemas/**'
+      - 'codegen/**'
+      - '.github/workflows/package-version-immutability.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.zpkg.toml'
+      - 'Cargo.lock'
+      - 'src/**'
+      - 'schemas/**'
+      - 'codegen/**'
+      - '.github/workflows/package-version-immutability.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  released-version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact candidate with tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Refuse source drift under an already-released version
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' .zpkg.toml | head -n1)"
+          test -n "$version"
+          tag="v$version"
+
+          if git rev-parse --verify --quiet "refs/tags/$tag^{commit}" >/dev/null; then
+            released="$(git rev-parse "refs/tags/$tag^{commit}")"
+            if test "$released" != "$EXPECTED_SHA"; then
+              echo "Zed package version $version is already released at $released; candidate $EXPECTED_SHA must use a new version." >&2
+              exit 1
+            fi
+          fi
+
+          echo "package version $version is not reusing a different immutable release commit"
