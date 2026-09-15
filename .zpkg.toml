@@ -1,7 +1,7 @@
 [package]
 org = "zed-pkg"
 name = "zed-interfaces"
-version = "0.1.0"
+version = "0.2.0"
 description = "Core manifest, lockfile, registry, version, and package-model interfaces for zed-pkg"
 license = "MIT"
 keywords = ["package-manager", "interfaces", "manifest", "lockfile", "polyglot"]
@@ -36,8 +36,7 @@ exclude = [
 # Take this one to regenerate or to diff the contract; take a language slice to
 # consume it.
 # The whole-repository slice publishes under the canonical package name; the
-# model rejects a divergent `name` here (DEN-2960). Take this one to regenerate
-# or to diff the contract; take a language slice to consume it.
+# model rejects a divergent `name` on the whole-repository slice (DEN-2960).
 [targets.repository]
 dir = "."
 
