@@ -47,42 +47,48 @@ jobs:
               text = text.replace(old, new, 1)
 
           replace_once(
-              '#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]\npub struct PackageSection {',
-              '#[derive(\n    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,\n)]\n#[serde(rename_all = "kebab-case")]\npub enum CodebaseKind {\n    Contracts,\n    Lib,\n    Sdk,\n    Server,\n    Cli,\n}\n\nimpl CodebaseKind {\n    pub fn as_str(self) -> &\'static str {\n        match self {\n            Self::Contracts => "contracts",\n            Self::Lib => "lib",\n            Self::Sdk => "sdk",\n            Self::Server => "server",\n            Self::Cli => "cli",\n        }\n    }\n}\n\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]\npub struct PackageSection {',
+              '#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]\\npub struct PackageSection {',
+              '#[derive(\\n    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,\\n)]\\n#[serde(rename_all = "kebab-case")]\\npub enum CodebaseKind {\\n    Contracts,\\n    Lib,\\n    Sdk,\\n    Server,\\n    Cli,\\n}\\n\\nimpl CodebaseKind {\\n    pub fn as_str(self) -> &\\'static str {\\n        match self {\\n            Self::Contracts => "contracts",\\n            Self::Lib => "lib",\\n            Self::Sdk => "sdk",\\n            Self::Server => "server",\\n            Self::Cli => "cli",\\n        }\\n    }\\n}\\n\\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]\\npub struct PackageSection {',
           )
           replace_once(
-              '    pub name: String,\n    /// Version of this package, interpreted according to `version_scheme`',
-              '    pub name: String,\n    /// Coarse codebase role used by package tooling and fleet policy. Optional\n    /// here for legacy/generated compatibility; authored-package enforcement\n    /// belongs at the CLI boundary.\n    #[serde(default, skip_serializing_if = "Option::is_none")]\n    pub kind: Option<CodebaseKind>,\n    /// Version of this package, interpreted according to `version_scheme`',
+              '    pub name: String,\\n    /// Version of this package, interpreted according to `version_scheme`',
+              '    pub name: String,\\n    /// Coarse codebase role used by package tooling and fleet policy. Optional\\n    /// here for legacy/generated compatibility; authored-package enforcement\\n    /// belongs at the CLI boundary.\\n    #[serde(default, skip_serializing_if = "Option::is_none")]\\n    pub kind: Option<CodebaseKind>,\\n    /// Version of this package, interpreted according to `version_scheme`',
           )
           replace_once(
-              '    pub dir: String,\n    /// Published package name for this target.',
-              '    pub dir: String,\n    /// Optional role override for this polyglot slice. When absent, consumers\n    /// inherit `[package].kind`; use an override only when the target genuinely\n    /// serves a different role from the source package.\n    #[serde(default, skip_serializing_if = "Option::is_none")]\n    pub kind: Option<CodebaseKind>,\n    /// Published package name for this target.',
+              '    pub dir: String,\\n    /// Published package name for this target.',
+              '    pub dir: String,\\n    /// Optional role override for this polyglot slice. When absent, consumers\\n    /// inherit `[package].kind`; use an override only when the target genuinely\\n    /// serves a different role from the source package.\\n    #[serde(default, skip_serializing_if = "Option::is_none")]\\n    pub kind: Option<CodebaseKind>,\\n    /// Published package name for this target.',
           )
           replace_once(
-              'impl TargetSection {\n    /// The language this target ships, from its explicit key.',
-              'impl TargetSection {\n    /// Effective role for this slice: its explicit override, otherwise the\n    /// package-level role.\n    pub fn effective_kind(&self, package_kind: Option<CodebaseKind>) -> Option<CodebaseKind> {\n        self.kind.or(package_kind)\n    }\n\n    /// The language this target ships, from its explicit key.',
+              'impl TargetSection {\\n    /// The language this target ships, from its explicit key.',
+              'impl TargetSection {\\n    /// Effective role for this slice: its explicit override, otherwise the\\n    /// package-level role.\\n    pub fn effective_kind(&self, package_kind: Option<CodebaseKind>) -> Option<CodebaseKind> {\\n        self.kind.or(package_kind)\\n    }\\n\\n    /// The language this target ships, from its explicit key.',
           )
           replace_once(
-              '        derived.package.name = name;\n        derived.package.description = Some(match &self.package.description {',
-              '        derived.package.name = name;\n        derived.package.kind = section.effective_kind(self.package.kind);\n        derived.package.description = Some(match &self.package.description {',
+              '        derived.package.name = name;\\n        derived.package.description = Some(match &self.package.description {',
+              '        derived.package.name = name;\\n        derived.package.kind = section.effective_kind(self.package.kind);\\n        derived.package.description = Some(match &self.package.description {',
           )
           replace_once(
-              '    pub fn is_polyglot(&self) -> bool {\n        !self.targets.is_empty()\n    }\n\n    /// The package name a target publishes under.',
-              '    pub fn is_polyglot(&self) -> bool {\n        !self.targets.is_empty()\n    }\n\n    /// Effective role for a selected polyglot target. Exact target names and\n    /// supported language synonyms resolve through the same path used by\n    /// installation; the target override wins over `[package].kind`.\n    pub fn effective_target_kind(&self, target: &str) -> Option<CodebaseKind> {\n        let key = self.resolve_target_key(target)?;\n        self.targets\n            .get(key)\n            .and_then(|section| section.effective_kind(self.package.kind))\n    }\n\n    /// The package name a target publishes under.',
+              '    pub fn is_polyglot(&self) -> bool {\\n        !self.targets.is_empty()\\n    }\\n\\n    /// The package name a target publishes under.',
+              '    pub fn is_polyglot(&self) -> bool {\\n        !self.targets.is_empty()\\n    }\\n\\n    /// Effective role for a selected polyglot target. Exact target names and\\n    /// supported language synonyms resolve through the same path used by\\n    /// installation; the target override wins over `[package].kind`.\\n    pub fn effective_target_kind(&self, target: &str) -> Option<CodebaseKind> {\\n        let key = self.resolve_target_key(target)?;\\n        self.targets\\n            .get(key)\\n            .and_then(|section| section.effective_kind(self.package.kind))\\n    }\\n\\n    /// The package name a target publishes under.',
           )
           path.write_text(text)
 
-          test_b64 = "dXNlIHplZF9pbnRlcmZhY2VzOjptYW5pZmVzdDo6e0NvZGViYXNlS2luZCwgTWFuaWZlc3R9OwoKZm4gbWFuaWZlc3Rfd2l0aChwYWNrYWdlX2tpbmQ6ICZzdHIsIHRhcmdldF9raW5kOiBPcHRpb248JnN0cj4pIC0+IFN0cmluZyB7CiAgICBsZXQgdGFyZ2V0X2tpbmQgPSB0YXJnZXRfa2luZAogICAgICAgIC5tYXAofGtpbmR8IGZvcm1hdCEoImtpbmQgPSBcIntraW5kfVwiXFxuIikpCiAgICAgICAgLnVud3JhcF9vcl9kZWZhdWx0KCk7CiAgICBmb3JtYXQhKAogICAgICAgIHIjIltwYWNrYWdlXQpvcmcgPSAiYWNtZSIKbmFtZSA9ICJwb2x5Z2xvdC1zZGsiCnZlcnNpb24gPSAiMS4yLjMiCmtpbmQgPSAie3BhY2thZ2Vfa2luZH0iCgpbcGFja2FnZS5yZXBvc2l0b3J5XQp2Y3MgPSAiZ2l0Igp1cmwgPSAiaHR0cHM6Ly9naXRodWIuY29tL2FjbWUvcG9seWdsb3Qtc2RrIgoKW3RhcmdldHMubm9kZWpzXQpkaXIgPSAiY2xpZW50cy9ub2RlIgp7dGFyZ2V0X2tpbmR9IiMKICAgICkKfQoKI1t0ZXN0XQpmbiBhbGxfZml2ZV9jb2RlYmFzZV9raW5kc19wYXJzZV9hbmRfcm91bmRfdHJpcCgpIHsKICAgIGZvciAodG9rZW4sIGV4cGVjdGVkKSBpbiBbCiAgICAgICAgKCJjb250cmFjdHMiLCBDb2RlYmFzZUtpbmQ6OkNvbnRyYWN0cyksCiAgICAgICAgKCJsaWIiLCBDb2RlYmFzZUtpbmQ6OkxpYiksCiAgICAgICAgKCJzZGsiLCBDb2RlYmFzZUtpbmQ6OlNkayksCiAgICAgICAgKCJzZXJ2ZXIiLCBDb2RlYmFzZUtpbmQ6OlNlcnZlciksCiAgICAgICAgKCJjbGkiLCBDb2RlYmFzZUtpbmQ6OkNsaSksCiAgICBdIHsKICAgICAgICBsZXQgbWFuaWZlc3QgPSBNYW5pZmVzdDo6cGFyc2UoJm1hbmlmZXN0X3dpdGgodG9rZW4sIE5vbmUpKS5leHBlY3QoImtpbmQgcGFyc2VzIik7CiAgICAgICAgYXNzZXJ0X2VxIShtYW5pZmVzdC5wYWNrYWdlLmtpbmQsIFNvbWUoZXhwZWN0ZWQpKTsKICAgICAgICBhc3NlcnRfZXEhKGV4cGVjdGVkLmFzX3N0cigpLCB0b2tlbik7CgogICAgICAgIGxldCBlbmNvZGVkID0gbWFuaWZlc3QudG9fdG9tbF9zdHJpbmcoKS5leHBlY3QoIm1hbmlmZXN0IHNlcmlhbGl6ZXMiKTsKICAgICAgICBsZXQgZGVjb2RlZCA9IE1hbmlmZXN0OjpwYXJzZSgmZW5jb2RlZCkuZXhwZWN0KCJyb3VuZCB0cmlwIHBhcnNlcyIpOwogICAgICAgIGFzc2VydF9lcSEoZGVjb2RlZC5wYWNrYWdlLmtpbmQsIFNvbWUoZXhwZWN0ZWQpKTsKICAgIH0KfQoKI1t0ZXN0XQpmbiB1bmtub3duX2NvZGViYXNlX2tpbmRfaXNfcmVqZWN0ZWQoKSB7CiAgICBsZXQgZXJyb3IgPSBNYW5pZmVzdDo6cGFyc2UoJm1hbmlmZXN0X3dpdGgoInNlcnZpY2UiLCBOb25lKSkuZXhwZWN0X2VycigidW5rbm93biBraW5kIGZhaWxzIik7CiAgICBhc3NlcnQhKGVycm9yLnRvX3N0cmluZygpLmNvbnRhaW5zKCJzZXJ2aWNlIikpOwp9CgojW3Rlc3RdCmZuIHRhcmdldF9pbmhlcml0c19wYWNrYWdlX2tpbmRfd2hlbl9ub19vdmVycmlkZV9leGlzdHMoKSB7CiAgICBsZXQgbWFuaWZlc3QgPSBNYW5pZmVzdDo6cGFyc2UoJm1hbmlmZXN0X3dpdGgoInNkayIsIE5vbmUpKS5leHBlY3QoIm1hbmlmZXN0IHBhcnNlcyIpOwogICAgYXNzZXJ0X2VxIShtYW5pZmVzdC5lZmZlY3RpdmVfdGFyZ2V0X2tpbmQoIm5vZGVqcyIpLCBTb21lKENvZGViYXNlS2luZDo6U2RrKSk7CgogICAgbGV0IGRlcml2ZWQgPSBtYW5pZmVzdC5tYW5pZmVzdF9mb3JfdGFyZ2V0KCJub2RlanMiKS5leHBlY3QoInRhcmdldCBkZXJpdmVzIik7CiAgICBhc3NlcnRfZXEhKGRlcml2ZWQucGFja2FnZS5raW5kLCBTb21lKENvZGViYXNlS2luZDo6U2RrKSk7Cn0KCiNbdGVzdF0KZm4gdGFyZ2V0X2tpbmRfb3ZlcnJpZGVfd2luc19hbmRfaXNfc3RhbXBlZF9pbnRvX2Rlcml2ZWRfbWFuaWZlc3QoKSB7CiAgICBsZXQgbWFuaWZlc3QgPSBNYW5pZmVzdDo6cGFyc2UoJm1hbmlmZXN0X3dpdGgoInNkayIsIFNvbWUoImNsaSIpKSkuZXhwZWN0KCJtYW5pZmVzdCBwYXJzZXMiKTsKICAgIGFzc2VydF9lcSEobWFuaWZlc3QuZWZmZWN0aXZlX3RhcmdldF9raW5kKCJub2RlanMiKSwgU29tZShDb2RlYmFzZUtpbmQ6OkNsaSkpOwogICAgYXNzZXJ0X2VxIShtYW5pZmVzdC5lZmZlY3RpdmVfdGFyZ2V0X2tpbmQoIm5vZGUiKSwgU29tZShDb2RlYmFzZUtpbmQ6OkNsaSkpOwoKICAgIGxldCBkZXJpdmVkID0gbWFuaWZlc3QubWFuaWZlc3RfZm9yX3RhcmdldCgibm9kZWpzIikuZXhwZWN0KCJ0YXJnZXQgZGVyaXZlcyIpOwogICAgYXNzZXJ0X2VxIShkZXJpdmVkLnBhY2thZ2Uua2luZCwgU29tZShDb2RlYmFzZUtpbmQ6OkNsaSkpOwp9Cg=="
+          lib = Path("src/rust/lib.rs")
+          lib_text = lib.read_text()
+          old = 'pub use manifest::{\\n    GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,'
+          new = 'pub use manifest::{\\n    CodebaseKind, GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,'
+          if lib_text.count(old) != 1:
+              raise SystemExit("expected manifest re-export anchor exactly once")
+          lib.write_text(lib_text.replace(old, new, 1))
+
+          test_b64 = "dXNlIHplZF9pbnRlcmZhY2VzOjp7Q29kZWJhc2VLaW5kLCBNYW5pZmVzdH07CgpmbiBtYW5pZmVzdF93aXRoKHBhY2thZ2Vfa2luZDogJnN0ciwgdGFyZ2V0X2tpbmQ6IE9wdGlvbjwmc3RyPikgLT4gU3RyaW5nIHsKICAgIGxldCB0YXJnZXRfa2luZCA9IHRhcmdldF9raW5kCiAgICAgICAgLm1hcCh8a2luZHwgZm9ybWF0ISgia2luZCA9IFwie2tpbmR9XCJcbiIpKQogICAgICAgIC51bndyYXBfb3JfZGVmYXVsdCgpOwogICAgZm9ybWF0ISgKICAgICAgICByIyJbcGFja2FnZV0Kb3JnID0gImFjbWUiCm5hbWUgPSAicG9seWdsb3Qtc2RrIgp2ZXJzaW9uID0gIjEuMi4zIgpraW5kID0gIntwYWNrYWdlX2tpbmR9IgoKW3BhY2thZ2UucmVwb3NpdG9yeV0KdmNzID0gImdpdCIKdXJsID0gImh0dHBzOi8vZ2l0aHViLmNvbS9hY21lL3BvbHlnbG90LXNkayIKClt0YXJnZXRzLm5vZGVqc10KZGlyID0gImNsaWVudHMvbm9kZSIKe3RhcmdldF9raW5kfSIjCiAgICApCn0KCiNbdGVzdF0KZm4gYWxsX2ZpdmVfY29kZWJhc2Vfa2luZHNfcGFyc2VfYW5kX3JvdW5kX3RyaXAoKSB7CiAgICBmb3IgKHRva2VuLCBleHBlY3RlZCkgaW4gWwogICAgICAgICgiY29udHJhY3RzIiwgQ29kZWJhc2VLaW5kOjpDb250cmFjdHMpLAogICAgICAgICgibGliIiwgQ29kZWJhc2VLaW5kOjpMaWIpLAogICAgICAgICgic2RrIiwgQ29kZWJhc2VLaW5kOjpTZGspLAogICAgICAgICgic2VydmVyIiwgQ29kZWJhc2VLaW5kOjpTZXJ2ZXIpLAogICAgICAgICgiY2xpIiwgQ29kZWJhc2VLaW5kOjpDbGkpLAogICAgXSB7CiAgICAgICAgbGV0IG1hbmlmZXN0ID0gTWFuaWZlc3Q6OnBhcnNlKCZtYW5pZmVzdF93aXRoKHRva2VuLCBOb25lKSkuZXhwZWN0KCJraW5kIHBhcnNlcyIpOwogICAgICAgIGFzc2VydF9lcSEobWFuaWZlc3QucGFja2FnZS5raW5kLCBTb21lKGV4cGVjdGVkKSk7CiAgICAgICAgYXNzZXJ0X2VxIShleHBlY3RlZC5hc19zdHIoKSwgdG9rZW4pOwoKICAgICAgICBsZXQgZW5jb2RlZCA9IG1hbmlmZXN0LnRvX3RvbWxfc3RyaW5nKCkuZXhwZWN0KCJtYW5pZmVzdCBzZXJpYWxpemVzIik7CiAgICAgICAgbGV0IGRlY29kZWQgPSBNYW5pZmVzdDo6cGFyc2UoJmVuY29kZWQpLmV4cGVjdCgicm91bmQgdHJpcCBwYXJzZXMiKTsKICAgICAgICBhc3NlcnRfZXEhKGRlY29kZWQucGFja2FnZS5raW5kLCBTb21lKGV4cGVjdGVkKSk7CiAgICB9Cn0KCiNbdGVzdF0KZm4gdW5rbm93bl9jb2RlYmFzZV9raW5kX2lzX3JlamVjdGVkKCkgewogICAgbGV0IGVycm9yID0gTWFuaWZlc3Q6OnBhcnNlKCZtYW5pZmVzdF93aXRoKCJzZXJ2aWNlIiwgTm9uZSkpLmV4cGVjdF9lcnIoInVua25vd24ga2luZCBmYWlscyIpOwogICAgYXNzZXJ0IShlcnJvci50b19zdHJpbmcoKS5jb250YWlucygic2VydmljZSIpKTsKfQoKI1t0ZXN0XQpmbiB0YXJnZXRfaW5oZXJpdHNfcGFja2FnZV9raW5kX3doZW5fbm9fb3ZlcnJpZGVfZXhpc3RzKCkgewogICAgbGV0IG1hbmlmZXN0ID0gTWFuaWZlc3Q6OnBhcnNlKCZtYW5pZmVzdF93aXRoKCJzZGsiLCBOb25lKSkuZXhwZWN0KCJtYW5pZmVzdCBwYXJzZXMiKTsKICAgIGFzc2VydF9lcSEobWFuaWZlc3QuZWZmZWN0aXZlX3RhcmdldF9raW5kKCJub2RlanMiKSwgU29tZShDb2RlYmFzZUtpbmQ6OlNkaykpOwoKICAgIGxldCBkZXJpdmVkID0gbWFuaWZlc3QubWFuaWZlc3RfZm9yX3RhcmdldCgibm9kZWpzIikuZXhwZWN0KCJ0YXJnZXQgZGVyaXZlcyIpOwogICAgYXNzZXJ0X2VxIShkZXJpdmVkLnBhY2thZ2Uua2luZCwgU29tZShDb2RlYmFzZUtpbmQ6OlNkaykpOwp9CgojW3Rlc3RdCmZuIHRhcmdldF9raW5kX292ZXJyaWRlX3dpbnNfYW5kX2lzX3N0YW1wZWRfaW50b19kZXJpdmVkX21hbmlmZXN0KCkgewogICAgbGV0IG1hbmlmZXN0ID0gTWFuaWZlc3Q6OnBhcnNlKCZtYW5pZmVzdF93aXRoKCJzZGsiLCBTb21lKCJjbGkiKSkpLmV4cGVjdCgibWFuaWZlc3QgcGFyc2VzIik7CiAgICBhc3NlcnRfZXEhKG1hbmlmZXN0LmVmZmVjdGl2ZV90YXJnZXRfa2luZCgibm9kZWpzIiksIFNvbWUoQ29kZWJhc2VLaW5kOjpDbGkpKTsKICAgIGFzc2VydF9lcSEobWFuaWZlc3QuZWZmZWN0aXZlX3RhcmdldF9raW5kKCJub2RlIiksIFNvbWUoQ29kZWJhc2VLaW5kOjpDbGkpKTsKCiAgICBsZXQgZGVyaXZlZCA9IG1hbmlmZXN0Lm1hbmlmZXN0X2Zvcl90YXJnZXQoIm5vZGVqcyIpLmV4cGVjdCgidGFyZ2V0IGRlcml2ZXMiKTsKICAgIGFzc2VydF9lcSEoZGVyaXZlZC5wYWNrYWdlLmtpbmQsIFNvbWUoQ29kZWJhc2VLaW5kOjpDbGkpKTsKfQo="
           Path("src/rust/tests/codebase_kind.rs").write_bytes(b64decode(test_b64))
           PY
 
       - name: Format source
         run: cargo fmt --all
 
-      - name: Run focused contract tests
-        run: |
-          cargo test --locked --test codebase_kind
-          cargo test --locked --test manifest_schema_contract
+      - name: Run focused codebase-kind tests
+        run: cargo test --locked --test codebase_kind
 
       - name: Regenerate Rust-authoritative schemas
         run: cargo run --locked --example generate_schemas
@@ -97,7 +103,7 @@ jobs:
         shell: bash
         run: |
           git rm .github/workflows/one-shot-codebase-kind-contract.yml
-          git add src/rust/manifest.rs src/rust/tests/codebase_kind.rs schemas/manifest.json
+          git add src/rust/manifest.rs src/rust/lib.rs src/rust/tests/codebase_kind.rs schemas/manifest.json
           git diff --cached --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
