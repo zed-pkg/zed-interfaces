@@ -27,8 +27,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ZED_CLI_COMMIT: b38a1edd2ca7852bc81ad2e01e2989f44009e93e
-  ZED_V010_SHA256: a2b695d68ac469941d465b0bb78dd191e65e7480412ad7e1ba28aaf0534b7ba4
+  # Pin a commit that contains zed-cli#379. Released v0.3.0 synthesized the
+  # sha256 of a raw GitHub source archive as package metadata and then refused
+  # that same archive after the digest became populated. The fixed resolver
+  # deterministically repacks tag archives through the same packer as publish.
+  ZED_CLI_COMMIT: eb5656e974105677982f533c6ae24f2c99abdf2e
+  ZED_V010_SHA256: 6df0c8ca7df5539276270dc8f50e79229ab797ca0c769ec1b8b935ebe44bdb47
   ZED_PKG_INTERACTIVE: 'false'
 
 jobs:
@@ -88,7 +92,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Check out exact released Zed CLI source
+      - name: Check out exact fixed Zed CLI source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: zed-pkg/zed-cli
@@ -96,7 +100,7 @@ jobs:
           path: zed-cli
           persist-credentials: false
 
-      - name: Build exact Zed CLI v0.3.0 toolchain
+      - name: Build pinned fixed Zed CLI toolchain
         working-directory: zed-cli
         shell: bash
         run: |
@@ -170,7 +174,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Check out exact released Zed CLI source
+      - name: Check out exact fixed Zed CLI source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: zed-pkg/zed-cli
@@ -178,7 +182,7 @@ jobs:
           path: zed-cli
           persist-credentials: false
 
-      - name: Build exact Zed CLI v0.3.0 toolchain
+      - name: Build pinned fixed Zed CLI toolchain
         working-directory: zed-cli
         shell: bash
         run: |
