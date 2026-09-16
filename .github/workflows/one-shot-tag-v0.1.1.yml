@@ -22,21 +22,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Create immutable v0.1.1 tag
+      - name: Verify immutable v0.1.1 tag
         env:
-          GITHUB_TOKEN: ${{ github.token }}
           TARGET_SHA: 99aaf991797432f26f7cebe0f56cbfebbb3461c4
         shell: bash
         run: |
           set -euo pipefail
           git fetch --force --tags origin
-          if git rev-parse -q --verify refs/tags/v0.1.1 >/dev/null; then
-            test "$(git rev-list -n1 v0.1.1)" = "$TARGET_SHA"
-          else
-            git tag v0.1.1 "$TARGET_SHA"
-            AUTH="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
-            git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $AUTH" push origin refs/tags/v0.1.1
-          fi
+          git rev-parse -q --verify refs/tags/v0.1.1 >/dev/null
+          test "$(git rev-list -n1 v0.1.1)" = "$TARGET_SHA"
 
       - name: Dispatch canonical release at immutable tag
         env:
@@ -48,4 +42,4 @@ jobs:
           gh api --method POST \
             "repos/${GH_REPO}/actions/workflows/zed-package-release.yml/dispatches" \
             -f ref='v0.1.1' \
-            -f 'inputs[version]=0.1.1'
+            -f 'inputs[release_ref]=v0.1.1'
