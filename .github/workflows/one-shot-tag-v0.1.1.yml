@@ -18,14 +18,14 @@ jobs:
       - name: Check out exact merged release
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 99aaf78fd2908a6565618040422a48639188576e
+          ref: 99aaf991797432f26f7cebe0f56cbfebbb3461c4
           fetch-depth: 0
           persist-credentials: false
 
       - name: Create immutable v0.1.1 tag
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          TARGET_SHA: 99aaf78fd2908a6565618040422a48639188576e
+          TARGET_SHA: 99aaf991797432f26f7cebe0f56cbfebbb3461c4
         shell: bash
         run: |
           set -euo pipefail
