@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.zpkg.net/dependents/consumer-registration-request-v1.json",
+  "title": "ConsumerRegistrationRequestV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol", "repository", "default_branch", "source_commit", "consumer_kind",
+    "automation_mode", "registration_ttl_seconds", "notify_major", "notify_minor",
+    "notify_patch", "security_patch_notify", "dependencies", "validation_commands"
+  ],
+  "properties": {
+    "protocol": { "type": "string", "const": "zed.consumer-registration.v1" },
+    "repository": { "type": "string", "minLength": 3, "maxLength": 255, "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$" },
+    "default_branch": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "consumer_kind": { "type": "string", "enum": ["server", "cli", "worker", "app", "library", "other"] },
+    "automation_mode": { "type": "string", "enum": ["off", "notify_only", "draft_pr"] },
+    "registration_ttl_seconds": { "type": "integer", "minimum": 300, "maximum": 2592000 },
+    "notify_major": { "type": "boolean" },
+    "notify_minor": { "type": "boolean" },
+    "notify_patch": { "type": "boolean" },
+    "security_patch_notify": { "type": "boolean" },
+    "dependencies": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/locked_dependency" }
+    },
+    "validation_commands": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 2048 } }
+  },
+  "$defs": {
+    "locked_dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "resolved_version", "source", "direct"],
+      "properties": {
+        "package": { "type": "string", "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$" },
+        "resolved_version": { "type": "string", "minLength": 1 },
+        "requirement": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "checksum_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "direct": { "type": "boolean" }
+      }
+    }
+  }
+}
