@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub const CONSUMER_REGISTRATION_PROTOCOL_V1: &str = "zed.consumer-registration.v1";
-pub const CONSUMER_REGISTRATION_RECEIPT_PROTOCOL_V1: &str =
-    "zed.consumer-registration-receipt.v1";
+pub const CONSUMER_REGISTRATION_RECEIPT_PROTOCOL_V1: &str = "zed.consumer-registration-receipt.v1";
 pub const RELEASE_IMPACT_PROTOCOL_V1: &str = "zed.release-impact.v1";
 pub const RELEASE_IMPACT_PLAN_PROTOCOL_V1: &str = "zed.release-impact-plan.v1";
 
