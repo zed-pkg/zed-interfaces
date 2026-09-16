@@ -1,0 +1,51 @@
+name: One-shot publish immutable v0.1.1
+
+on:
+  push:
+    branches:
+      - release/v0.1.1-namespace-contracts-20260915
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag-and-dispatch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact merged release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 99aaf78fd2908a6565618040422a48639188576e
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create immutable v0.1.1 tag
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_SHA: 99aaf78fd2908a6565618040422a48639188576e
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          if git rev-parse -q --verify refs/tags/v0.1.1 >/dev/null; then
+            test "$(git rev-list -n1 v0.1.1)" = "$TARGET_SHA"
+          else
+            git tag v0.1.1 "$TARGET_SHA"
+            AUTH="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+            git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $AUTH" push origin refs/tags/v0.1.1
+          fi
+
+      - name: Dispatch canonical release at immutable tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            "repos/${GH_REPO}/actions/workflows/zed-package-release.yml/dispatches" \
+            -f ref='v0.1.1' \
+            -f 'inputs[version]=0.1.1'
