@@ -1,0 +1,45 @@
+name: release version contract
+
+on:
+  pull_request:
+    paths:
+      - '.zpkg.toml'
+      - 'Cargo.lock'
+      - 'src/rust/Cargo.toml'
+      - 'src/dart/pubspec.yaml'
+      - 'src/ts/package.json'
+      - 'scripts/check-release-version-contract.sh'
+      - '.github/workflows/release-version-contract.yml'
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - '.zpkg.toml'
+      - 'Cargo.lock'
+      - 'src/rust/Cargo.toml'
+      - 'src/dart/pubspec.yaml'
+      - 'src/ts/package.json'
+      - 'scripts/check-release-version-contract.sh'
+      - '.github/workflows/release-version-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-version-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact candidate with tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact candidate
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Verify release version parity and immutability
+        run: bash scripts/check-release-version-contract.sh
