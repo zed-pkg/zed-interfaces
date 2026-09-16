@@ -143,9 +143,11 @@ jobs:
             fi
           fi
 
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
-          echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "sha256=$sha256"
+            echo "source_commit=$source_commit"
+          } >> "$GITHUB_OUTPUT"
 
   publish-release:
     name: publish immutable release and prove fallback
