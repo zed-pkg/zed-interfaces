@@ -1,14 +1,14 @@
 [package]
 name = "zed-interfaces"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Core interface definitions for the zed-pkg universal package manager"
 license = "MIT"
 repository = "https://github.com/zed-pkg/zed-interfaces"
 
 # This crate is the Rust slice of a polyglot zed-package: it sits in
-# `src/rust/` beside `src/dart/` and `src/ts/`, which are generated from
-# `schemas/`. `.zpkg.toml` routes this directory to crates.io as
+# `src/rust/` beside the generated `src/dart/` and `src/ts/` slices.
+# `.zpkg.toml` routes this directory to crates.io as
 # `[targets.rust]` — a target may not own `dir = "."`, which is why the
 # manifest lives here rather than at the repository root. See
 # `docs/multi-language-layout.md`.
