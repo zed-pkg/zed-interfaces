@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.zpkg.net/dependents/release-impact-request-v1.json",
+  "title": "ReleaseImpactRequestV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol", "release_event_id", "package", "published_version", "release_class",
+    "security_critical", "published_source_commit"
+  ],
+  "properties": {
+    "protocol": { "type": "string", "const": "zed.release-impact.v1" },
+    "release_event_id": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "package": { "type": "string", "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$" },
+    "previous_version": { "type": "string", "minLength": 1 },
+    "published_version": { "type": "string", "minLength": 1 },
+    "release_class": { "type": "string", "enum": ["patch_suppressed", "patch_security_notify", "minor", "major", "calendar"] },
+    "security_critical": { "type": "boolean" },
+    "published_source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+  }
+}
