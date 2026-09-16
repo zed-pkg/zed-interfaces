@@ -10,6 +10,7 @@ pub mod artifact;
 pub mod binary_artifact;
 pub mod dependency_graph;
 pub mod dependency_graph_export;
+pub mod dependents;
 pub mod environment;
 pub mod environment_lock;
 pub mod environment_v2;
@@ -68,6 +69,13 @@ pub use dependency_graph_export::{
     DEPENDENCY_GRAPH_MESSAGEPACK_MEDIA_TYPE, DEPENDENCY_GRAPH_PROTOBUF_MEDIA_TYPE,
     DEPENDENCY_GRAPH_XML_MEDIA_TYPE, DependencyGraphExportFormat,
     declared_dependency_graph_export_path,
+};
+pub use dependents::{
+    AutomationModeV1, CONSUMER_REGISTRATION_PROTOCOL_V1,
+    CONSUMER_REGISTRATION_RECEIPT_PROTOCOL_V1, ConsumerKindV1, ConsumerRegistrationReceiptV1,
+    ConsumerRegistrationRequestV1, DependentActionV1, DependentImpactV1, DependentsContractError,
+    LockedDependencySnapshotV1, RELEASE_IMPACT_PLAN_PROTOCOL_V1, RELEASE_IMPACT_PROTOCOL_V1,
+    ReleaseClassV1, ReleaseImpactPlanV1, ReleaseImpactRequestV1,
 };
 pub use environment::{
     ActivationPolicy, Checksum, ChecksumAlgorithm, EnvironmentManager, EnvironmentPlan,
