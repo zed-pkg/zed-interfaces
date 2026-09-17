@@ -194,6 +194,25 @@ pub fn validate_env_declarations(declarations: &[EnvDeclaration]) -> Result<(), 
     Ok(())
 }
 
+#[derive(Debug, Default, Deserialize)]
+struct ManifestEnvDocument {
+    #[serde(default)]
+    env: Vec<EnvDeclaration>,
+}
+
+/// Parse and semantically validate only the `[[env]]` portion of a `.zpkg.toml`.
+///
+/// Other root manifest fields are deliberately ignored here. This gives Zed
+/// callers an additive migration path while the core `Manifest` wire type is
+/// upgraded: env metadata can already be admitted without duplicating package
+/// parsing logic or treating the env inventory as operational configuration.
+pub fn parse_manifest_env(input: &str) -> Result<Vec<EnvDeclaration>, String> {
+    let document: ManifestEnvDocument =
+        toml::from_str(input).map_err(|error| format!("manifest env TOML error: {error}"))?;
+    validate_env_declarations(&document.env)?;
+    Ok(document.env)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,9 +246,36 @@ mod tests {
     }
 
     #[test]
+    fn parses_env_inventory_from_full_manifest_without_owning_other_fields() {
+        let text = r#"
+[package]
+org = "oresoftware"
+name = "ores-clis-core"
+version = "0.1.0"
+
+[[env]]
+name = "signal_handlers"
+key = "ORES_CLIS_SIGNAL_HANDLERS"
+kind = "bool"
+required = false
+secret = false
+exposure = "env-only"
+description = "Enable opt-in signal handling."
+overrides = ["signal_handlers.enabled"]
+environments = ["dev", "stage", "prod"]
+defaultValue = "true"
+"#;
+        let declarations = parse_manifest_env(text).unwrap();
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].key, "ORES_CLIS_SIGNAL_HANDLERS");
+        assert_eq!(declarations[0].default_value.as_deref(), Some("true"));
+    }
+
+    #[test]
     fn secret_defaults_and_argv_exposure_fail_closed() {
         let mut declaration = valid();
         declaration.secret = true;
+        declaration.exposure = EnvExposure::ArgvAndEnv;
         assert!(declaration.validate().unwrap_err().contains("env-only"));
         declaration.exposure = EnvExposure::EnvOnly;
         assert!(declaration.validate().unwrap_err().contains("defaultValue"));
