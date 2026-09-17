@@ -20,6 +20,7 @@ pub mod inspection;
 pub mod language;
 pub mod lockfile;
 pub mod manifest;
+pub mod manifest_env;
 pub mod mirror;
 pub mod namespace_claim;
 pub mod native_dependency;
@@ -47,8 +48,7 @@ pub use binary_artifact::{
     BINARY_ARTIFACT_SCHEMA_V1, BINARY_DESCRIPTOR_ARCHIVE_PATH, BINARY_DESCRIPTOR_PATH,
     BINARY_PACKAGE_MANIFEST_ARCHIVE_PATH, BINARY_PACKAGE_MANIFEST_PATH, BinaryArchiveFormatV1,
     BinaryArtifactAttachmentKindV1, BinaryArtifactAttachmentV1, BinaryArtifactError,
-    BinaryArtifactListResponseV1, BinaryArtifactLockV1, BinaryArtifactManifestV1,
-    BinaryArtifactMetadataV1, BinaryArtifactPublishMetaV1, BinaryFileV1, BinaryPackageIdentityV1,
+    BinaryArtifactListResponseV1, BinaryArchiveFormatV1, BinaryFileV1, BinaryPackageIdentityV1,
     BinaryPlatformV1, BinarySourceProvenanceV1,
 };
 pub use dependency_graph::{
@@ -99,6 +99,9 @@ pub use manifest::{
     CodebaseKind, GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,
     NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute, ProjectLifecycleHook,
     ProjectLifecycleHookConfig, ProjectLifecycleMode, ProjectLifecycleSection,
+};
+pub use manifest_env::{
+    EnvDeclaration, EnvEnvironment, EnvExposure, EnvKind, validate_env_declarations,
 };
 pub use mirror::{
     DEFAULT_ASSET_PREFIX, DEFAULT_INDEX_TAG, DEFAULT_RAW_BRANCH, DEFAULT_RAW_PREFIX, GITHUB_HOST,
