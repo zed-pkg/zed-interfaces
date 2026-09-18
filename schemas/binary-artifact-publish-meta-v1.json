@@ -665,8 +665,8 @@
             "$ref": "#/$defs/BuildSection"
           },
           "description": "Replace or provide a dependency's `[build]` step.",
-          "type": "object",
-        }
+          "type": "object"
+        },
         "path": {
           "additionalProperties": {
             "type": "string"
