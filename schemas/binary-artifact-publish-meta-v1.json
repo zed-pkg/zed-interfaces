@@ -149,6 +149,16 @@
       ],
       "type": "object"
     },
+    "CodebaseKind": {
+      "enum": [
+        "contracts",
+        "lib",
+        "sdk",
+        "server",
+        "cli"
+      ],
+      "type": "string"
+    },
     "Ecosystem": {
       "description": "How a consumer's build system takes a dependency in: the resolution\nmechanism, not the language. Drives the install guard and which toolchain\nwiring file `zed install` writes.",
       "oneOf": [
@@ -663,6 +673,13 @@
           },
           "description": "Replace or provide a dependency's `[build]` step.",
           "type": "object"
+        },
+        "path": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Resolve a dependency from a developer-controlled local checkout instead\nof the registry. Values may be absolute or project-relative and may\ncontain $VAR / ${VAR} references. They are data, never shell code:\ncommand substitution and backticks are rejected during validation.",
+          "type": "object"
         }
       },
       "type": "object"
@@ -685,6 +702,10 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/CodebaseKind",
+          "description": "Coarse codebase role used by package tooling and fleet policy. Optional\nhere for legacy/generated compatibility; authored-package enforcement\nbelongs at the CLI boundary."
         },
         "language": {
           "$ref": "#/$defs/Language",
@@ -943,6 +964,10 @@
         "hooks": {
           "$ref": "#/$defs/InstallHooksSection",
           "description": "Target-specific lifecycle hooks, appended after package-level hooks in\neach phase when the target is selected."
+        },
+        "kind": {
+          "$ref": "#/$defs/CodebaseKind",
+          "description": "Optional role override for this polyglot slice. When absent, consumers\ninherit `[package].kind`; use an override only when the target genuinely\nserves a different role from the source package."
         },
         "name": {
           "description": "Published package name for this target. Non-root targets default to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may\noverride that convention here. A whole-repository target (`dir = \".\"`)\nalways publishes as the root `package.name`; omit `name` there or repeat\nthe canonical root name. A different root-target name is invalid.",

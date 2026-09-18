@@ -10,6 +10,7 @@ pub mod artifact;
 pub mod binary_artifact;
 pub mod dependency_graph;
 pub mod dependency_graph_export;
+pub mod dependents;
 pub mod environment;
 pub mod environment_lock;
 pub mod environment_v2;
@@ -29,6 +30,7 @@ pub mod nix_plan;
 pub mod oci;
 pub mod paths;
 pub mod public_intake;
+pub mod recovery;
 pub mod registry;
 pub mod registry_protocol_v1;
 pub mod signing;
@@ -68,6 +70,13 @@ pub use dependency_graph_export::{
     DEPENDENCY_GRAPH_XML_MEDIA_TYPE, DependencyGraphExportFormat,
     declared_dependency_graph_export_path,
 };
+pub use dependents::{
+    AutomationModeV1, CONSUMER_REGISTRATION_PROTOCOL_V1, CONSUMER_REGISTRATION_RECEIPT_PROTOCOL_V1,
+    ConsumerKindV1, ConsumerRegistrationReceiptV1, ConsumerRegistrationRequestV1,
+    DependentActionV1, DependentImpactV1, DependentsContractError, LockedDependencySnapshotV1,
+    RELEASE_IMPACT_PLAN_PROTOCOL_V1, RELEASE_IMPACT_PROTOCOL_V1, ReleaseClassV1,
+    ReleaseImpactPlanV1, ReleaseImpactRequestV1,
+};
 pub use environment::{
     ActivationPolicy, Checksum, ChecksumAlgorithm, EnvironmentManager, EnvironmentPlan,
     EnvironmentPlanError, EnvironmentSource, EnvironmentValidationMode, ImmutableSource,
@@ -87,9 +96,11 @@ pub use git_cli_install::{GIT_CLI_INSTALL_RECEIPT_SCHEMA_VERSION_V1, GitCliInsta
 pub use language::{Ecosystem, Language, detect_ecosystems};
 pub use lockfile::{LockedPackage, Lockfile, LockfileError};
 pub use manifest::{
-    GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,
+    CodebaseKind, GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,
     NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute, ProjectLifecycleHook,
     ProjectLifecycleHookConfig, ProjectLifecycleMode, ProjectLifecycleSection,
+    SourceCompositionEntry, SourceCompositionProjection, SourceCompositionRole,
+    SourceCompositionSection,
 };
 pub use mirror::{
     DEFAULT_ASSET_PREFIX, DEFAULT_INDEX_TAG, DEFAULT_RAW_BRANCH, DEFAULT_RAW_PREFIX, GITHUB_HOST,
@@ -135,6 +146,7 @@ pub use oci::{
     ZED_OCI_MANIFEST_MEDIA_TYPE_V1, ZED_OCI_PACKAGE_TAR_GZ_MEDIA_TYPE_V1,
     ZED_OCI_PACKAGE_ZIP_MEDIA_TYPE_V1,
 };
+pub use recovery::artifact_recovery_locators;
 pub use registry_protocol_v1::{
     REGISTRY_ARCHIVE_MANIFEST_SCHEMA_V1, REGISTRY_CHECKPOINT_SCHEMA_V1,
     REGISTRY_DISCOVERY_SCHEMA_V1, REGISTRY_INDEX_RECORD_SCHEMA_V1,

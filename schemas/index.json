@@ -85,6 +85,11 @@
       "why": "Org claim flow is a web form."
     },
     {
+      "file": "consumer-registration-request-v1.json",
+      "targets": [],
+      "why": "Unpublished consumer registration is emitted by zed-cli and consumed by the registry/server control plane; no browser, Flutter, or editor client decodes it directly."
+    },
+    {
       "file": "dependency-graph-v1.json",
       "targets": [],
       "why": "Resolution/graph contract consumed by zed-cli and the servers (DEN-2864); a front end renders resolved versions, not the graph that produced them."
@@ -268,6 +273,11 @@
       "file": "registry-publish-request-v1.json",
       "targets": [],
       "why": "Registry protocol v1 publication verification is currently implemented by the Rust client and server boundary."
+    },
+    {
+      "file": "release-impact-request-v1.json",
+      "targets": [],
+      "why": "Release-impact planning is a CLI/server automation contract; front ends consume resulting release metadata rather than this control-plane request."
     },
     {
       "file": "search-response.json",

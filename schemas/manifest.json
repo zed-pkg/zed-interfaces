@@ -186,6 +186,16 @@
         "command"
       ]
     },
+    "CodebaseKind": {
+      "type": "string",
+      "enum": [
+        "contracts",
+        "lib",
+        "sdk",
+        "server",
+        "cli"
+      ]
+    },
     "Ecosystem": {
       "description": "How a consumer's build system takes a dependency in: the resolution\nmechanism, not the language. Drives the install guard and which toolchain\nwiring file `zed install` writes.",
       "oneOf": [
@@ -335,6 +345,10 @@
         },
         "git": {
           "$ref": "#/$defs/GitInteropSection"
+        },
+        "source-composition": {
+          "description": "Canonical repository-source composition owned by .zpkg.toml. Native\nVCS metadata such as .gitmodules is a generated/import compatibility\nprojection, never a second dependency-graph authority.",
+          "$ref": "#/$defs/SourceCompositionSection"
         }
       }
     },
@@ -629,6 +643,13 @@
           "additionalProperties": {
             "$ref": "#/$defs/BuildSection"
           }
+        },
+        "path": {
+          "description": "Resolve a dependency from a developer-controlled local checkout instead\nof the registry. Values may be absolute or project-relative and may\ncontain $VAR / ${VAR} references. They are data, never shell code:\ncommand substitution and backticks are rejected during validation.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -654,6 +675,17 @@
           "items": {
             "type": "string"
           }
+        },
+        "kind": {
+          "description": "Coarse codebase role used by package tooling and fleet policy. Optional\nhere for legacy/generated compatibility; authored-package enforcement\nbelongs at the CLI boundary.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CodebaseKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "language": {
           "description": "The language this package's code targets. A multi-language repository\npublishes one package per language, all at one version, and each names\nits own — `acme-clients-java`, `acme-clients-nodejs`. Defaults to\n`universal` (language-agnostic), which is never subject to the install\necosystem guard.",
@@ -1009,6 +1041,106 @@
         }
       }
     },
+    "SourceCompositionEntry": {
+      "description": "One VCS-backed source declared by the Zed manifest.",
+      "type": "object",
+      "properties": {
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "package": {
+          "description": "Canonical Zed package identity for workspace/package-backed sources.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Explicit project-relative checkout path. When omitted, the CLI derives\nit from the corresponding section root plus the source name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "projection": {
+          "$ref": "#/$defs/SourceCompositionProjection",
+          "default": "checkout"
+        },
+        "recursive": {
+          "type": "boolean"
+        },
+        "revision": {
+          "description": "Optional human-authored revision or branch intent. Exact immutable\nprovenance remains a lockfile concern.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "$ref": "#/$defs/SourceCompositionRole"
+        },
+        "url": {
+          "type": "string"
+        },
+        "vcs": {
+          "$ref": "#/$defs/Vcs",
+          "default": "git"
+        }
+      },
+      "required": [
+        "url",
+        "role"
+      ]
+    },
+    "SourceCompositionProjection": {
+      "description": "How the source is projected into the working tree.",
+      "type": "string",
+      "enum": [
+        "checkout",
+        "git-submodule"
+      ]
+    },
+    "SourceCompositionRole": {
+      "description": "Why a repository source is present. Explicit classification prevents a Git\nsubmodule or other checkout from silently becoming a package dependency.",
+      "type": "string",
+      "enum": [
+        "workspace",
+        "inventory",
+        "embedded-source",
+        "experiment-reference",
+        "legacy"
+      ]
+    },
+    "SourceCompositionSection": {
+      "description": "Canonical source-composition declaration. This is authored Zed state;\n.gitmodules/.hg metadata are transport projections or migration inputs.",
+      "type": "object",
+      "properties": {
+        "checkout_dir": {
+          "description": "Default project-relative root for ordinary VCS checkouts. Omitted =\n.zed/vcs. Must not overlap the package materialization tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "git_submodule_dir": {
+          "description": "Default project-relative root for Git-submodule projections. Omitted =\nsubmodules. This is separate from checkout_dir and [install].dir.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sources": {
+          "description": "Stable source names mapped to their transport and ownership declaration.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SourceCompositionEntry"
+          }
+        }
+      }
+    },
     "TargetSection": {
       "description": "One ecosystem's slice of a polyglot package — and, on publish, its own\nindependently installable package.\n\nA repo like `fiducia-clients` carrying `clients/ts`, `clients/java`, and\n`clients/go` declares one target each. `zed publish` then emits **one\nartifact per target**, named `<name>-<target>` by default:\n\n```text\nfiducia/fiducia-clients-nodejs@1.1.2   <- clients/ts only\nfiducia/fiducia-clients-java@1.1.2     <- clients/java only\nfiducia/fiducia-clients-golang@1.1.2   <- clients/go only\n```\n\nOne source of truth and one version in the repo; N packages on the wire.\nA Java consumer downloads only Java bytes — the decisive advantage over\nshipping one fat artifact and slicing it at install time.",
       "type": "object",
@@ -1031,6 +1163,17 @@
         "hooks": {
           "description": "Target-specific lifecycle hooks, appended after package-level hooks in\neach phase when the target is selected.",
           "$ref": "#/$defs/InstallHooksSection"
+        },
+        "kind": {
+          "description": "Optional role override for this polyglot slice. When absent, consumers\ninherit `[package].kind`; use an override only when the target genuinely\nserves a different role from the source package.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CodebaseKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "name": {
           "description": "Published package name for this target. Non-root targets default to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may\noverride that convention here. A whole-repository target (`dir = \".\"`)\nalways publishes as the root `package.name`; omit `name` there or repeat\nthe canonical root name. A different root-target name is invalid.",

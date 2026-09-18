@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$repo_root"
+if [[ "${1:-}" == "--install" ]]; then
+  chmod +x .githooks/pre-push
+  git config core.hooksPath .githooks
+  printf 'installed Zed pre-push hook via core.hooksPath=.githooks\n'
+  exit 0
+fi
+[[ -f .zpkg.toml ]] || exit 0
+command -v zed >/dev/null 2>&1 || { echo 'zed CLI is required; install the pinned project/fleet version first' >&2; exit 1; }
+lock_tracked=0
+if git ls-files --error-unmatch .zpkg.lock >/dev/null 2>&1; then lock_tracked=1; fi
+pack_dir="${TMPDIR:-/tmp}/zed-latest-deps-pack-$$"
+cleanup() {
+  rm -rf "$pack_dir"
+  if [[ "$lock_tracked" -eq 0 ]]; then rm -f .zpkg.lock; fi
+}
+trap cleanup EXIT
+zed install
+if [[ "$lock_tracked" -eq 1 ]] && ! git diff --quiet HEAD -- .zpkg.lock; then
+  echo 'Zed dependency lock is stale relative to the newest versions allowed by .zpkg.toml.' >&2
+  echo 'Run zed install, review the dependency update, commit .zpkg.lock, and retry.' >&2
+  git --no-pager diff HEAD -- .zpkg.lock >&2 || true
+  exit 1
+fi
+zed validate --require-lock
+zed install --frozen
+zed build
+if [[ -f Cargo.toml ]]; then
+  if [[ -f Cargo.lock ]]; then zed develop --no-install -c 'cargo check --locked --all-targets'; else zed develop --no-install -c 'cargo check --all-targets'; fi
+fi
+if [[ -f go.mod ]]; then zed develop --no-install -c 'go test ./...'; fi
+
+node_compile_dir() {
+  local dir="$1"
+  local package_json="$dir/package.json"
+  local pm install_cmd script
+  [[ -f "$package_json" ]] || return 1
+
+  if node -e 'const p=require(process.argv[1]); process.exit(p.scripts && p.scripts.typecheck ? 0 : 1)' "./$package_json"; then
+    script=typecheck
+  elif node -e 'const p=require(process.argv[1]); process.exit(p.scripts && p.scripts.build ? 0 : 1)' "./$package_json"; then
+    script=build
+  else
+    return 1
+  fi
+
+  if [[ -f "$dir/pnpm-lock.yaml" ]]; then
+    pm='corepack pnpm'
+    install_cmd='corepack pnpm install --frozen-lockfile'
+  elif [[ -f "$dir/package-lock.json" ]]; then
+    pm='npm'
+    install_cmd='npm ci'
+  elif [[ -f "$dir/yarn.lock" ]]; then
+    pm='corepack yarn'
+    install_cmd='corepack yarn install --immutable'
+  else
+    pm='npm'
+    install_cmd='npm install --ignore-scripts'
+  fi
+
+  printf 'checking Node/TypeScript package %s with %s\n' "$dir" "$script"
+  zed develop --no-install -c "cd '$dir' && $install_cmd && $pm run $script"
+}
+
+if [[ -f package.json ]]; then
+  if node_compile_dir .; then
+    :
+  elif node_compile_dir src/ts; then
+    :
+  else
+    echo 'no canonical Node/TypeScript package exposes a typecheck or build script; refusing to claim Node compile coverage' >&2
+    exit 1
+  fi
+fi
+if [[ -f pyproject.toml || -f setup.py ]]; then zed develop --no-install -c 'python3 -m compileall -q .'; fi
+if [[ -f pom.xml ]]; then zed develop --no-install -c 'mvn -B -DskipTests compile'; fi
+if [[ -f gradlew ]]; then zed develop --no-install -c './gradlew --no-daemon classes'; fi
+mkdir -p "$pack_dir"
+zed pack --out "$pack_dir"

@@ -1,6 +1,6 @@
 {
   "name": "@zed-pkg/zed-interfaces",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Front-end contract types for the zed-pkg registry, generated from the JSON Schemas that the Rust crate in src/rust is the source of truth for.",
   "license": "MIT",
   "repository": {

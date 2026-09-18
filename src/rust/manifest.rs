@@ -157,6 +157,30 @@ pub struct Manifest {
     pub targets: BTreeMap<String, TargetSection>,
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum CodebaseKind {
+    Contracts,
+    Lib,
+    Sdk,
+    Server,
+    Cli,
+}
+
+impl CodebaseKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Contracts => "contracts",
+            Self::Lib => "lib",
+            Self::Sdk => "sdk",
+            Self::Server => "server",
+            Self::Cli => "cli",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct PackageSection {
     /// Namespace the package is published under. Lowercase slug.
@@ -165,6 +189,11 @@ pub struct PackageSection {
     /// Package name, unique within the org. Lowercase slug.
     #[schemars(length(min = 1), regex(pattern = r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"))]
     pub name: String,
+    /// Coarse codebase role used by package tooling and fleet policy. Optional
+    /// here for legacy/generated compatibility; authored-package enforcement
+    /// belongs at the CLI boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<CodebaseKind>,
     /// Version of this package, interpreted according to `version_scheme`
     /// (semver by default).
     pub version: String,
@@ -314,6 +343,15 @@ impl InstallSection {
 pub struct InteropSection {
     #[serde(skip_serializing_if = "GitInteropSection::is_empty")]
     pub git: GitInteropSection,
+    /// Canonical repository-source composition owned by .zpkg.toml. Native
+    /// VCS metadata such as .gitmodules is a generated/import compatibility
+    /// projection, never a second dependency-graph authority.
+    #[serde(
+        rename = "source-composition",
+        alias = "source_composition",
+        skip_serializing_if = "SourceCompositionSection::is_empty"
+    )]
+    pub source_composition: SourceCompositionSection,
     /// Bind installed CLI entry points to one package-owned flags-2-env contract.
     /// Zed uses this explicit path rather than discovering configuration from
     /// the consumer's working directory.
@@ -327,7 +365,7 @@ pub struct InteropSection {
 
 impl InteropSection {
     pub fn is_empty(&self) -> bool {
-        self.git.is_empty() && self.flags_2_env.is_empty()
+        self.git.is_empty() && self.source_composition.is_empty() && self.flags_2_env.is_empty()
     }
 }
 
@@ -365,6 +403,93 @@ impl GitInteropSection {
     }
 }
 
+/// Canonical source-composition declaration. This is authored Zed state;
+/// .gitmodules/.hg metadata are transport projections or migration inputs.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SourceCompositionSection {
+    /// Default project-relative root for ordinary VCS checkouts. Omitted =
+    /// .zed/vcs. Must not overlap the package materialization tree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checkout_dir: Option<String>,
+    /// Default project-relative root for Git-submodule projections. Omitted =
+    /// submodules. This is separate from checkout_dir and [install].dir.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git_submodule_dir: Option<String>,
+    /// Stable source names mapped to their transport and ownership declaration.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub sources: BTreeMap<String, SourceCompositionEntry>,
+}
+
+impl SourceCompositionSection {
+    pub fn is_empty(&self) -> bool {
+        self.checkout_dir.is_none() && self.git_submodule_dir.is_none() && self.sources.is_empty()
+    }
+
+    pub fn checkout_dir(&self) -> &str {
+        self.checkout_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(".zed/vcs")
+    }
+
+    pub fn git_submodule_dir(&self) -> &str {
+        self.git_submodule_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("submodules")
+    }
+}
+
+/// Why a repository source is present. Explicit classification prevents a Git
+/// submodule or other checkout from silently becoming a package dependency.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum SourceCompositionRole {
+    Workspace,
+    Inventory,
+    EmbeddedSource,
+    ExperimentReference,
+    Legacy,
+}
+
+/// How the source is projected into the working tree.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum SourceCompositionProjection {
+    #[default]
+    Checkout,
+    GitSubmodule,
+}
+
+/// One VCS-backed source declared by the Zed manifest.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SourceCompositionEntry {
+    #[serde(default)]
+    pub vcs: Vcs,
+    pub url: String,
+    pub role: SourceCompositionRole,
+    #[serde(default)]
+    pub projection: SourceCompositionProjection,
+    /// Explicit project-relative checkout path. When omitted, the CLI derives
+    /// it from the corresponding section root plus the source name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// Canonical Zed package identity for workspace/package-backed sources.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
+    /// Optional human-authored revision or branch intent. Exact immutable
+    /// provenance remains a lockfile concern.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub recursive: bool,
+}
+
 /// One ecosystem's slice of a polyglot package — and, on publish, its own
 /// independently installable package.
 ///
@@ -387,6 +512,11 @@ pub struct TargetSection {
     /// `python` or `clients/go`. Must be a safe relative path (no leading `/`,
     /// no `..`) so a target can never escape the package.
     pub dir: String,
+    /// Optional role override for this polyglot slice. When absent, consumers
+    /// inherit `[package].kind`; use an override only when the target genuinely
+    /// serves a different role from the source package.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<CodebaseKind>,
     /// Published package name for this target. Non-root targets default to
     /// `<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may
     /// override that convention here. A whole-repository target (`dir = "."`)
@@ -436,6 +566,12 @@ pub struct TargetSection {
 }
 
 impl TargetSection {
+    /// Effective role for this slice: its explicit override, otherwise the
+    /// package-level role.
+    pub fn effective_kind(&self, package_kind: Option<CodebaseKind>) -> Option<CodebaseKind> {
+        self.kind.or(package_kind)
+    }
+
     /// The language this target ships, from its explicit key. `universal` when
     /// the key is not a language zed knows — such a target still publishes and
     /// installs, it just is not ecosystem-gated.
@@ -1391,6 +1527,199 @@ fn validate_project_lifecycle_command(
     Ok(())
 }
 
+fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError> {
+    let section = &manifest.interop.source_composition;
+    if section.is_empty() {
+        return Ok(());
+    }
+    if manifest.interop.git.consume_gitmodules {
+        return Err(ManifestError::InvalidSourceComposition(
+            "manifest-authoritative [interop.source-composition] cannot coexist with legacy [interop.git].consume_gitmodules = true; import the legacy Git metadata and keep one authority".to_string(),
+        ));
+    }
+
+    let checkout_root = section.checkout_dir();
+    let submodule_root = section.git_submodule_dir();
+    for (label, value) in [
+        ("checkout_dir", checkout_root),
+        ("git_submodule_dir", submodule_root),
+    ] {
+        if !is_safe_relative_path(value)
+            || is_reserved_source_path(value)
+            || value.len() > 4096
+            || value.chars().any(char::is_control)
+        {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "{label} `{value}` must be a safe non-reserved project-relative path of at most 4096 bytes without control characters"
+            )));
+        }
+        if paths_overlap(value, manifest.modules_dir()) {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "{label} `{value}` overlaps package install directory `{}`",
+                manifest.modules_dir()
+            )));
+        }
+    }
+    if paths_overlap(checkout_root, submodule_root) {
+        return Err(ManifestError::InvalidSourceComposition(format!(
+            "checkout_dir `{checkout_root}` and git_submodule_dir `{submodule_root}` must be disjoint"
+        )));
+    }
+
+    let mut claimed_paths = BTreeMap::<String, String>::new();
+    let mut claimed_packages = BTreeMap::<String, String>::new();
+    for (name, source) in &section.sources {
+        if !is_source_name(name) {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source name `{name}` must use 1-128 characters from [A-Za-z0-9._-] and may not start with a dot"
+            )));
+        }
+        if !is_allowed_repo_url(&source.url)
+            || source.url.chars().any(char::is_control)
+            || source.url.chars().any(char::is_whitespace)
+        {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` has an invalid repository URL"
+            )));
+        }
+        if source.projection == SourceCompositionProjection::GitSubmodule && source.vcs != Vcs::Git
+        {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` uses git-submodule projection but vcs is `{}`",
+                source.vcs
+            )));
+        }
+        if source.projection == SourceCompositionProjection::GitSubmodule
+            && source.revision.is_some()
+        {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "Git-submodule source `{name}` may not declare revision; the superproject gitlink and Zed lock own the exact commit"
+            )));
+        }
+        if let Some(package) = source.package.as_deref() {
+            if !is_dependency_key(package) {
+                return Err(ManifestError::InvalidSourceComposition(format!(
+                    "source `{name}` has invalid package identity `{package}`"
+                )));
+            }
+            if let Some(previous_name) = claimed_packages.insert(package.to_string(), name.clone()) {
+                return Err(ManifestError::InvalidSourceComposition(format!(
+                    "package `{package}` is declared by both source `{previous_name}` and source `{name}`"
+                )));
+            }
+        }
+        if source.role == SourceCompositionRole::Workspace && source.package.is_none() {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "workspace source `{name}` must declare package = \"org/name\""
+            )));
+        }
+        if source.revision.is_some() && source.branch.is_some() {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` may declare revision or branch, not both"
+            )));
+        }
+        for (field, value) in [
+            ("revision", source.revision.as_deref()),
+            ("branch", source.branch.as_deref()),
+        ] {
+            if let Some(value) = value
+                && (value.trim().is_empty()
+                    || value.len() > 512
+                    || value.starts_with('-')
+                    || value.chars().any(char::is_control)
+                    || value.chars().any(char::is_whitespace))
+            {
+                return Err(ManifestError::InvalidSourceComposition(format!(
+                    "source `{name}` {field} must be a trimmed non-option VCS token of at most 512 bytes without whitespace or control characters"
+                )));
+            }
+        }
+
+        let path = source.path.as_deref().unwrap_or_else(|| {
+            if source.projection == SourceCompositionProjection::GitSubmodule {
+                submodule_root
+            } else {
+                checkout_root
+            }
+        });
+        let derived;
+        let effective = if source.path.is_some() {
+            path
+        } else {
+            derived = format!("{path}/{name}");
+            derived.as_str()
+        };
+        if !is_safe_relative_path(effective)
+            || is_reserved_source_path(effective)
+            || effective.len() > 4096
+            || effective.chars().any(char::is_control)
+        {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` path `{effective}` must be a safe non-reserved project-relative path of at most 4096 bytes without control characters"
+            )));
+        }
+        if paths_overlap(effective, manifest.modules_dir()) {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` path `{effective}` overlaps package install directory `{}`",
+                manifest.modules_dir()
+            )));
+        }
+        if let Some((previous_path, previous_name)) = claimed_paths
+            .iter()
+            .find(|(previous_path, _)| paths_overlap(previous_path, effective))
+        {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` path `{effective}` overlaps source `{previous_name}` path `{previous_path}`"
+            )));
+        }
+        claimed_paths.insert(effective.to_string(), name.clone());
+    }
+    Ok(())
+}
+
+fn is_source_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && !value.starts_with('.')
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+fn paths_overlap(left: &str, right: &str) -> bool {
+    let left = left.trim().trim_matches('/');
+    let right = right.trim().trim_matches('/');
+    left == right
+        || left
+            .strip_prefix(right)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+        || right
+            .strip_prefix(left)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn is_reserved_source_path(path: &str) -> bool {
+    let normalized = path.trim().trim_matches('/');
+    let first = normalized.split('/').next().unwrap_or_default();
+    matches!(first, ".git" | ".hg" | ".svn" | ".zpkg-staging")
+        || matches!(normalized, ".zpkg.toml" | ".zpkg.lock" | ".gitmodules")
+        || [
+            ".zed/operation.lock",
+            ".zed/pack",
+            ".zed/tools",
+            ".zed/environment.lock.toml",
+            ".zed/paths.json",
+            ".zed/node_path",
+            ".zed/classpath",
+            ".zed/go.work",
+            ".zed/pythonpath",
+            ".zed/cargo-paths.toml",
+            ".zed/pub-deps.yaml",
+        ]
+        .iter()
+        .any(|reserved| paths_overlap(normalized, reserved))
+}
+
 fn validate_project_lifecycle_shell(shell: &str, phase: &str) -> Result<(), ManifestError> {
     if shell.is_empty()
         || shell.trim() != shell
@@ -1499,11 +1828,17 @@ pub struct OverridesSection {
     /// Replace or provide a dependency's `[build]` step.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub build: BTreeMap<String, BuildSection>,
+    /// Resolve a dependency from a developer-controlled local checkout instead
+    /// of the registry. Values may be absolute or project-relative and may
+    /// contain $VAR / ${VAR} references. They are data, never shell code:
+    /// command substitution and backticks are rejected during validation.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub path: BTreeMap<String, String>,
 }
 
 impl OverridesSection {
     pub fn is_empty(&self) -> bool {
-        self.build.is_empty()
+        self.build.is_empty() && self.path.is_empty()
     }
 }
 
@@ -1531,6 +1866,8 @@ pub enum ManifestError {
     InvalidBin(String, String),
     #[error("invalid [interop.flags-2-env] section: {0}")]
     InvalidFlags2EnvInterop(String),
+    #[error("invalid [interop.source-composition] section: {0}")]
+    InvalidSourceComposition(String),
     #[error("invalid build section: {0}")]
     InvalidBuild(String),
     #[error("invalid native dependency declaration for `{0}`: {1}")]
@@ -1543,6 +1880,8 @@ pub enum ManifestError {
     InvalidWorkspaceMember(String),
     #[error("invalid install dir `{0}`: {1}")]
     InvalidInstallDir(String, String),
+    #[error("invalid local path override for `{0}`: {1}")]
+    InvalidPathOverride(String, String),
     #[error("invalid target `{0}`: {1}")]
     InvalidTarget(String, String),
     #[error("invalid native release route for target `{0}`: {1}")]
@@ -1612,13 +1951,47 @@ pub fn is_safe_relative_path(path: &str) -> bool {
 }
 
 fn is_allowed_repo_url(url: &str) -> bool {
-    // The repo URL renders as a link in registry UIs and is shelled to VCS
-    // tooling, so restrict it to the schemes those consumers expect.
-    ["https://", "http://", "ssh://", "git://", "git+ssh://"]
-        .iter()
-        .any(|scheme| url.starts_with(scheme))
-        // scp-like git syntax: git@github.com:org/repo.git
-        || (url.contains('@') && url.contains(':') && !url.contains("://"))
+    // The repo URL renders as a link in registry UIs and is passed to VCS
+    // tooling. Never permit option-shaped URLs or embedded HTTP credentials
+    // that could be committed and later echoed in logs.
+    if url.starts_with('-') {
+        return false;
+    }
+    for scheme in ["https://", "http://"] {
+        if let Some(rest) = url.strip_prefix(scheme) {
+            let authority = rest.split('/').next().unwrap_or_default();
+            return !authority.is_empty() && !authority.contains('@');
+        }
+    }
+    if let Some(rest) = url.strip_prefix("git://") {
+        let authority = rest.split('/').next().unwrap_or_default();
+        return !authority.is_empty() && !authority.contains('@');
+    }
+    for scheme in ["ssh://", "git+ssh://"] {
+        if let Some(rest) = url.strip_prefix(scheme) {
+            let authority = rest.split('/').next().unwrap_or_default();
+            if authority.is_empty() {
+                return false;
+            }
+            if let Some((userinfo, host)) = authority.rsplit_once('@') {
+                return !userinfo.is_empty() && !userinfo.contains(':') && !host.is_empty();
+            }
+            return true;
+        }
+    }
+    // scp-like Git syntax: git@github.com:org/repo.git. Keep the username and
+    // host/path nonempty and option-safe; credentials do not belong here.
+    if !url.contains("://")
+        && let Some((user, host_path)) = url.split_once('@')
+        && let Some((host, path)) = host_path.split_once(':')
+    {
+        return !user.is_empty()
+            && !user.contains(':')
+            && !host.is_empty()
+            && !path.is_empty()
+            && !path.starts_with('-');
+    }
+    false
 }
 
 fn validate_native_release_section(
@@ -2034,6 +2407,7 @@ impl Manifest {
                 ));
             }
         }
+        validate_source_composition(self)?;
         if !self.interop.flags_2_env.is_empty() {
             let interop = &self.interop.flags_2_env;
             let config = interop
@@ -2095,9 +2469,34 @@ impl Manifest {
                 }
             }
         }
-        for key in self.overrides.build.keys() {
+        for key in self
+            .overrides
+            .build
+            .keys()
+            .chain(self.overrides.path.keys())
+        {
             if !is_dependency_key(key) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
+            }
+        }
+        for (key, value) in &self.overrides.path {
+            if value.trim().is_empty() {
+                return Err(ManifestError::InvalidPathOverride(
+                    key.clone(),
+                    "path must not be empty".to_string(),
+                ));
+            }
+            if value.chars().any(char::is_control) {
+                return Err(ManifestError::InvalidPathOverride(
+                    key.clone(),
+                    "path must not contain control characters".to_string(),
+                ));
+            }
+            if value.contains("$(") || value.contains('`') {
+                return Err(ManifestError::InvalidPathOverride(
+                    key.clone(),
+                    "only $VAR and ${VAR} interpolation are allowed; command substitution and backticks are forbidden".to_string(),
+                ));
             }
         }
         if let Some(ws) = &self.workspace {
@@ -2141,6 +2540,16 @@ impl Manifest {
     /// True when this package ships per-ecosystem subtrees.
     pub fn is_polyglot(&self) -> bool {
         !self.targets.is_empty()
+    }
+
+    /// Effective role for a selected polyglot target. Exact target names and
+    /// supported language synonyms resolve through the same path used by
+    /// installation; the target override wins over `[package].kind`.
+    pub fn effective_target_kind(&self, target: &str) -> Option<CodebaseKind> {
+        let key = self.resolve_target_key(target)?;
+        self.targets
+            .get(key)
+            .and_then(|section| section.effective_kind(self.package.kind))
     }
 
     /// The package name a target publishes under. A whole-repository target
@@ -2295,6 +2704,7 @@ impl Manifest {
         let section = self.targets.get(target)?;
         let mut derived = self.clone();
         derived.package.name = name;
+        derived.package.kind = section.effective_kind(self.package.kind);
         derived.package.description = Some(match &self.package.description {
             Some(base) => format!("{base} ({target})"),
             None => format!("{} ({target} client)", self.package.name),
@@ -2481,6 +2891,13 @@ impl Manifest {
         dep_build: Option<&BuildSection>,
     ) -> Option<BuildSection> {
         self.overrides.build.get(dep_key).or(dep_build).cloned()
+    }
+
+    /// Developer-local source override for one dependency, if configured.
+    /// Expansion and canonicalization are intentionally owned by the CLI so
+    /// this shared contract remains side-effect free.
+    pub fn dependency_path_override(&self, dep_key: &str) -> Option<&str> {
+        self.overrides.path.get(dep_key).map(String::as_str)
     }
 
     /// `org/name`, the canonical package identifier.
