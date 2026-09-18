@@ -50,6 +50,29 @@ fn path_overrides_accept_env_templates_without_shell_execution() {
 }
 
 #[test]
+fn default_install_and_workspace_roots_are_disjoint_and_canonical() {
+    let parsed = Manifest::parse(&manifest(
+        r#"[workspace]
+
+[workspace.sources.api]
+vcs = "git"
+url = "https://github.com/acme/api"
+package = "acme/api"
+"#,
+    ))
+    .expect("default project layout is valid");
+
+    assert_eq!(parsed.modules_dir(), ".zed/pkg");
+    let workspace = parsed.workspace.as_ref().expect("workspace");
+    assert_eq!(workspace.checkout_dir(), ".zed/vcs");
+    assert_eq!(workspace.git_submodule_dir(), "submodules");
+    assert_eq!(
+        workspace.source_path("api", &workspace.sources["api"]),
+        ".zed/vcs/api"
+    );
+}
+
+#[test]
 fn workspace_sources_derive_disjoint_mode_specific_paths() {
     let parsed = Manifest::parse(&manifest(
         r#"[install]
