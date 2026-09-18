@@ -1550,7 +1550,8 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
                 "source `{name}` has an invalid repository URL"
             )));
         }
-        if source.projection == SourceCompositionProjection::GitSubmodule && source.vcs != Vcs::Git {
+        if source.projection == SourceCompositionProjection::GitSubmodule && source.vcs != Vcs::Git
+        {
             return Err(ManifestError::InvalidSourceComposition(format!(
                 "source `{name}` uses git-submodule projection but vcs is `{}`",
                 source.vcs
