@@ -38,17 +38,19 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: 03ccc0ecdfc70f9198c3ccf80718910961d3fde1
+          ref: d60d0d79d83e075077382623ec9e23a401ab601f
           path: .deps/typespec-json-schema-validator
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22.16.0"
-      - name: Audit and install the locked canonical compiler and CLI native addon
+      - name: Audit and install the locked canonical compiler and parity tools
         env:
           TSJSV_NPM_AUDIT_RECEIPT: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
         run: |
-          test "$(git -C .deps/typespec-json-schema-validator rev-parse HEAD)" = 03ccc0ecdfc70f9198c3ccf80718910961d3fde1
+          test "$(git -C .deps/api-docs rev-parse HEAD)" = 41fb8561b1195c01a59cc92f2fb608fe796cef52
+          git -C .deps/api-docs diff --exit-code HEAD
+          test "$(git -C .deps/typespec-json-schema-validator rev-parse HEAD)" = d60d0d79d83e075077382623ec9e23a401ab601f
           git -C .deps/typespec-json-schema-validator diff --exit-code HEAD
           node .deps/typespec-json-schema-validator/scripts/npm-audit-gate.mjs
           npm ci --prefix .deps/typespec-json-schema-validator
@@ -91,5 +93,6 @@ jobs:
           done
       - name: Preserve validator and authored sources
         run: |
+          git -C .deps/api-docs diff --exit-code HEAD
           git -C .deps/typespec-json-schema-validator diff --exit-code HEAD
           git diff --exit-code -- validation/typespec validation/public-contracts.v1.json validation/compiler/cases.json
