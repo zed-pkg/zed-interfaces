@@ -139,6 +139,32 @@ path = ".zed/vcs/lib"
 }
 
 #[test]
+fn source_composition_rejects_legacy_git_dual_authority() {
+    let input = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[interop.git]
+consume_gitmodules = true
+
+[interop.source-composition.sources.lib]
+vcs = "git"
+url = "https://github.com/acme/lib.git"
+role = "workspace"
+package = "acme/lib"
+"#;
+    let error = Manifest::parse(input).expect_err("legacy and canonical Git authority must conflict");
+    assert!(error.to_string().contains("cannot coexist"), "{error}");
+}
+
+#[test]
 fn source_composition_rejects_duplicate_package_ownership_and_generated_state_paths() {
     let base = r#"
 [package]
