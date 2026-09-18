@@ -1777,7 +1777,7 @@ pub enum WorkspaceSourceRole {
 }
 
 /// One independently editable repository managed by workspace source composition.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct WorkspaceSourceSection {
     #[serde(default)]
@@ -1798,20 +1798,6 @@ pub struct WorkspaceSourceSection {
     pub mode: WorkspaceSourceMode,
     #[serde(default)]
     pub role: WorkspaceSourceRole,
-}
-
-impl Default for WorkspaceSourceSection {
-    fn default() -> Self {
-        Self {
-            vcs: Vcs::default(),
-            url: String::new(),
-            path: None,
-            package: None,
-            branch: None,
-            mode: WorkspaceSourceMode::default(),
-            role: WorkspaceSourceRole::default(),
-        }
-    }
 }
 
 /// Consumer-side dependency patches, keyed by `org/name`.
