@@ -1,6 +1,6 @@
 [package]
 name = "zed-interfaces"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Core interface definitions for the zed-pkg universal package manager"
 license = "MIT"

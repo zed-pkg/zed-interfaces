@@ -128,6 +128,16 @@
         "command"
       ]
     },
+    "CodebaseKind": {
+      "type": "string",
+      "enum": [
+        "contracts",
+        "lib",
+        "sdk",
+        "server",
+        "cli"
+      ]
+    },
     "DetachedSignatureV1": {
       "type": "object",
       "properties": {
@@ -715,6 +725,13 @@
           "additionalProperties": {
             "$ref": "#/$defs/BuildSection"
           }
+        },
+        "path": {
+          "description": "Resolve a dependency from a developer-controlled local checkout instead\nof the registry. Values may be absolute or project-relative and may\ncontain $VAR / ${VAR} references. They are data, never shell code:\ncommand substitution and backticks are rejected during validation.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -740,6 +757,17 @@
           "items": {
             "type": "string"
           }
+        },
+        "kind": {
+          "description": "Coarse codebase role used by package tooling and fleet policy. Optional\nhere for legacy/generated compatibility; authored-package enforcement\nbelongs at the CLI boundary.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CodebaseKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "language": {
           "description": "The language this package's code targets. A multi-language repository\npublishes one package per language, all at one version, and each names\nits own — `acme-clients-java`, `acme-clients-nodejs`. Defaults to\n`universal` (language-agnostic), which is never subject to the install\necosystem guard.",
@@ -1117,6 +1145,17 @@
         "hooks": {
           "description": "Target-specific lifecycle hooks, appended after package-level hooks in\neach phase when the target is selected.",
           "$ref": "#/$defs/InstallHooksSection"
+        },
+        "kind": {
+          "description": "Optional role override for this polyglot slice. When absent, consumers\ninherit `[package].kind`; use an override only when the target genuinely\nserves a different role from the source package.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CodebaseKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "name": {
           "description": "Published package name for this target. Non-root targets default to\n`<package.name>-<target key>` (e.g. `fiducia-clients-java`) and may\noverride that convention here. A whole-repository target (`dir = \".\"`)\nalways publishes as the root `package.name`; omit `name` there or repeat\nthe canonical root name. A different root-target name is invalid.",
