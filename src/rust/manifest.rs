@@ -93,7 +93,7 @@ pub struct Manifest {
     pub overrides: OverridesSection,
     /// Executables this package exposes, keyed by command name, valued by a
     /// path relative to the package root. On install they are hoisted into
-    /// `zed_modules/.bin/` and runnable via `zed run <name>` (zed-docs
+    /// `.zed/pkg/.bin/` and runnable via `zed run <name>` (zed-docs
     /// issue #7).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub bin: BTreeMap<String, String>,
@@ -105,7 +105,7 @@ pub struct Manifest {
     /// zed complements npm/maven/etc. rather than replacing them, so this dir
     /// sits alongside the native one and the ecosystem adapter wires it into
     /// the toolchain (NODE_PATH / node_modules, the JVM classpath, …). `dir`
-    /// defaults to `zed_modules`; relocate it with e.g. `.vendor/.zed` or
+    /// defaults to `.zed/pkg`; relocate it with e.g. `.vendor/.zed` or
     /// `.deps/.zed`.
     #[serde(default, skip_serializing_if = "InstallSection::is_empty")]
     pub install: InstallSection,
@@ -295,7 +295,7 @@ pub struct ScriptsSection {
 #[serde(default)]
 pub struct InstallSection {
     /// Project-relative directory for the installed tree (`<dir>/<org>/<name>`).
-    /// Defaults to `zed_modules`. Common overrides: `.vendor/.zed`, `.deps/.zed`.
+    /// Defaults to `.zed/pkg`. Common overrides: `.vendor/.zed`, `.deps/.zed`.
     /// Must be a safe relative path (no leading `/`, no `..`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dir: Option<String>,
@@ -2432,7 +2432,7 @@ impl Manifest {
     }
 
     /// Project-relative directory dependencies install into. Honors
-    /// `[install].dir` (e.g. `.vendor/.zed`), else the default `zed_modules`.
+    /// `[install].dir` (e.g. `.vendor/.zed`), else the default `.zed/pkg`.
     pub fn modules_dir(&self) -> &str {
         self.install
             .dir
