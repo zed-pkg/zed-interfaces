@@ -28,6 +28,7 @@ fn canonical_writer_upgrades_legacy_none_without_mutating_the_builder() {
         version: Lockfile::CURRENT_VERSION,
         packages: vec![package(None)],
         native_dependencies: Vec::new(),
+        tools: Vec::new(),
         nix_adapters: Vec::new(),
     };
 
@@ -50,6 +51,7 @@ fn canonical_writer_preserves_a_stronger_verified_revision() {
         version: Lockfile::CURRENT_VERSION,
         packages: vec![package(Some(revision))],
         native_dependencies: Vec::new(),
+        tools: Vec::new(),
         nix_adapters: Vec::new(),
     };
 
@@ -103,6 +105,7 @@ fn fallback_derivation_rejects_malformed_or_zero_hashes() {
             version: Lockfile::CURRENT_VERSION,
             packages: vec![bad],
             native_dependencies: Vec::new(),
+            tools: Vec::new(),
             nix_adapters: Vec::new(),
         };
         let error = lock.to_toml_string().unwrap_err().to_string();
