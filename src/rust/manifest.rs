@@ -1520,9 +1520,9 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
         ("checkout_dir", checkout_root),
         ("git_submodule_dir", submodule_root),
     ] {
-        if !is_safe_relative_path(value) {
+        if !is_safe_relative_path(value) || is_reserved_source_path(value) {
             return Err(ManifestError::InvalidSourceComposition(format!(
-                "{label} `{value}` must be a safe project-relative path"
+                "{label} `{value}` must be a safe non-reserved project-relative path"
             )));
         }
         if paths_overlap(value, manifest.modules_dir()) {
@@ -1545,7 +1545,10 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
                 "source name `{name}` must use 1-128 characters from [A-Za-z0-9._-] and may not start with a dot"
             )));
         }
-        if !is_allowed_repo_url(&source.url) || source.url.chars().any(char::is_control) {
+        if !is_allowed_repo_url(&source.url)
+            || source.url.chars().any(char::is_control)
+            || source.url.chars().any(char::is_whitespace)
+        {
             return Err(ManifestError::InvalidSourceComposition(format!(
                 "source `{name}` has an invalid repository URL"
             )));
@@ -1576,6 +1579,11 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
                 "workspace source `{name}` must declare package = \"org/name\""
             )));
         }
+        if source.revision.is_some() && source.branch.is_some() {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` may declare revision or branch, not both"
+            )));
+        }
         for (field, value) in [
             ("revision", source.revision.as_deref()),
             ("branch", source.branch.as_deref()),
@@ -1583,10 +1591,12 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
             if let Some(value) = value
                 && (value.trim().is_empty()
                     || value.len() > 512
-                    || value.chars().any(char::is_control))
+                    || value.starts_with('-')
+                    || value.chars().any(char::is_control)
+                    || value.chars().any(char::is_whitespace))
             {
                 return Err(ManifestError::InvalidSourceComposition(format!(
-                    "source `{name}` {field} must be a trimmed non-control string of at most 512 bytes"
+                    "source `{name}` {field} must be a trimmed non-option VCS token of at most 512 bytes without whitespace or control characters"
                 )));
             }
         }
@@ -1605,9 +1615,9 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
             derived = format!("{path}/{name}");
             derived.as_str()
         };
-        if !is_safe_relative_path(effective) {
+        if !is_safe_relative_path(effective) || is_reserved_source_path(effective) {
             return Err(ManifestError::InvalidSourceComposition(format!(
-                "source `{name}` path `{effective}` must be a safe project-relative path"
+                "source `{name}` path `{effective}` must be a safe non-reserved project-relative path"
             )));
         }
         if paths_overlap(effective, manifest.modules_dir()) {
@@ -1648,6 +1658,14 @@ fn paths_overlap(left: &str, right: &str) -> bool {
         || right
             .strip_prefix(left)
             .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn is_reserved_source_path(path: &str) -> bool {
+    let normalized = path.trim().trim_matches('/');
+    let first = normalized.split('/').next().unwrap_or_default();
+    matches!(first, ".git" | ".hg" | ".svn" | ".zpkg-staging")
+        || matches!(normalized, ".zpkg.toml" | ".zpkg.lock" | ".gitmodules")
+        || paths_overlap(normalized, ".zed/operation.lock")
 }
 
 fn validate_project_lifecycle_shell(shell: &str, phase: &str) -> Result<(), ManifestError> {
