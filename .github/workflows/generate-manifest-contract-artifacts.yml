@@ -1,0 +1,57 @@
+name: generate manifest contract artifacts
+
+on:
+  pull_request:
+    paths:
+      - src/rust/manifest.rs
+      - src/rust/tests/workspace_source_contract.rs
+      - src/rust/examples/generate_schemas.rs
+      - schemas/manifest.json
+      - .github/workflows/generate-manifest-contract-artifacts.yml
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          show-progress: false
+
+      - name: Verify exact candidate and install committed Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          toolchain="$(sed -n 's/^channel = "\([^"]*\)"/\1/p' rust-toolchain.toml)"
+          [[ "$toolchain" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          rustup toolchain install "$toolchain" --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default "$toolchain"
+
+      - name: Generate schemas
+        run: cargo run --locked --example generate_schemas
+
+      - name: Verify source and focused contract tests
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo test --locked --test workspace_source_contract
+          cargo test --locked --test manifest_schema_contract
+          git diff --check
+
+      - name: Upload generated manifest schema
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: manifest-contract-artifacts
+          path: schemas/manifest.json
+          if-no-files-found: error
+          retention-days: 1
