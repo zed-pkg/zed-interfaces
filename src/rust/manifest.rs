@@ -1561,9 +1561,7 @@ fn validate_workspace_sources(
                 "source names must use the canonical lowercase slug syntax".to_string(),
             ));
         }
-        if !is_allowed_repo_url(&source.url)
-            || source.url.chars().any(char::is_control)
-        {
+        if !is_allowed_repo_url(&source.url) || source.url.chars().any(char::is_control) {
             return Err(ManifestError::InvalidWorkspaceSource(
                 name.clone(),
                 format!(
