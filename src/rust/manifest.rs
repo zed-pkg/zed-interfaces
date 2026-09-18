@@ -324,6 +324,15 @@ impl InstallSection {
 pub struct InteropSection {
     #[serde(skip_serializing_if = "GitInteropSection::is_empty")]
     pub git: GitInteropSection,
+    /// Canonical repository-source composition owned by .zpkg.toml. Native
+    /// VCS metadata such as .gitmodules is a generated/import compatibility
+    /// projection, never a second dependency-graph authority.
+    #[serde(
+        rename = "source-composition",
+        alias = "source_composition",
+        skip_serializing_if = "SourceCompositionSection::is_empty"
+    )]
+    pub source_composition: SourceCompositionSection,
     /// Bind installed CLI entry points to one package-owned flags-2-env contract.
     /// Zed uses this explicit path rather than discovering configuration from
     /// the consumer's working directory.
@@ -337,7 +346,7 @@ pub struct InteropSection {
 
 impl InteropSection {
     pub fn is_empty(&self) -> bool {
-        self.git.is_empty() && self.flags_2_env.is_empty()
+        self.git.is_empty() && self.source_composition.is_empty() && self.flags_2_env.is_empty()
     }
 }
 
@@ -373,6 +382,93 @@ impl GitInteropSection {
     pub fn is_empty(&self) -> bool {
         !self.consume_gitmodules
     }
+}
+
+/// Canonical source-composition declaration. This is authored Zed state;
+/// .gitmodules/.hg metadata are transport projections or migration inputs.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SourceCompositionSection {
+    /// Default project-relative root for ordinary VCS checkouts. Omitted =
+    /// .zed/vcs. Must not overlap the package materialization tree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checkout_dir: Option<String>,
+    /// Default project-relative root for Git-submodule projections. Omitted =
+    /// submodules. This is separate from checkout_dir and [install].dir.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git_submodule_dir: Option<String>,
+    /// Stable source names mapped to their transport and ownership declaration.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub sources: BTreeMap<String, SourceCompositionEntry>,
+}
+
+impl SourceCompositionSection {
+    pub fn is_empty(&self) -> bool {
+        self.checkout_dir.is_none() && self.git_submodule_dir.is_none() && self.sources.is_empty()
+    }
+
+    pub fn checkout_dir(&self) -> &str {
+        self.checkout_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(".zed/vcs")
+    }
+
+    pub fn git_submodule_dir(&self) -> &str {
+        self.git_submodule_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("submodules")
+    }
+}
+
+/// Why a repository source is present. Explicit classification prevents a Git
+/// submodule or other checkout from silently becoming a package dependency.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum SourceCompositionRole {
+    Workspace,
+    Inventory,
+    EmbeddedSource,
+    ExperimentReference,
+    Legacy,
+}
+
+/// How the source is projected into the working tree.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum SourceCompositionProjection {
+    #[default]
+    Checkout,
+    GitSubmodule,
+}
+
+/// One VCS-backed source declared by the Zed manifest.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SourceCompositionEntry {
+    #[serde(default)]
+    pub vcs: Vcs,
+    pub url: String,
+    pub role: SourceCompositionRole,
+    #[serde(default)]
+    pub projection: SourceCompositionProjection,
+    /// Explicit project-relative checkout path. When omitted, the CLI derives
+    /// it from the corresponding section root plus the source name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// Canonical Zed package identity for workspace/package-backed sources.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
+    /// Optional human-authored revision or branch intent. Exact immutable
+    /// provenance remains a lockfile concern.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub recursive: bool,
 }
 
 /// One ecosystem's slice of a polyglot package — and, on publish, its own
@@ -1412,6 +1508,136 @@ fn validate_project_lifecycle_command(
     Ok(())
 }
 
+fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError> {
+    let section = &manifest.interop.source_composition;
+    if section.is_empty() {
+        return Ok(());
+    }
+
+    let checkout_root = section.checkout_dir();
+    let submodule_root = section.git_submodule_dir();
+    for (label, value) in [
+        ("checkout_dir", checkout_root),
+        ("git_submodule_dir", submodule_root),
+    ] {
+        if !is_safe_relative_path(value) {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "{label} `{value}` must be a safe project-relative path"
+            )));
+        }
+        if paths_overlap(value, manifest.modules_dir()) {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "{label} `{value}` overlaps package install directory `{}`",
+                manifest.modules_dir()
+            )));
+        }
+    }
+    if paths_overlap(checkout_root, submodule_root) {
+        return Err(ManifestError::InvalidSourceComposition(format!(
+            "checkout_dir `{checkout_root}` and git_submodule_dir `{submodule_root}` must be disjoint"
+        )));
+    }
+
+    let mut claimed_paths = BTreeMap::<String, String>::new();
+    for (name, source) in &section.sources {
+        if !is_source_name(name) {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source name `{name}` must use 1-128 characters from [A-Za-z0-9._-] and may not start with a dot"
+            )));
+        }
+        if !is_allowed_repo_url(&source.url) || source.url.chars().any(char::is_control) {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` has an invalid repository URL"
+            )));
+        }
+        if source.projection == SourceCompositionProjection::GitSubmodule && source.vcs != Vcs::Git {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` uses git-submodule projection but vcs is `{}`",
+                source.vcs
+            )));
+        }
+        if let Some(package) = source.package.as_deref()
+            && !is_dependency_key(package)
+        {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` has invalid package identity `{package}`"
+            )));
+        }
+        if source.role == SourceCompositionRole::Workspace && source.package.is_none() {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "workspace source `{name}` must declare package = \"org/name\""
+            )));
+        }
+        for (field, value) in [
+            ("revision", source.revision.as_deref()),
+            ("branch", source.branch.as_deref()),
+        ] {
+            if let Some(value) = value
+                && (value.trim().is_empty()
+                    || value.len() > 512
+                    || value.chars().any(char::is_control))
+            {
+                return Err(ManifestError::InvalidSourceComposition(format!(
+                    "source `{name}` {field} must be a trimmed non-control string of at most 512 bytes"
+                )));
+            }
+        }
+
+        let path = source.path.as_deref().unwrap_or_else(|| {
+            if source.projection == SourceCompositionProjection::GitSubmodule {
+                submodule_root
+            } else {
+                checkout_root
+            }
+        });
+        let derived;
+        let effective = if source.path.is_some() {
+            path
+        } else {
+            derived = format!("{path}/{name}");
+            derived.as_str()
+        };
+        if !is_safe_relative_path(effective) {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` path `{effective}` must be a safe project-relative path"
+            )));
+        }
+        if paths_overlap(effective, manifest.modules_dir()) {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "source `{name}` path `{effective}` overlaps package install directory `{}`",
+                manifest.modules_dir()
+            )));
+        }
+        if let Some(previous) = claimed_paths.insert(effective.to_string(), name.clone()) {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "sources `{previous}` and `{name}` both resolve to `{effective}`"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn is_source_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && !value.starts_with('.')
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+fn paths_overlap(left: &str, right: &str) -> bool {
+    let left = left.trim().trim_matches('/');
+    let right = right.trim().trim_matches('/');
+    left == right
+        || left
+            .strip_prefix(right)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+        || right
+            .strip_prefix(left)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
 fn validate_project_lifecycle_shell(shell: &str, phase: &str) -> Result<(), ManifestError> {
     if shell.is_empty()
         || shell.trim() != shell
@@ -1554,6 +1780,8 @@ pub enum ManifestError {
     InvalidBin(String, String),
     #[error("invalid [interop.flags-2-env] section: {0}")]
     InvalidFlags2EnvInterop(String),
+    #[error("invalid [interop.source-composition] section: {0}")]
+    InvalidSourceComposition(String),
     #[error("invalid build section: {0}")]
     InvalidBuild(String),
     #[error("invalid native dependency declaration for `{0}`: {1}")]
@@ -2046,6 +2274,7 @@ impl Manifest {
                 ));
             }
         }
+        validate_source_composition(self)?;
         if !self.interop.flags_2_env.is_empty() {
             let interop = &self.interop.flags_2_env;
             let config = interop
