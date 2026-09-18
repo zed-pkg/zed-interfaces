@@ -1520,9 +1520,13 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
         ("checkout_dir", checkout_root),
         ("git_submodule_dir", submodule_root),
     ] {
-        if !is_safe_relative_path(value) || is_reserved_source_path(value) {
+        if !is_safe_relative_path(value)
+            || is_reserved_source_path(value)
+            || value.len() > 4096
+            || value.chars().any(char::is_control)
+        {
             return Err(ManifestError::InvalidSourceComposition(format!(
-                "{label} `{value}` must be a safe non-reserved project-relative path"
+                "{label} `{value}` must be a safe non-reserved project-relative path of at most 4096 bytes without control characters"
             )));
         }
         if paths_overlap(value, manifest.modules_dir()) {
@@ -1621,9 +1625,13 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
             derived = format!("{path}/{name}");
             derived.as_str()
         };
-        if !is_safe_relative_path(effective) || is_reserved_source_path(effective) {
+        if !is_safe_relative_path(effective)
+            || is_reserved_source_path(effective)
+            || effective.len() > 4096
+            || effective.chars().any(char::is_control)
+        {
             return Err(ManifestError::InvalidSourceComposition(format!(
-                "source `{name}` path `{effective}` must be a safe non-reserved project-relative path"
+                "source `{name}` path `{effective}` must be a safe non-reserved project-relative path of at most 4096 bytes without control characters"
             )));
         }
         if paths_overlap(effective, manifest.modules_dir()) {
@@ -1915,9 +1923,16 @@ pub fn is_safe_relative_path(path: &str) -> bool {
 }
 
 fn is_allowed_repo_url(url: &str) -> bool {
-    // The repo URL renders as a link in registry UIs and is shelled to VCS
-    // tooling, so restrict it to the schemes those consumers expect.
-    ["https://", "http://", "ssh://", "git://", "git+ssh://"]
+    // The repo URL renders as a link in registry UIs and is passed to VCS
+    // tooling, so restrict it to known schemes and never permit HTTP(S)
+    // userinfo where credentials could be committed and later echoed in logs.
+    for scheme in ["https://", "http://"] {
+        if let Some(rest) = url.strip_prefix(scheme) {
+            let authority = rest.split('/').next().unwrap_or_default();
+            return !authority.is_empty() && !authority.contains('@');
+        }
+    }
+    ["ssh://", "git://", "git+ssh://"]
         .iter()
         .any(|scheme| url.starts_with(scheme))
         // scp-like git syntax: git@github.com:org/repo.git
