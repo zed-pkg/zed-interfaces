@@ -20,3 +20,32 @@ fn checked_in_manifest_schema_matches_the_public_contract() {
         assert_eq!(package["properties"][identity]["pattern"], SLUG_PATTERN);
     }
 }
+
+#[test]
+fn local_path_overrides_are_typed_and_reject_shell_execution() {
+    let valid = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[overrides.path]
+"acme/lib" = "${HOME}/codes/acme/lib"
+"#;
+    let manifest = Manifest::parse(valid).expect("safe env-expanded local path override");
+    assert_eq!(
+        manifest.dependency_path_override("acme/lib"),
+        Some("${HOME}/codes/acme/lib")
+    );
+
+    for dangerous in ["$(touch /tmp/zed-owned)", "`touch /tmp/zed-owned`"] {
+        let input = valid.replace("${HOME}/codes/acme/lib", dangerous);
+        let error = Manifest::parse(&input).expect_err("shell syntax must be rejected");
+        assert!(error.to_string().contains("command substitution"));
+    }
+}

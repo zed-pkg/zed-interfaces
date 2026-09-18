@@ -666,6 +666,13 @@
           },
           "description": "Replace or provide a dependency's `[build]` step.",
           "type": "object"
+        },
+        "path": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Resolve a dependency from a developer-controlled local checkout instead\nof the registry. Values may be absolute or project-relative and may\ncontain $VAR / ${VAR} references. They are data, never shell code:\ncommand substitution and backticks are rejected during validation.",
+          "type": "object"
         }
       },
       "type": "object"
