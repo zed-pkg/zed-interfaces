@@ -98,7 +98,8 @@ pub use lockfile::{LockedPackage, Lockfile, LockfileError};
 pub use manifest::{
     CodebaseKind, GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,
     NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute, ProjectLifecycleHook,
-    ProjectLifecycleHookConfig, ProjectLifecycleMode, ProjectLifecycleSection,
+    ProjectLifecycleHookConfig, ProjectLifecycleMode, ProjectLifecycleSection, WorkspaceSection,
+    WorkspaceSourceMode, WorkspaceSourceRole, WorkspaceSourceSection,
 };
 pub use mirror::{
     DEFAULT_ASSET_PREFIX, DEFAULT_INDEX_TAG, DEFAULT_RAW_BRANCH, DEFAULT_RAW_PREFIX, GITHUB_HOST,
