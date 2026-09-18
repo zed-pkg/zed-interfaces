@@ -1489,8 +1489,7 @@ fn validate_path_override_template(value: &str) -> Result<(), String> {
         }
 
         let start = index;
-        while index < bytes.len()
-            && (bytes[index] == b'_' || bytes[index].is_ascii_alphanumeric())
+        while index < bytes.len() && (bytes[index] == b'_' || bytes[index].is_ascii_alphanumeric())
         {
             index += 1;
         }
@@ -2421,9 +2420,8 @@ impl Manifest {
             if !is_dependency_key(key) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
             }
-            validate_path_override_template(path).map_err(|reason| {
-                ManifestError::InvalidPathOverride(key.clone(), reason)
-            })?;
+            validate_path_override_template(path)
+                .map_err(|reason| ManifestError::InvalidPathOverride(key.clone(), reason))?;
         }
         if let Some(ws) = &self.workspace {
             for pat in &ws.members {
