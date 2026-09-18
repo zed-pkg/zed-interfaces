@@ -1520,11 +1520,17 @@ pub struct OverridesSection {
     /// Replace or provide a dependency's `[build]` step.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub build: BTreeMap<String, BuildSection>,
+    /// Resolve a dependency from a developer-controlled local checkout instead
+    /// of the registry. Values may be absolute or project-relative and may
+    /// contain $VAR / ${VAR} references. They are data, never shell code:
+    /// command substitution and backticks are rejected during validation.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub path: BTreeMap<String, String>,
 }
 
 impl OverridesSection {
     pub fn is_empty(&self) -> bool {
-        self.build.is_empty()
+        self.build.is_empty() && self.path.is_empty()
     }
 }
 
@@ -1560,6 +1566,8 @@ pub enum ManifestError {
     InvalidWorkspaceMember(String),
     #[error("invalid install dir `{0}`: {1}")]
     InvalidInstallDir(String, String),
+    #[error("invalid local path override for `{0}`: {1}")]
+    InvalidPathOverride(String, String),
     #[error("invalid target `{0}`: {1}")]
     InvalidTarget(String, String),
     #[error("invalid native release route for target `{0}`: {1}")]
@@ -2099,9 +2107,34 @@ impl Manifest {
                 }
             }
         }
-        for key in self.overrides.build.keys() {
+        for key in self
+            .overrides
+            .build
+            .keys()
+            .chain(self.overrides.path.keys())
+        {
             if !is_dependency_key(key) {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
+            }
+        }
+        for (key, value) in &self.overrides.path {
+            if value.trim().is_empty() {
+                return Err(ManifestError::InvalidPathOverride(
+                    key.clone(),
+                    "path must not be empty".to_string(),
+                ));
+            }
+            if value.chars().any(char::is_control) {
+                return Err(ManifestError::InvalidPathOverride(
+                    key.clone(),
+                    "path must not contain control characters".to_string(),
+                ));
+            }
+            if value.contains("$(") || value.contains('`') {
+                return Err(ManifestError::InvalidPathOverride(
+                    key.clone(),
+                    "only $VAR and ${VAR} interpolation are allowed; command substitution and backticks are forbidden".to_string(),
+                ));
             }
         }
         if let Some(ws) = &self.workspace {
@@ -2496,6 +2529,13 @@ impl Manifest {
         dep_build: Option<&BuildSection>,
     ) -> Option<BuildSection> {
         self.overrides.build.get(dep_key).or(dep_build).cloned()
+    }
+
+    /// Developer-local source override for one dependency, if configured.
+    /// Expansion and canonicalization are intentionally owned by the CLI so
+    /// this shared contract remains side-effect free.
+    pub fn dependency_path_override(&self, dep_key: &str) -> Option<&str> {
+        self.overrides.path.get(dep_key).map(String::as_str)
     }
 
     /// `org/name`, the canonical package identifier.
