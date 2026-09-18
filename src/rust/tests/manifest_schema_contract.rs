@@ -104,8 +104,6 @@ recursive = true
 }
 
 #[test]
-
-#[test]
 fn source_composition_rejects_reserved_paths_and_ambiguous_refs() {
     let base = r#"
 [package]
@@ -140,6 +138,7 @@ path = ".zed/vcs/lib"
     }
 }
 
+#[test]
 fn workspace_sources_require_canonical_package_identity() {
     let input = r#"
 [package]
