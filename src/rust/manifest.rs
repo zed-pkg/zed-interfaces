@@ -1513,6 +1513,11 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
     if section.is_empty() {
         return Ok(());
     }
+    if manifest.interop.git.consume_gitmodules {
+        return Err(ManifestError::InvalidSourceComposition(
+            "manifest-authoritative [interop.source-composition] cannot coexist with legacy [interop.git].consume_gitmodules = true; import the legacy Git metadata and keep one authority".to_string(),
+        ));
+    }
 
     let checkout_root = section.checkout_dir();
     let submodule_root = section.git_submodule_dir();
