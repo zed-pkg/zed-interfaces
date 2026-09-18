@@ -29,6 +29,16 @@ pub struct Lockfile {
     pub version: u32,
     #[serde(default, rename = "package", skip_serializing_if = "Vec::is_empty")]
     pub packages: Vec<LockedPackage>,
+    /// Exact pins for `[tool-dependencies]` — command-line tools this project
+    /// declares but never materializes into its own tree. They are kept in
+    /// their own array rather than mixed into `package` so that every existing
+    /// consumer of `packages` (materialization, adapter wiring, `node_modules`
+    /// linking, OCI layering) keeps seeing exactly the set it is supposed to
+    /// place in the project, and a tool pin can never be linked in by accident.
+    /// The entry shape is identical, because the identity requirement is
+    /// identical: one immutable artifact, addressed by sha256.
+    #[serde(default, rename = "tool", skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<LockedPackage>,
     /// Exact source-aware npm/Cargo resolutions. This additive field keeps
     /// existing lockfile version 1 documents readable while newer writers can
     /// preserve native requirement translation and immutable artifact identity.
@@ -93,6 +103,12 @@ pub enum LockfileError {
     InvalidPackageMetadata { package: String, reason: String },
     #[error("duplicate locked package identity `{0}`")]
     DuplicatePackage(String),
+    #[error("duplicate locked tool identity `{0}`")]
+    DuplicateTool(String),
+    #[error(
+        "`{0}` is locked both as an installed package and as a tool: a lockfile entry is one or the other"
+    )]
+    ConflictingToolIdentity(String),
     #[error("invalid native dependency provenance: {0}")]
     InvalidNativeDependency(String),
     #[error("duplicate native dependency key `{0}`")]
@@ -108,6 +124,7 @@ impl Default for Lockfile {
         Self {
             version: Self::CURRENT_VERSION,
             packages: Vec::new(),
+            tools: Vec::new(),
             native_dependencies: Vec::new(),
             nix_adapters: Vec::new(),
         }
@@ -122,6 +139,7 @@ impl Lockfile {
             toml::from_str(input).map_err(|error| LockfileError::Toml(error.to_string()))?;
         lockfile.validate_version()?;
         lockfile.validate_packages()?;
+        lockfile.validate_tools()?;
         lockfile.validate_native_dependencies()?;
         lockfile.validate_nix_adapters()?;
         Ok(lockfile)
@@ -132,10 +150,14 @@ impl Lockfile {
         normalized.validate_version()?;
         normalized.normalize_missing_package_revisions()?;
         normalized.validate_packages()?;
+        normalized.validate_tools()?;
         normalized.validate_native_dependencies()?;
         normalized.validate_nix_adapters()?;
         normalized
             .packages
+            .sort_by(|left, right| (&left.org, &left.name).cmp(&(&right.org, &right.name)));
+        normalized
+            .tools
             .sort_by(|left, right| (&left.org, &left.name).cmp(&(&right.org, &right.name)));
         normalized
             .native_dependencies
@@ -156,6 +178,22 @@ impl Lockfile {
             .retain(|existing| !(existing.org == package.org && existing.name == package.name));
         self.packages.push(package);
         self.packages
+            .sort_by(|a, b| (&a.org, &a.name).cmp(&(&b.org, &b.name)));
+    }
+
+    /// Return the pin for a declared tool dependency.
+    pub fn find_tool(&self, org: &str, name: &str) -> Option<&LockedPackage> {
+        self.tools
+            .iter()
+            .find(|tool| tool.org == org && tool.name == name)
+    }
+
+    /// Insert or replace the tool pin for `org/name`, keeping entries sorted.
+    pub fn upsert_tool(&mut self, tool: LockedPackage) {
+        self.tools
+            .retain(|existing| !(existing.org == tool.org && existing.name == tool.name));
+        self.tools.push(tool);
+        self.tools
             .sort_by(|a, b| (&a.org, &a.name).cmp(&(&b.org, &b.name)));
     }
 
@@ -214,7 +252,7 @@ impl Lockfile {
     }
 
     fn normalize_missing_package_revisions(&mut self) -> Result<(), LockfileError> {
-        for package in &mut self.packages {
+        for package in self.packages.iter_mut().chain(self.tools.iter_mut()) {
             if package.vcs_commit.is_some() {
                 continue;
             }
@@ -237,53 +275,23 @@ impl Lockfile {
     }
 
     fn validate_packages(&self) -> Result<(), LockfileError> {
-        let mut seen = BTreeSet::new();
-        for package in &self.packages {
-            let label = package.full_name();
-            if !seen.insert((package.org.clone(), package.name.clone())) {
-                return Err(LockfileError::DuplicatePackage(label));
-            }
-            if !is_slug(&package.org) {
-                return invalid_package(
-                    &label,
-                    "org must be a lowercase slug using letters, digits, and interior hyphens",
-                );
-            }
-            if !is_slug(&package.name) {
-                return invalid_package(
-                    &label,
-                    "name must be a lowercase slug using letters, digits, and interior hyphens",
-                );
-            }
-            if package.version.trim().is_empty() {
-                return invalid_package(&label, "version must not be empty");
-            }
-            if !is_canonical_sha256(&package.sha256) {
-                return invalid_package(
-                    &label,
-                    "sha256 must be 64 lowercase hexadecimal characters",
-                );
-            }
-            if package.sha256.bytes().all(|byte| byte == b'0') {
-                return invalid_package(&label, "sha256 must not be the all-zero digest");
-            }
-            if package.size == 0 {
-                return invalid_package(&label, "size must be greater than zero");
-            }
-            if package.vcs_tag.trim().is_empty() {
-                return invalid_package(&label, "vcs_tag must not be empty");
-            }
-            let Some(commit) = package.vcs_commit.as_deref() else {
-                return invalid_package(&label, "vcs_commit must be explicitly present");
-            };
-            if !is_immutable_vcs_revision(commit) {
-                return invalid_package(
-                    &label,
-                    "vcs_commit must be a bounded immutable revision, not a mutable ref",
-                );
-            }
-            if package.source.trim().is_empty() {
-                return invalid_package(&label, "source must not be empty");
+        validate_locked_entries(&self.packages, LockfileError::DuplicatePackage)
+    }
+
+    /// Tool pins carry the same immutable identity as installed packages, so
+    /// they get the same validation. The one extra rule is cross-array: a
+    /// single project never both links a package into its tree and runs it
+    /// from the central tool store, because `zed run` would then have two
+    /// defensible answers for the same name.
+    fn validate_tools(&self) -> Result<(), LockfileError> {
+        validate_locked_entries(&self.tools, LockfileError::DuplicateTool)?;
+        for tool in &self.tools {
+            if self
+                .packages
+                .iter()
+                .any(|package| package.org == tool.org && package.name == tool.name)
+            {
+                return Err(LockfileError::ConflictingToolIdentity(tool.full_name()));
             }
         }
         Ok(())
@@ -320,6 +328,61 @@ impl Lockfile {
         }
         Ok(())
     }
+}
+
+/// Validate one array of locked entries. Packages and tools share this so a
+/// tool pin can never be held to a weaker integrity standard than a package.
+fn validate_locked_entries(
+    entries: &[LockedPackage],
+    duplicate: fn(String) -> LockfileError,
+) -> Result<(), LockfileError> {
+    let mut seen = BTreeSet::new();
+    for package in entries {
+        let label = package.full_name();
+        if !seen.insert((package.org.clone(), package.name.clone())) {
+            return Err(duplicate(label));
+        }
+        if !is_slug(&package.org) {
+            return invalid_package(
+                &label,
+                "org must be a lowercase slug using letters, digits, and interior hyphens",
+            );
+        }
+        if !is_slug(&package.name) {
+            return invalid_package(
+                &label,
+                "name must be a lowercase slug using letters, digits, and interior hyphens",
+            );
+        }
+        if package.version.trim().is_empty() {
+            return invalid_package(&label, "version must not be empty");
+        }
+        if !is_canonical_sha256(&package.sha256) {
+            return invalid_package(&label, "sha256 must be 64 lowercase hexadecimal characters");
+        }
+        if package.sha256.bytes().all(|byte| byte == b'0') {
+            return invalid_package(&label, "sha256 must not be the all-zero digest");
+        }
+        if package.size == 0 {
+            return invalid_package(&label, "size must be greater than zero");
+        }
+        if package.vcs_tag.trim().is_empty() {
+            return invalid_package(&label, "vcs_tag must not be empty");
+        }
+        let Some(commit) = package.vcs_commit.as_deref() else {
+            return invalid_package(&label, "vcs_commit must be explicitly present");
+        };
+        if !is_immutable_vcs_revision(commit) {
+            return invalid_package(
+                &label,
+                "vcs_commit must be a bounded immutable revision, not a mutable ref",
+            );
+        }
+        if package.source.trim().is_empty() {
+            return invalid_package(&label, "source must not be empty");
+        }
+    }
+    Ok(())
 }
 
 impl LockedPackage {
@@ -634,6 +697,7 @@ source = "file:///tmp/registry"
             version: Lockfile::CURRENT_VERSION,
             packages: vec![package_without_commit(digest)],
             native_dependencies: Vec::new(),
+            tools: Vec::new(),
             nix_adapters: Vec::new(),
         };
         let serialized = lock.to_toml_string().unwrap();
@@ -656,6 +720,7 @@ source = "file:///tmp/registry"
                 version: Lockfile::CURRENT_VERSION,
                 packages: vec![package_without_commit(digest)],
                 native_dependencies: Vec::new(),
+                tools: Vec::new(),
                 nix_adapters: Vec::new(),
             };
             let error = lock.to_toml_string().unwrap_err().to_string();

@@ -134,6 +134,7 @@ fn duplicate_native_keys_fail_during_write_and_parse() {
         version: Lockfile::CURRENT_VERSION,
         packages: Vec::new(),
         native_dependencies: vec![first, second],
+        tools: Vec::new(),
         nix_adapters: Vec::new(),
     };
 
@@ -186,6 +187,7 @@ fn embedded_lock_preserves_native_validation_errors() {
         version: Lockfile::CURRENT_VERSION,
         packages: Vec::new(),
         native_dependencies: vec![invalid],
+        tools: Vec::new(),
         nix_adapters: Vec::new(),
     };
     assert!(matches!(

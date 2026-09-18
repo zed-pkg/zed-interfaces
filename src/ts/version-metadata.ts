@@ -10,10 +10,30 @@ export type ArtifactFormat = "tar.gz" | "zip";
 /** Every `ArtifactFormat` value, in schema order — for validation and pickers. */
 export const ARTIFACT_FORMAT_VALUES = ["tar.gz", "zip"] as const;
 
+/** One concrete fetch location for a published artifact. */
+export interface ArtifactLocator {
+  readonly kind: ArtifactSourceKind;
+  readonly url: string;
+}
+
+/**
+ * Where a published artifact can be fetched from when the primary registry host is down. Order in [`artifact_locators`] is the client retry order.
+ * - `registry`: `zed-api-server` (`/v1/artifacts/<sha256>` or a presigned redirect).
+ * - `r2`: Direct GET against the public R2/CDN origin.
+ * - `github-release`: Packed tarball attached to a GitHub Release.
+ * - `github-archive`: Source archive of the tagged commit. Last resort: the bytes are the VCS tree, not the pruned publish artifact, so a lockfile sha256 will not match unless the client re-packs with the same rules.
+ */
+export type ArtifactSourceKind = "registry" | "r2" | "github-release" | "github-archive";
+
+/** Every `ArtifactSourceKind` value, in schema order — for validation and pickers. */
+export const ARTIFACT_SOURCE_KIND_VALUES = ["registry", "r2", "github-release", "github-archive"] as const;
+
 export interface VersionMetadata {
   /** Absolute or registry-relative URL the artifact can be fetched from. */
   readonly download_url: string;
   readonly format?: ArtifactFormat;
+  /** Alternate fetch locations (public R2, GitHub Release) so a client that already has this metadata can retry without the registry host. Empty when the publisher did not advertise mirrors; clients still guess standard GitHub/R2 paths from `org`/`name`/`vcs_tag`. */
+  readonly mirrors?: readonly ArtifactLocator[];
   readonly name: string;
   readonly org: string;
   /** RFC 3339 timestamp. */
