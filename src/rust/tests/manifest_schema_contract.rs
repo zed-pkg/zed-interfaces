@@ -104,6 +104,42 @@ recursive = true
 }
 
 #[test]
+
+#[test]
+fn source_composition_rejects_reserved_paths_and_ambiguous_refs() {
+    let base = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[interop.source-composition.sources.lib]
+vcs = "git"
+url = "https://github.com/acme/lib.git"
+role = "inventory"
+path = ".zed/vcs/lib"
+"#;
+
+    for input in [
+        base.replace("path = \".zed/vcs/lib\"", "path = \".git/hooks\""),
+        base.replace("path = \".zed/vcs/lib\"", "path = \".zpkg-staging/lib\""),
+        format!("{base}revision = \"deadbeef\"\nbranch = \"main\"\n"),
+        format!("{base}revision = \"--upload-pack=evil\"\n"),
+        base.replace(
+            "https://github.com/acme/lib.git",
+            "https://github.com/acme/lib git",
+        ),
+    ] {
+        let error = Manifest::parse(&input).expect_err("unsafe source composition must fail");
+        assert!(error.to_string().contains("source-composition"), "{error}");
+    }
+}
+
 fn workspace_sources_require_canonical_package_identity() {
     let input = r#"
 [package]
