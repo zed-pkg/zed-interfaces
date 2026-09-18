@@ -99,6 +99,8 @@ pub use manifest::{
     CodebaseKind, GitInteropSection, InstallHooksSection, InteropSection, Manifest, ManifestError,
     NATIVE_PACKAGE_MANAGERS, NativeDependencies, NixExportRoute, ProjectLifecycleHook,
     ProjectLifecycleHookConfig, ProjectLifecycleMode, ProjectLifecycleSection,
+    SourceCompositionEntry, SourceCompositionProjection, SourceCompositionRole,
+    SourceCompositionSection,
 };
 pub use mirror::{
     DEFAULT_ASSET_PREFIX, DEFAULT_INDEX_TAG, DEFAULT_RAW_BRANCH, DEFAULT_RAW_PREFIX, GITHUB_HOST,

@@ -49,3 +49,171 @@ url = "https://github.com/acme/consumer"
         assert!(error.to_string().contains("command substitution"));
     }
 }
+
+#[test]
+fn source_composition_is_manifest_authoritative_and_layout_safe() {
+    let valid = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[install]
+dir = ".zed/pkg"
+
+[dependencies]
+"acme/lib" = "=1.2.3"
+
+[interop.source-composition]
+checkout_dir = ".zed/vcs"
+git_submodule_dir = "submodules"
+
+[interop.source-composition.sources.lib]
+vcs = "git"
+url = "https://github.com/acme/lib.git"
+role = "workspace"
+projection = "git-submodule"
+path = "apps/lib"
+package = "acme/lib"
+branch = "main"
+recursive = true
+"#;
+    let manifest = Manifest::parse(valid).expect("manifest-owned source composition");
+    let sources = &manifest.interop.source_composition;
+    assert_eq!(sources.checkout_dir(), ".zed/vcs");
+    assert_eq!(sources.git_submodule_dir(), "submodules");
+    assert_eq!(sources.sources["lib"].package.as_deref(), Some("acme/lib"));
+
+    for (needle, replacement) in [
+        ("path = \"apps/lib\"", "path = \".zed/pkg/acme/lib\""),
+        ("vcs = \"git\"", "vcs = \"hg\""),
+    ] {
+        let input = if needle == "vcs = \"git\"" {
+            valid.replacen(needle, replacement, 2)
+        } else {
+            valid.replace(needle, replacement)
+        };
+        let error = Manifest::parse(&input).expect_err("unsafe source composition must fail");
+        assert!(error.to_string().contains("source-composition"), "{error}");
+    }
+}
+
+#[test]
+fn source_composition_rejects_reserved_paths_and_ambiguous_refs() {
+    let base = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[interop.source-composition.sources.lib]
+vcs = "git"
+url = "https://github.com/acme/lib.git"
+role = "inventory"
+path = ".zed/vcs/lib"
+"#;
+
+    for input in [
+        base.replace("path = \".zed/vcs/lib\"", "path = \".git/hooks\""),
+        base.replace("path = \".zed/vcs/lib\"", "path = \".zpkg-staging/lib\""),
+        format!("{base}revision = \"deadbeef\"\nbranch = \"main\"\n"),
+        format!("{base}revision = \"--upload-pack=evil\"\n"),
+        base.replace(
+            "https://github.com/acme/lib.git",
+            "https://github.com/acme/lib git",
+        ),
+    ] {
+        let error = Manifest::parse(&input).expect_err("unsafe source composition must fail");
+        assert!(error.to_string().contains("source-composition"), "{error}");
+    }
+}
+
+#[test]
+fn source_composition_rejects_legacy_git_dual_authority() {
+    let input = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[interop.git]
+consume_gitmodules = true
+
+[interop.source-composition.sources.lib]
+vcs = "git"
+url = "https://github.com/acme/lib.git"
+role = "workspace"
+package = "acme/lib"
+"#;
+    let error = Manifest::parse(input).expect_err("legacy and canonical Git authority must conflict");
+    assert!(error.to_string().contains("cannot coexist"), "{error}");
+}
+
+#[test]
+fn source_composition_rejects_duplicate_package_ownership_and_generated_state_paths() {
+    let base = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[interop.source-composition.sources.one]
+vcs = "git"
+url = "https://github.com/acme/one.git"
+role = "workspace"
+package = "acme/lib"
+path = "sources/one"
+"#;
+
+    let duplicate = format!(
+        "{base}\n[interop.source-composition.sources.two]\nvcs = \"git\"\nurl = \"https://github.com/acme/two.git\"\nrole = \"workspace\"\npackage = \"acme/lib\"\npath = \"sources/two\"\n"
+    );
+    let error = Manifest::parse(&duplicate).expect_err("duplicate package ownership must fail");
+    assert!(error.to_string().contains("declared by both source"), "{error}");
+
+    let reserved = base.replace("path = \"sources/one\"", "path = \".zed/pack/source\"");
+    let error = Manifest::parse(&reserved).expect_err("generated Zed state must stay reserved");
+    assert!(error.to_string().contains("source-composition"), "{error}");
+}
+
+#[test]
+fn workspace_sources_require_canonical_package_identity() {
+    let input = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[interop.source-composition.sources.lib]
+vcs = "git"
+url = "https://github.com/acme/lib.git"
+role = "workspace"
+"#;
+    let error = Manifest::parse(input).expect_err("workspace source without package must fail");
+    assert!(error.to_string().contains("must declare package"));
+}
