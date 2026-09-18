@@ -717,8 +717,8 @@
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/BuildSection"
-          },
-        }
+          }
+        },
         "path": {
           "additionalProperties": {
             "type": "string"
