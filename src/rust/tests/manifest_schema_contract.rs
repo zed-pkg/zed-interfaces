@@ -50,7 +50,6 @@ url = "https://github.com/acme/consumer"
     }
 }
 
-
 #[test]
 fn source_composition_is_manifest_authoritative_and_layout_safe() {
     let valid = r#"
@@ -100,10 +99,7 @@ recursive = true
             valid.replace(needle, replacement)
         };
         let error = Manifest::parse(&input).expect_err("unsafe source composition must fail");
-        assert!(
-            error.to_string().contains("source-composition"),
-            "{error}"
-        );
+        assert!(error.to_string().contains("source-composition"), "{error}");
     }
 }
 
