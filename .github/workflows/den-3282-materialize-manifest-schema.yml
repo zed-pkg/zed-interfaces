@@ -1,0 +1,31 @@
+name: DEN-3282 materialize manifest schema
+
+on:
+  pull_request:
+    paths:
+      - "src/rust/manifest.rs"
+      - "src/rust/lib.rs"
+      - "src/rust/tests/manifest_schema_contract.rs"
+      - ".github/workflows/den-3282-materialize-manifest-schema.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+      - name: Generate manifest schema from Rust authority
+        run: cargo run --locked --example generate_schemas
+      - name: Retain exact generated manifest schema
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0
+        with:
+          name: den-3282-manifest-schema
+          path: schemas/manifest.json
+          if-no-files-found: error
+          retention-days: 7
