@@ -1924,19 +1924,46 @@ pub fn is_safe_relative_path(path: &str) -> bool {
 
 fn is_allowed_repo_url(url: &str) -> bool {
     // The repo URL renders as a link in registry UIs and is passed to VCS
-    // tooling, so restrict it to known schemes and never permit HTTP(S)
-    // userinfo where credentials could be committed and later echoed in logs.
+    // tooling. Never permit option-shaped URLs or embedded HTTP credentials
+    // that could be committed and later echoed in logs.
+    if url.starts_with('-') {
+        return false;
+    }
     for scheme in ["https://", "http://"] {
         if let Some(rest) = url.strip_prefix(scheme) {
             let authority = rest.split('/').next().unwrap_or_default();
             return !authority.is_empty() && !authority.contains('@');
         }
     }
-    ["ssh://", "git://", "git+ssh://"]
-        .iter()
-        .any(|scheme| url.starts_with(scheme))
-        // scp-like git syntax: git@github.com:org/repo.git
-        || (url.contains('@') && url.contains(':') && !url.contains("://"))
+    if let Some(rest) = url.strip_prefix("git://") {
+        let authority = rest.split('/').next().unwrap_or_default();
+        return !authority.is_empty() && !authority.contains('@');
+    }
+    for scheme in ["ssh://", "git+ssh://"] {
+        if let Some(rest) = url.strip_prefix(scheme) {
+            let authority = rest.split('/').next().unwrap_or_default();
+            if authority.is_empty() {
+                return false;
+            }
+            if let Some((userinfo, host)) = authority.rsplit_once('@') {
+                return !userinfo.is_empty() && !userinfo.contains(':') && !host.is_empty();
+            }
+            return true;
+        }
+    }
+    // scp-like Git syntax: git@github.com:org/repo.git. Keep the username and
+    // host/path nonempty and option-safe; credentials do not belong here.
+    if !url.contains("://")
+        && let Some((user, host_path)) = url.split_once('@')
+        && let Some((host, path)) = host_path.split_once(':')
+    {
+        return !user.is_empty()
+            && !user.contains(':')
+            && !host.is_empty()
+            && !path.is_empty()
+            && !path.starts_with('-');
+    }
+    false
 }
 
 fn validate_native_release_section(
