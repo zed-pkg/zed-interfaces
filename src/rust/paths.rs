@@ -4,7 +4,7 @@
 //! `ZED_PKG_HOME`). Existing `$HOME/.zed-pkg` homes remain a legacy migration
 //! location. Projects never copy packages by default: installed
 //! versions are extracted once into the content-addressed store and
-//! symlinked into the project's `zed_modules/` directory, pnpm-style.
+//! symlinked into the project's `.zed/pkg/` directory, pnpm-style.
 //! In containers (`--install-mode copy`) the symlink step is replaced by a
 //! copy so image layers stay self-contained.
 
@@ -14,8 +14,8 @@ pub const ZED_HOME_DIR_NAME: &str = ".zpkg";
 pub const LEGACY_ZED_HOME_DIR_NAME: &str = ".zed-pkg";
 
 /// Directory inside a project where installed packages appear
-/// (`zed_modules/<org>/<name>`).
-pub const MODULES_DIR: &str = "zed_modules";
+/// (`.zed/pkg/<org>/<name>`).
+pub const MODULES_DIR: &str = ".zed/pkg";
 
 /// Package manifest file name, at the repository root. TOML only.
 pub const MANIFEST_FILE: &str = ".zpkg.toml";
@@ -39,8 +39,8 @@ pub const ARCHIVE_ROOT: &str = "pkg";
 /// Where `zed pack` writes artifacts, relative to the project root.
 pub const PACK_OUT_DIR: &str = ".zed/pack";
 
-/// Directory inside `zed_modules/` where package-declared executables are
-/// hoisted (`zed_modules/.bin/<name>`), runnable via `zed run <name>`.
+/// Directory inside `.zed/pkg/` where package-declared executables are
+/// hoisted (`.zed/pkg/.bin/<name>`), runnable via `zed run <name>`.
 pub const BIN_DIR: &str = ".bin";
 
 /// Store entry path for an artifact, relative to the zed home directory,
