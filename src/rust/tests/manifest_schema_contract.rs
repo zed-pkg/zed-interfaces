@@ -139,6 +139,38 @@ path = ".zed/vcs/lib"
 }
 
 #[test]
+fn source_composition_rejects_duplicate_package_ownership_and_generated_state_paths() {
+    let base = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[interop.source-composition.sources.one]
+vcs = "git"
+url = "https://github.com/acme/one.git"
+role = "workspace"
+package = "acme/lib"
+path = "sources/one"
+"#;
+
+    let duplicate = format!(
+        "{base}\n[interop.source-composition.sources.two]\nvcs = \"git\"\nurl = \"https://github.com/acme/two.git\"\nrole = \"workspace\"\npackage = \"acme/lib\"\npath = \"sources/two\"\n"
+    );
+    let error = Manifest::parse(&duplicate).expect_err("duplicate package ownership must fail");
+    assert!(error.to_string().contains("declared by both source"), "{error}");
+
+    let reserved = base.replace("path = \"sources/one\"", "path = \".zed/pack/source\"");
+    let error = Manifest::parse(&reserved).expect_err("generated Zed state must stay reserved");
+    assert!(error.to_string().contains("source-composition"), "{error}");
+}
+
+#[test]
 fn workspace_sources_require_canonical_package_identity() {
     let input = r#"
 [package]
