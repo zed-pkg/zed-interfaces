@@ -632,6 +632,13 @@
           "additionalProperties": {
             "$ref": "#/$defs/BuildSection"
           }
+        },
+        "path": {
+          "description": "Replace a registry/workspace dependency with a reviewed local checkout.\n\nValues may be absolute or project-relative paths and may interpolate\nportable environment variables using `$NAME` or `${NAME}`. Shell\ncommand substitution is deliberately not part of this contract.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -1134,15 +1141,119 @@
       ]
     },
     "WorkspaceSection": {
-      "description": "Monorepo workspace membership. `members` are glob patterns (relative to\nthe workspace root) selecting directories that each contain a `.zpkg.toml`,\ne.g. `[\"packages/*\", \"apps/*\"]`. Dependencies that resolve to a member are\nlinked straight to the member's source directory instead of going through\nthe registry.",
+      "description": "Monorepo workspace membership plus independently editable source repositories.\n\nLocal `members` are glob patterns relative to the workspace root. Remote\n`sources` make `.zpkg.toml` authoritative for source-composition intent:\nnative VCS files such as `.gitmodules` are compatibility projections, not a\nsecond package graph authority.",
       "type": "object",
       "properties": {
+        "checkout_dir": {
+          "description": "Default root for ordinary VCS checkouts materialized by Zed.\nDefaults to `.zed/vcs`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "git_submodule_dir": {
+          "description": "Default root for Git-submodule projections. Defaults to `submodules`\nand must remain disjoint from the Zed package materialization tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "members": {
           "type": "array",
           "default": [],
           "items": {
             "type": "string"
           }
+        },
+        "sources": {
+          "description": "Named independently editable source repositories.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/WorkspaceSourceSection"
+          }
+        }
+      }
+    },
+    "WorkspaceSourceMode": {
+      "description": "How a workspace source is materialized.",
+      "oneOf": [
+        {
+          "description": "Zed owns a normal checkout below `workspace.checkout_dir`.",
+          "type": "string",
+          "const": "checkout"
+        },
+        {
+          "description": "Zed projects the source into Git's submodule/gitlink model.",
+          "type": "string",
+          "const": "git-submodule"
+        }
+      ]
+    },
+    "WorkspaceSourceRole": {
+      "description": "Why the repository participates in source composition.",
+      "oneOf": [
+        {
+          "description": "Independently editable repository participating in the workspace graph.",
+          "type": "string",
+          "const": "workspace"
+        },
+        {
+          "description": "Inventory/reference only; not a package dependency.",
+          "type": "string",
+          "const": "inventory"
+        },
+        {
+          "description": "Source intentionally embedded in publication inputs.",
+          "type": "string",
+          "const": "embedded-source"
+        },
+        {
+          "description": "Compatibility record retained during migration.",
+          "type": "string",
+          "const": "legacy"
+        }
+      ]
+    },
+    "WorkspaceSourceSection": {
+      "description": "One independently editable repository managed by workspace source composition.",
+      "type": "object",
+      "properties": {
+        "branch": {
+          "description": "Optional branch/bookmark hint. Immutable revision identity belongs in\nthe lock/provenance layer rather than authored source configuration.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "$ref": "#/$defs/WorkspaceSourceMode",
+          "default": "checkout"
+        },
+        "package": {
+          "description": "Optional Zed package identity provided by this source.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Optional explicit repository-relative materialization path. When absent,\nthe path is derived from the mode-specific workspace root and source name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "$ref": "#/$defs/WorkspaceSourceRole",
+          "default": "workspace"
+        },
+        "url": {
+          "type": "string",
+          "default": ""
+        },
+        "vcs": {
+          "$ref": "#/$defs/Vcs",
+          "default": "git"
         }
       }
     }
