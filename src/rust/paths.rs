@@ -1,14 +1,17 @@
 //! Filesystem layout conventions shared by the CLI, servers, and docs.
 //!
-//! The global store lives under `$HOME/.zed-pkg` (overridable with
-//! `ZED_PKG_HOME`). Projects never copy packages by default: installed
+//! The global store lives under `$HOME/.zpkg` (overridable with
+//! `ZED_PKG_HOME`). Existing `$HOME/.zed-pkg` homes remain a legacy migration
+//! location. Projects never copy packages by default: installed
 //! versions are extracted once into the content-addressed store and
 //! symlinked into the project's `zed_modules/` directory, pnpm-style.
 //! In containers (`--install-mode copy`) the symlink step is replaced by a
 //! copy so image layers stay self-contained.
 
-/// Name of the per-user global directory, resolved against `$HOME`.
-pub const ZED_HOME_DIR_NAME: &str = ".zed-pkg";
+/// Preferred name of the per-user global directory, resolved against `$HOME`.
+pub const ZED_HOME_DIR_NAME: &str = ".zpkg";
+/// Legacy per-user global directory retained for migration detection.
+pub const LEGACY_ZED_HOME_DIR_NAME: &str = ".zed-pkg";
 
 /// Directory inside a project where installed packages appear
 /// (`zed_modules/<org>/<name>`).
