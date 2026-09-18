@@ -39,6 +39,12 @@ jobs:
       - name: Generate schemas
         run: cargo run --locked --example generate_schemas
 
+      - name: Emit generated manifest schema for exact artifact promotion
+        run: |
+          echo '---ZED-GENERATED-MANIFEST-SCHEMA-BEGIN---'
+          cat schemas/manifest.json
+          echo '---ZED-GENERATED-MANIFEST-SCHEMA-END---'
+
       - name: Verify source and focused contract tests
         run: |
           set -euo pipefail
