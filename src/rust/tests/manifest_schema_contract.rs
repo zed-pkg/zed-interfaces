@@ -49,3 +49,82 @@ url = "https://github.com/acme/consumer"
         assert!(error.to_string().contains("command substitution"));
     }
 }
+
+
+#[test]
+fn source_composition_is_manifest_authoritative_and_layout_safe() {
+    let valid = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[install]
+dir = ".zed/pkg"
+
+[dependencies]
+"acme/lib" = "=1.2.3"
+
+[interop.source-composition]
+checkout_dir = ".zed/vcs"
+git_submodule_dir = "submodules"
+
+[interop.source-composition.sources.lib]
+vcs = "git"
+url = "https://github.com/acme/lib.git"
+role = "workspace"
+projection = "git-submodule"
+path = "apps/lib"
+package = "acme/lib"
+branch = "main"
+recursive = true
+"#;
+    let manifest = Manifest::parse(valid).expect("manifest-owned source composition");
+    let sources = &manifest.interop.source_composition;
+    assert_eq!(sources.checkout_dir(), ".zed/vcs");
+    assert_eq!(sources.git_submodule_dir(), "submodules");
+    assert_eq!(sources.sources["lib"].package.as_deref(), Some("acme/lib"));
+
+    for (needle, replacement) in [
+        ("path = \"apps/lib\"", "path = \".zed/pkg/acme/lib\""),
+        ("vcs = \"git\"", "vcs = \"hg\""),
+    ] {
+        let input = if needle == "vcs = \"git\"" {
+            valid.replacen(needle, replacement, 2)
+        } else {
+            valid.replace(needle, replacement)
+        };
+        let error = Manifest::parse(&input).expect_err("unsafe source composition must fail");
+        assert!(
+            error.to_string().contains("source-composition"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn workspace_sources_require_canonical_package_identity() {
+    let input = r#"
+[package]
+org = "acme"
+name = "consumer"
+version = "1.0.0"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/acme/consumer"
+
+[interop.source-composition.sources.lib]
+vcs = "git"
+url = "https://github.com/acme/lib.git"
+role = "workspace"
+"#;
+    let error = Manifest::parse(input).expect_err("workspace source without package must fail");
+    assert!(error.to_string().contains("must declare package"));
+}
