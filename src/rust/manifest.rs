@@ -1441,6 +1441,199 @@ fn validate_project_lifecycle_shell(shell: &str, phase: &str) -> Result<(), Mani
     Ok(())
 }
 
+fn validate_env_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+fn validate_path_override_template(value: &str) -> Result<(), String> {
+    if value.is_empty() || value.trim() != value {
+        return Err("path must be a non-empty trimmed string".to_string());
+    }
+    if value.contains('\0') || value.chars().any(char::is_control) {
+        return Err("path must not contain control characters".to_string());
+    }
+    if value.contains('`') || value.contains("$(") {
+        return Err(
+            "shell command substitution is not allowed; use $NAME or ${NAME} environment interpolation"
+                .to_string(),
+        );
+    }
+
+    let bytes = value.as_bytes();
+    let mut index = 0usize;
+    while index < bytes.len() {
+        if bytes[index] != b'$' {
+            index += 1;
+            continue;
+        }
+        index += 1;
+        if index >= bytes.len() {
+            return Err("trailing `$` is not a valid environment reference".to_string());
+        }
+        if bytes[index] == b'{' {
+            let start = index + 1;
+            let Some(relative_end) = value[start..].find('}') else {
+                return Err("unterminated `${NAME}` environment reference".to_string());
+            };
+            let end = start + relative_end;
+            let name = &value[start..end];
+            if !validate_env_name(name) {
+                return Err(format!("invalid environment variable name `{name}`"));
+            }
+            index = end + 1;
+            continue;
+        }
+
+        let start = index;
+        while index < bytes.len()
+            && (bytes[index] == b'_' || bytes[index].is_ascii_alphanumeric())
+        {
+            index += 1;
+        }
+        let name = &value[start..index];
+        if !validate_env_name(name) {
+            return Err(format!(
+                "invalid environment reference near byte {start}; expected $NAME or ${{NAME}}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn relative_paths_overlap(left: &str, right: &str) -> bool {
+    left == right
+        || left
+            .strip_prefix(right)
+            .is_some_and(|rest| rest.starts_with('/'))
+        || right
+            .strip_prefix(left)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+fn validate_workspace_sources(
+    manifest: &Manifest,
+    workspace: &WorkspaceSection,
+) -> Result<(), ManifestError> {
+    for (label, path) in [
+        ("checkout_dir", workspace.checkout_dir()),
+        ("git_submodule_dir", workspace.git_submodule_dir()),
+    ] {
+        if !is_safe_relative_path(path) {
+            return Err(ManifestError::InvalidWorkspaceSource(
+                label.to_string(),
+                format!("`{path}` must be a safe project-relative path"),
+            ));
+        }
+    }
+
+    let modules_dir = manifest.modules_dir();
+    if relative_paths_overlap(modules_dir, workspace.checkout_dir())
+        || relative_paths_overlap(modules_dir, workspace.git_submodule_dir())
+    {
+        return Err(ManifestError::InvalidWorkspaceSource(
+            "layout".to_string(),
+            format!(
+                "package install dir `{modules_dir}` must not overlap workspace checkout roots `{}` or `{}`",
+                workspace.checkout_dir(),
+                workspace.git_submodule_dir()
+            ),
+        ));
+    }
+    if relative_paths_overlap(workspace.checkout_dir(), workspace.git_submodule_dir()) {
+        return Err(ManifestError::InvalidWorkspaceSource(
+            "layout".to_string(),
+            format!(
+                "workspace checkout roots `{}` and `{}` must not overlap",
+                workspace.checkout_dir(),
+                workspace.git_submodule_dir()
+            ),
+        ));
+    }
+
+    let mut paths = BTreeMap::<String, String>::new();
+    for (name, source) in &workspace.sources {
+        if !is_slug(name) {
+            return Err(ManifestError::InvalidWorkspaceSource(
+                name.clone(),
+                "source names must use the canonical lowercase slug syntax".to_string(),
+            ));
+        }
+        if !is_allowed_repo_url(&source.url) {
+            return Err(ManifestError::InvalidWorkspaceSource(
+                name.clone(),
+                format!("unsupported repository URL `{}`", source.url),
+            ));
+        }
+        if let Some(package) = source.package.as_deref()
+            && !is_dependency_key(package)
+        {
+            return Err(ManifestError::InvalidWorkspaceSource(
+                name.clone(),
+                format!("invalid package identity `{package}`"),
+            ));
+        }
+        if source.role == WorkspaceSourceRole::Workspace && source.package.is_none() {
+            return Err(ManifestError::InvalidWorkspaceSource(
+                name.clone(),
+                "workspace sources must declare the Zed package identity they provide".to_string(),
+            ));
+        }
+        if source.mode == WorkspaceSourceMode::GitSubmodule
+            && !matches!(source.vcs, Vcs::Git | Vcs::Jj | Vcs::Sapling)
+        {
+            return Err(ManifestError::InvalidWorkspaceSource(
+                name.clone(),
+                format!(
+                    "git-submodule mode requires a Git-compatible VCS, not `{}`",
+                    source.vcs
+                ),
+            ));
+        }
+        if let Some(branch) = source.branch.as_deref()
+            && (branch.trim().is_empty()
+                || branch.trim() != branch
+                || branch.chars().any(char::is_control))
+        {
+            return Err(ManifestError::InvalidWorkspaceSource(
+                name.clone(),
+                "branch must be a non-empty trimmed string without control characters".to_string(),
+            ));
+        }
+
+        let path = workspace.source_path(name, source);
+        if !is_safe_relative_path(&path) {
+            return Err(ManifestError::InvalidWorkspaceSource(
+                name.clone(),
+                format!("materialization path `{path}` must be a safe project-relative path"),
+            ));
+        }
+        if relative_paths_overlap(modules_dir, &path) {
+            return Err(ManifestError::InvalidWorkspaceSource(
+                name.clone(),
+                format!(
+                    "materialization path `{path}` overlaps package install dir `{modules_dir}`"
+                ),
+            ));
+        }
+        for (other_path, other_name) in &paths {
+            if relative_paths_overlap(other_path, &path) {
+                return Err(ManifestError::InvalidWorkspaceSource(
+                    name.clone(),
+                    format!(
+                        "materialization path `{path}` overlaps source `{other_name}` at `{other_path}`"
+                    ),
+                ));
+            }
+        }
+        paths.insert(path, name.clone());
+    }
+    Ok(())
+}
+
 fn validate_project_lifecycle_env(
     environment: &BTreeMap<String, String>,
     phase: &str,
@@ -1502,15 +1695,124 @@ pub struct BuildSection {
     pub outputs: Vec<String>,
 }
 
-/// Monorepo workspace membership. `members` are glob patterns (relative to
-/// the workspace root) selecting directories that each contain a `.zpkg.toml`,
-/// e.g. `["packages/*", "apps/*"]`. Dependencies that resolve to a member are
-/// linked straight to the member's source directory instead of going through
-/// the registry.
+/// Monorepo workspace membership plus independently editable source repositories.
+///
+/// Local `members` are glob patterns relative to the workspace root. Remote
+/// `sources` make `.zpkg.toml` authoritative for source-composition intent:
+/// native VCS files such as `.gitmodules` are compatibility projections, not a
+/// second package graph authority.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct WorkspaceSection {
     pub members: Vec<String>,
+    /// Default root for ordinary VCS checkouts materialized by Zed.
+    /// Defaults to `.zed/vcs`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checkout_dir: Option<String>,
+    /// Default root for Git-submodule projections. Defaults to `submodules`
+    /// and must remain disjoint from the Zed package materialization tree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git_submodule_dir: Option<String>,
+    /// Named independently editable source repositories.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sources: BTreeMap<String, WorkspaceSourceSection>,
+}
+
+impl WorkspaceSection {
+    pub fn checkout_dir(&self) -> &str {
+        self.checkout_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(".zed/vcs")
+    }
+
+    pub fn git_submodule_dir(&self) -> &str {
+        self.git_submodule_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("submodules")
+    }
+
+    /// Effective repository-relative materialization path for one source.
+    pub fn source_path(&self, name: &str, source: &WorkspaceSourceSection) -> String {
+        source.path.clone().unwrap_or_else(|| {
+            let root = match source.mode {
+                WorkspaceSourceMode::Checkout => self.checkout_dir(),
+                WorkspaceSourceMode::GitSubmodule => self.git_submodule_dir(),
+            };
+            format!("{root}/{name}")
+        })
+    }
+}
+
+/// How a workspace source is materialized.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkspaceSourceMode {
+    /// Zed owns a normal checkout below `workspace.checkout_dir`.
+    #[default]
+    Checkout,
+    /// Zed projects the source into Git's submodule/gitlink model.
+    GitSubmodule,
+}
+
+/// Why the repository participates in source composition.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkspaceSourceRole {
+    /// Independently editable repository participating in the workspace graph.
+    #[default]
+    Workspace,
+    /// Inventory/reference only; not a package dependency.
+    Inventory,
+    /// Source intentionally embedded in publication inputs.
+    EmbeddedSource,
+    /// Compatibility record retained during migration.
+    Legacy,
+}
+
+/// One independently editable repository managed by workspace source composition.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct WorkspaceSourceSection {
+    #[serde(default)]
+    pub vcs: Vcs,
+    pub url: String,
+    /// Optional explicit repository-relative materialization path. When absent,
+    /// the path is derived from the mode-specific workspace root and source name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// Optional Zed package identity provided by this source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
+    /// Optional branch/bookmark hint. Immutable revision identity belongs in
+    /// the lock/provenance layer rather than authored source configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    #[serde(default)]
+    pub mode: WorkspaceSourceMode,
+    #[serde(default)]
+    pub role: WorkspaceSourceRole,
+}
+
+impl Default for WorkspaceSourceSection {
+    fn default() -> Self {
+        Self {
+            vcs: Vcs::default(),
+            url: String::new(),
+            path: None,
+            package: None,
+            branch: None,
+            mode: WorkspaceSourceMode::default(),
+            role: WorkspaceSourceRole::default(),
+        }
+    }
 }
 
 /// Consumer-side dependency patches, keyed by `org/name`.
@@ -1520,11 +1822,18 @@ pub struct OverridesSection {
     /// Replace or provide a dependency's `[build]` step.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub build: BTreeMap<String, BuildSection>,
+    /// Replace a registry/workspace dependency with a reviewed local checkout.
+    ///
+    /// Values may be absolute or project-relative paths and may interpolate
+    /// portable environment variables using `$NAME` or `${NAME}`. Shell
+    /// command substitution is deliberately not part of this contract.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub path: BTreeMap<String, String>,
 }
 
 impl OverridesSection {
     pub fn is_empty(&self) -> bool {
-        self.build.is_empty()
+        self.build.is_empty() && self.path.is_empty()
     }
 }
 
@@ -1558,6 +1867,10 @@ pub enum ManifestError {
     InvalidProjectLifecycle(String, String),
     #[error("invalid workspace member pattern `{0}`")]
     InvalidWorkspaceMember(String),
+    #[error("invalid workspace source `{0}`: {1}")]
+    InvalidWorkspaceSource(String, String),
+    #[error("invalid local path override for `{0}`: {1}")]
+    InvalidPathOverride(String, String),
     #[error("invalid install dir `{0}`: {1}")]
     InvalidInstallDir(String, String),
     #[error("invalid target `{0}`: {1}")]
@@ -2104,12 +2417,21 @@ impl Manifest {
                 return Err(ManifestError::InvalidDependencyKey(key.clone()));
             }
         }
+        for (key, path) in &self.overrides.path {
+            if !is_dependency_key(key) {
+                return Err(ManifestError::InvalidDependencyKey(key.clone()));
+            }
+            validate_path_override_template(path).map_err(|reason| {
+                ManifestError::InvalidPathOverride(key.clone(), reason)
+            })?;
+        }
         if let Some(ws) = &self.workspace {
             for pat in &ws.members {
                 if pat.trim().is_empty() {
                     return Err(ManifestError::InvalidWorkspaceMember(pat.clone()));
                 }
             }
+            validate_workspace_sources(self, ws)?;
         }
         if let Some(dir) = &self.install.dir
             && !is_safe_relative_path(dir)
