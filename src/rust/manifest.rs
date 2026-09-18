@@ -1557,6 +1557,13 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
                 source.vcs
             )));
         }
+        if source.projection == SourceCompositionProjection::GitSubmodule
+            && source.revision.is_some()
+        {
+            return Err(ManifestError::InvalidSourceComposition(format!(
+                "Git-submodule source `{name}` may not declare revision; the superproject gitlink and Zed lock own the exact commit"
+            )));
+        }
         if let Some(package) = source.package.as_deref()
             && !is_dependency_key(package)
         {
@@ -1609,11 +1616,15 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
                 manifest.modules_dir()
             )));
         }
-        if let Some(previous) = claimed_paths.insert(effective.to_string(), name.clone()) {
+        if let Some((previous_path, previous_name)) = claimed_paths
+            .iter()
+            .find(|(previous_path, _)| paths_overlap(previous_path, effective))
+        {
             return Err(ManifestError::InvalidSourceComposition(format!(
-                "sources `{previous}` and `{name}` both resolve to `{effective}`"
+                "source `{name}` path `{effective}` overlaps source `{previous_name}` path `{previous_path}`"
             )));
         }
+        claimed_paths.insert(effective.to_string(), name.clone());
     }
     Ok(())
 }
