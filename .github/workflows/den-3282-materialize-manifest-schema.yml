@@ -1,31 +1,55 @@
 name: DEN-3282 materialize manifest schema
 
 on:
-  pull_request:
+  push:
+    branches:
+      - alexanderdmills/den-3282-manifest-vcs-source-composition
     paths:
       - "src/rust/manifest.rs"
       - "src/rust/lib.rs"
       - "src/rust/tests/manifest_schema_contract.rs"
+      - "schemas/manifest.json"
       - ".github/workflows/den-3282-materialize-manifest-schema.yml"
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: den-3282-materialize-manifest-schema-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   materialize:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Check out exact branch head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+          ref: ${{ github.sha }}
+          persist-credentials: true
+          show-progress: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+
       - name: Generate manifest schema from Rust authority
         run: cargo run --locked --example generate_schemas
-      - name: Retain exact generated manifest schema
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: den-3282-manifest-schema
-          path: schemas/manifest.json
-          if-no-files-found: error
-          retention-days: 7
+
+      - name: Commit exact generated schema when stale
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          BRANCH: alexanderdmills/den-3282-manifest-vcs-source-composition
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          if git diff --quiet -- schemas/manifest.json; then
+            echo "schemas/manifest.json already matches the Rust authority"
+            exit 0
+          fi
+          git diff --check -- schemas/manifest.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- schemas/manifest.json
+          git commit -m "DEN-3282 regenerate manifest schema"
+          git push origin "HEAD:$BRANCH"
