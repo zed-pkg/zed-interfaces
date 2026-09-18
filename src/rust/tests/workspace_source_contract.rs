@@ -32,7 +32,12 @@ fn path_overrides_accept_env_templates_without_shell_execution() {
         "${HOME}/codes/acme/core"
     );
 
-    for hostile in ["$(touch /tmp/pwned)", "`touch /tmp/pwned`", "$", "${BAD-NAME}/x"] {
+    for hostile in [
+        "$(touch /tmp/pwned)",
+        "`touch /tmp/pwned`",
+        "$",
+        "${BAD-NAME}/x",
+    ] {
         let raw = manifest(&format!(
             "[dependencies]\n\"acme/core\" = \"^1\"\n\n[overrides.path]\n\"acme/core\" = {hostile:?}\n"
         ));
@@ -130,5 +135,9 @@ url = "https://github.com/acme/api"
 "#,
     ))
     .expect_err("workspace source without package identity must fail");
-    assert!(error.to_string().contains("must declare the Zed package identity"));
+    assert!(
+        error
+            .to_string()
+            .contains("must declare the Zed package identity")
+    );
 }
