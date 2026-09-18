@@ -1539,6 +1539,7 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
     }
 
     let mut claimed_paths = BTreeMap::<String, String>::new();
+    let mut claimed_packages = BTreeMap::<String, String>::new();
     for (name, source) in &section.sources {
         if !is_source_name(name) {
             return Err(ManifestError::InvalidSourceComposition(format!(
@@ -1567,12 +1568,17 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
                 "Git-submodule source `{name}` may not declare revision; the superproject gitlink and Zed lock own the exact commit"
             )));
         }
-        if let Some(package) = source.package.as_deref()
-            && !is_dependency_key(package)
-        {
-            return Err(ManifestError::InvalidSourceComposition(format!(
-                "source `{name}` has invalid package identity `{package}`"
-            )));
+        if let Some(package) = source.package.as_deref() {
+            if !is_dependency_key(package) {
+                return Err(ManifestError::InvalidSourceComposition(format!(
+                    "source `{name}` has invalid package identity `{package}`"
+                )));
+            }
+            if let Some(previous_name) = claimed_packages.insert(package.to_string(), name.clone()) {
+                return Err(ManifestError::InvalidSourceComposition(format!(
+                    "package `{package}` is declared by both source `{previous_name}` and source `{name}`"
+                )));
+            }
         }
         if source.role == SourceCompositionRole::Workspace && source.package.is_none() {
             return Err(ManifestError::InvalidSourceComposition(format!(
@@ -1665,7 +1671,21 @@ fn is_reserved_source_path(path: &str) -> bool {
     let first = normalized.split('/').next().unwrap_or_default();
     matches!(first, ".git" | ".hg" | ".svn" | ".zpkg-staging")
         || matches!(normalized, ".zpkg.toml" | ".zpkg.lock" | ".gitmodules")
-        || paths_overlap(normalized, ".zed/operation.lock")
+        || [
+            ".zed/operation.lock",
+            ".zed/pack",
+            ".zed/tools",
+            ".zed/environment.lock.toml",
+            ".zed/paths.json",
+            ".zed/node_path",
+            ".zed/classpath",
+            ".zed/go.work",
+            ".zed/pythonpath",
+            ".zed/cargo-paths.toml",
+            ".zed/pub-deps.yaml",
+        ]
+        .iter()
+        .any(|reserved| paths_overlap(normalized, reserved))
 }
 
 fn validate_project_lifecycle_shell(shell: &str, phase: &str) -> Result<(), ManifestError> {
