@@ -1,0 +1,10 @@
+{
+  "schema": "ores.conformance.bootstrap/v1",
+  "repository": "zed-pkg/zed-interfaces",
+  "id": "authority-boundary",
+  "status": "bootstrap-only",
+  "notes": [
+    "Policy metadata only; not a behavioral case.",
+    "Add ores.conformance.case/v1 behavior cases before declaring behavioral coverage."
+  ]
+}
