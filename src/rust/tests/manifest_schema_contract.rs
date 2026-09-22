@@ -160,7 +160,8 @@ url = "https://github.com/acme/lib.git"
 role = "workspace"
 package = "acme/lib"
 "#;
-    let error = Manifest::parse(input).expect_err("legacy and canonical Git authority must conflict");
+    let error =
+        Manifest::parse(input).expect_err("legacy and canonical Git authority must conflict");
     assert!(error.to_string().contains("cannot coexist"), "{error}");
 }
 
@@ -189,7 +190,10 @@ path = "sources/one"
         "{base}\n[interop.source-composition.sources.two]\nvcs = \"git\"\nurl = \"https://github.com/acme/two.git\"\nrole = \"workspace\"\npackage = \"acme/lib\"\npath = \"sources/two\"\n"
     );
     let error = Manifest::parse(&duplicate).expect_err("duplicate package ownership must fail");
-    assert!(error.to_string().contains("declared by both source"), "{error}");
+    assert!(
+        error.to_string().contains("declared by both source"),
+        "{error}"
+    );
 
     let reserved = base.replace("path = \"sources/one\"", "path = \".zed/pack/source\"");
     let error = Manifest::parse(&reserved).expect_err("generated Zed state must stay reserved");
