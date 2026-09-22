@@ -295,6 +295,10 @@
         },
         "git": {
           "$ref": "#/$defs/GitInteropSection"
+        },
+        "source-composition": {
+          "$ref": "#/$defs/SourceCompositionSection",
+          "description": "Canonical repository-source composition owned by .zpkg.toml. Native\nVCS metadata such as .gitmodules is a generated/import compatibility\nprojection, never a second dependency-graph authority."
         }
       },
       "type": "object"
@@ -935,6 +939,88 @@
       "properties": {
         "key_id": {
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SourceCompositionEntry": {
+      "description": "One VCS-backed source declared by the Zed manifest.",
+      "properties": {
+        "branch": {
+          "type": "string"
+        },
+        "package": {
+          "description": "Canonical Zed package identity for workspace/package-backed sources.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Explicit project-relative checkout path. When omitted, the CLI derives\nit from the corresponding section root plus the source name.",
+          "type": "string"
+        },
+        "projection": {
+          "$ref": "#/$defs/SourceCompositionProjection",
+          "default": "checkout"
+        },
+        "recursive": {
+          "type": "boolean"
+        },
+        "revision": {
+          "description": "Optional human-authored revision or branch intent. Exact immutable\nprovenance remains a lockfile concern.",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/SourceCompositionRole"
+        },
+        "url": {
+          "type": "string"
+        },
+        "vcs": {
+          "$ref": "#/$defs/Vcs",
+          "default": "git"
+        }
+      },
+      "required": [
+        "url",
+        "role"
+      ],
+      "type": "object"
+    },
+    "SourceCompositionProjection": {
+      "description": "How the source is projected into the working tree.",
+      "enum": [
+        "checkout",
+        "git-submodule"
+      ],
+      "type": "string"
+    },
+    "SourceCompositionRole": {
+      "description": "Why a repository source is present. Explicit classification prevents a Git\nsubmodule or other checkout from silently becoming a package dependency.",
+      "enum": [
+        "workspace",
+        "inventory",
+        "embedded-source",
+        "experiment-reference",
+        "legacy"
+      ],
+      "type": "string"
+    },
+    "SourceCompositionSection": {
+      "description": "Canonical source-composition declaration. This is authored Zed state;\n.gitmodules/.hg metadata are transport projections or migration inputs.",
+      "properties": {
+        "checkout_dir": {
+          "description": "Default project-relative root for ordinary VCS checkouts. Omitted =\n.zed/vcs. Must not overlap the package materialization tree.",
+          "type": "string"
+        },
+        "git_submodule_dir": {
+          "description": "Default project-relative root for Git-submodule projections. Omitted =\nsubmodules. This is separate from checkout_dir and [install].dir.",
+          "type": "string"
+        },
+        "sources": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SourceCompositionEntry"
+          },
+          "description": "Stable source names mapped to their transport and ownership declaration.",
+          "type": "object"
         }
       },
       "type": "object"
