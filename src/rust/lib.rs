@@ -33,6 +33,7 @@ pub mod public_intake;
 pub mod recovery;
 pub mod registry;
 pub mod registry_protocol_v1;
+pub mod retirement;
 pub mod signing;
 pub mod source;
 pub mod sync;
@@ -159,6 +160,10 @@ pub use registry_protocol_v1::{
     RegistryLimitsV1, RegistryProtocolErrorCodeV1, RegistryProtocolErrorV1,
     RegistryProtocolV1Error, RegistryPublishRequestV1, RegistryRootSignatureV1,
     RegistrySigningKeyStateV1, RegistrySigningKeyV1, RegistryVisibilityV1,
+};
+pub use retirement::{
+    MAX_RETIREMENT_MESSAGE_CHARS, RETIRE_AUDIT_ACTION, RetireRequest, RetireResponse, Retirement,
+    RetirementError, RetirementReason, UNRETIRE_AUDIT_ACTION, retirement_path,
 };
 pub use signing::{
     DetachedSignatureV1, ED25519_PUBLIC_KEY_BYTES, ED25519_SIGNATURE_BYTES, IndexAttestationV1,
