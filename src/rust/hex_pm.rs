@@ -175,7 +175,11 @@ pub mod api {
         key_name: &str,
     ) -> Result<String, HexPmPathError> {
         validate_segment("key name", key_name)?;
-        Ok(format!("{}/{}", organization_keys_path(organization)?, key_name))
+        Ok(format!(
+            "{}/{}",
+            organization_keys_path(organization)?,
+            key_name
+        ))
     }
 
     pub fn user_path(username: &str) -> Result<String, HexPmPathError> {
@@ -205,7 +209,11 @@ impl HexPmPathError {
 
 impl fmt::Display for HexPmPathError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Hex.pm {} must be one non-empty URL path segment", self.field)
+        write!(
+            f,
+            "Hex.pm {} must be one non-empty URL path segment",
+            self.field
+        )
     }
 }
 
@@ -231,7 +239,9 @@ mod tests {
         assert_eq!(HexPmRepositoryResource::Names.path(&public), "/names");
         assert_eq!(HexPmRepositoryResource::Versions.path(&public), "/versions");
         assert_eq!(
-            HexPmRepositoryResource::package("plug").unwrap().path(&public),
+            HexPmRepositoryResource::package("plug")
+                .unwrap()
+                .path(&public),
             "/packages/plug"
         );
         assert_eq!(
@@ -245,7 +255,10 @@ mod tests {
     #[test]
     fn private_repository_paths_are_scoped_without_changing_resource_shape() {
         let private = HexPmRepositoryScope::private("acme").unwrap();
-        assert_eq!(HexPmRepositoryResource::Names.path(&private), "/repos/acme/names");
+        assert_eq!(
+            HexPmRepositoryResource::Names.path(&private),
+            "/repos/acme/names"
+        );
         assert_eq!(
             HexPmRepositoryResource::package("secret")
                 .unwrap()

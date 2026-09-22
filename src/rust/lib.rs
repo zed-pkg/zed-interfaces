@@ -16,6 +16,7 @@ pub mod environment_lock;
 pub mod environment_v2;
 pub mod excludes;
 pub mod git_cli_install;
+pub mod hex_pm;
 pub mod inspection;
 pub mod language;
 pub mod lockfile;
