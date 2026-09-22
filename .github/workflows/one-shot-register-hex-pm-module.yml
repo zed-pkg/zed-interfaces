@@ -1,0 +1,43 @@
+name: one-shot register Hex.pm contract module
+
+on:
+  push:
+    branches:
+      - feat/hex-pm-protocol-contract
+
+permissions:
+  contents: write
+
+jobs:
+  register:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+      - name: Register module, format, test, and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/rust/lib.rs')
+          text = path.read_text()
+          anchor = 'pub mod git_cli_install;\n'
+          if 'pub mod hex_pm;\n' not in text:
+              if anchor not in text:
+                  raise SystemExit('lib.rs module insertion anchor drifted')
+              text = text.replace(anchor, anchor + 'pub mod hex_pm;\n', 1)
+              path.write_text(text)
+          PY
+          rustup component add rustfmt
+          cargo fmt --all
+          cargo test --locked --manifest-path src/rust/Cargo.toml hex_pm
+          rm .github/workflows/one-shot-register-hex-pm-module.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'feat: expose Hex.pm protocol contract'
+          git push origin HEAD:feat/hex-pm-protocol-contract
