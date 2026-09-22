@@ -1583,7 +1583,8 @@ fn validate_source_composition(manifest: &Manifest) -> Result<(), ManifestError>
                     "source `{name}` has invalid package identity `{package}`"
                 )));
             }
-            if let Some(previous_name) = claimed_packages.insert(package.to_string(), name.clone()) {
+            if let Some(previous_name) = claimed_packages.insert(package.to_string(), name.clone())
+            {
                 return Err(ManifestError::InvalidSourceComposition(format!(
                     "package `{package}` is declared by both source `{previous_name}` and source `{name}`"
                 )));
