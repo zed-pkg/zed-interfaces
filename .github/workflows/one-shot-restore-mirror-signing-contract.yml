@@ -1,0 +1,151 @@
+name: one-shot restore mirror signing contract
+
+on:
+  push:
+    branches:
+      - fix/restore-mirror-signing-contract-20260922
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Resolve repository Rust toolchain
+        id: rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import tomllib
+          from pathlib import Path
+          print(f"toolchain={tomllib.loads(Path('rust-toolchain.toml').read_text())['toolchain']['channel']}")
+          PY
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+          components: rustfmt,clippy
+
+      - name: Restore focused shared contract slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin feat/mirror-fallback-and-forge-interop
+          # Salvage only the first, transport/signing contract commit. Do not
+          # pull the later OCI-registry expansion into this compatibility repair.
+          git show 013c0092efd98ce81617bfcb6a644b40c334fb49:src/rust/signing.rs > src/rust/signing.rs
+          git show 013c0092efd98ce81617bfcb6a644b40c334fb49:src/rust/mirror.rs > src/rust/mirror.rs
+          git show 013c0092efd98ce81617bfcb6a644b40c334fb49:schemas/index.json > /tmp/mirror-index.json
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected patch anchor missing in {path}: {old[:100]!r}")
+              if text.count(old) != 1:
+                  raise SystemExit(f"patch anchor is not unique in {path}: {old[:100]!r}")
+              path.write_text(text.replace(old, new, 1))
+
+          registry = Path('src/rust/registry.rs')
+          replace_once(
+              registry,
+              '''pub fn org_keys_path(org: &str) -> String {\n    format!("{API_V1}/orgs/{org}/keys")\n}\n\n''',
+              '''pub fn org_keys_path(org: &str) -> String {\n    format!("{API_V1}/orgs/{org}/keys")\n}\n\n/// `GET` — mirror set advertised by this registry deployment.\npub fn mirrors_path() -> String {\n    format!("{API_V1}/mirrors")\n}\n\n/// `GET` / `PUT` — publisher-signed package index used for mirror fallback.\npub fn signed_index_path(org: &str, name: &str) -> String {\n    format!("{API_V1}/packages/{org}/{name}/signed-index")\n}\n\n''',
+          )
+          replace_once(
+              registry,
+              '''pub struct OrgKeysResponse {\n    pub keys: Vec<crate::signing::PublisherKeyV1>,\n}\n\n''',
+              '''pub struct OrgKeysResponse {\n    pub org: String,\n    pub keys: Vec<crate::signing::PublisherKeyV1>,\n}\n\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]\npub struct MirrorsResponse {\n    pub registry_url: String,\n    pub mirrors: Vec<crate::mirror::MirrorDescriptorV1>,\n}\n\n/// The HTTP response is the shared signed-index document itself.\npub type SignedIndexResponse = crate::signing::SignedIndexV1;\n\n''',
+          )
+
+          generator = Path('src/rust/examples/generate_schemas.rs')
+          anchor = '''    write::<zed_interfaces::registry::PackageMetadata>(dir, "package-metadata");\n'''
+          additions = '''    write::<zed_interfaces::mirror::MirrorBootstrapV1>(dir, "mirror-bootstrap-v1");\n    write::<zed_interfaces::mirror::MirrorDescriptorV1>(dir, "mirror-descriptor-v1");\n    write::<zed_interfaces::registry::MirrorsResponse>(dir, "mirrors-response");\n    write::<zed_interfaces::registry::OrgKeysRequest>(dir, "org-keys-request");\n    write::<zed_interfaces::registry::OrgKeysResponse>(dir, "org-keys-response");\n    write::<zed_interfaces::signing::PublisherKeySetV1>(dir, "publisher-keys-v1");\n    write::<zed_interfaces::signing::SignedIndexV1>(dir, "signed-index-v1");\n    write::<zed_interfaces::signing::SignedVersionV1>(dir, "signed-version-v1");\n'''
+          replace_once(generator, anchor, additions + anchor)
+
+          index_path = Path('schemas/index.json')
+          current = json.loads(index_path.read_text())
+          salvage = json.loads(Path('/tmp/mirror-index.json').read_text())
+          wanted = {
+              'mirror-bootstrap-v1.json',
+              'mirror-descriptor-v1.json',
+              'mirrors-response.json',
+              'org-keys-request.json',
+              'org-keys-response.json',
+              'publisher-keys-v1.json',
+              'signed-index-v1.json',
+              'signed-version-v1.json',
+          }
+          by_file = {entry['file']: entry for entry in current['schemas']}
+          salvage_by_file = {entry['file']: entry for entry in salvage['schemas']}
+          missing = wanted - salvage_by_file.keys()
+          if missing:
+              raise SystemExit(f'salvage index missing expected entries: {sorted(missing)}')
+          for name in wanted:
+              by_file[name] = salvage_by_file[name]
+          current['schemas'] = [by_file[name] for name in sorted(by_file)]
+          index_path.write_text(json.dumps(current, indent=2, ensure_ascii=False) + '\n')
+          PY
+
+          cargo fmt --all
+          git diff --check
+
+      - name: Regenerate schemas and polyglot slices
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --example generate_schemas 2>&1 | tee /tmp/generate-schemas.log
+          node codegen/generate.mjs 2>&1 | tee /tmp/codegen.log
+          cargo fmt --all
+          git diff --check
+
+      - name: Validate Rust contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check --locked --all-targets 2>&1 | tee /tmp/cargo-check.log
+          cargo test --locked --all-targets 2>&1 | tee /tmp/cargo-test.log
+          cargo clippy --locked --all-targets -- -D warnings 2>&1 | tee /tmp/clippy.log
+          cargo fmt --all -- --check
+
+      - name: Validate generated client slices
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test 2>&1 | tee /tmp/npm-test.log
+
+      - name: Upload rescue diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mirror-signing-contract-rescue-diagnostics
+          path: |
+            /tmp/generate-schemas.log
+            /tmp/codegen.log
+            /tmp/cargo-check.log
+            /tmp/cargo-test.log
+            /tmp/clippy.log
+            /tmp/npm-test.log
+          if-no-files-found: ignore
+
+      - name: Commit validated compatibility contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/one-shot-restore-mirror-signing-contract.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: restore mirror and signing shared contracts'
+          git push origin HEAD:fix/restore-mirror-signing-contract-20260922
