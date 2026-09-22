@@ -1,0 +1,38 @@
+name: one-shot refresh generated schemas
+
+on:
+  push:
+    branches:
+      - chore/refresh-generated-schemas-baseline
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: stable
+      - name: Refresh checked-in schemas and remove one-shot workflow
+        shell: bash
+        working-directory: src/rust
+        run: |
+          set -euo pipefail
+          cargo run --locked --example generate_schemas
+          cd ../..
+          rm .github/workflows/one-shot-refresh-schemas.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No generated schema changes were needed.'
+            exit 0
+          fi
+          git commit -m 'chore: refresh generated schemas'
+          git push origin HEAD:chore/refresh-generated-schemas-baseline
