@@ -1,0 +1,24 @@
+name: prove ores-stack 279
+on:
+  push:
+    branches: [proof/ores-stack-279-ppr-20260923]
+permissions:
+  contents: read
+jobs:
+  compile-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ORESoftware/ores-stack
+          ref: d3e93afabe1540a04de12dd8dccc4ab77ac8af90
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+      - run: cargo check --locked -p ores-stack-cli --all-targets
+      - run: cargo test --locked -p ores-stack-cli
+      - run: cargo test --locked -p ores-stack-ppr-http
+      - run: cargo test --locked -p ores-stack-p2-edge-minimal
+      - run: cargo test --locked -p ores-stack-process-tree
