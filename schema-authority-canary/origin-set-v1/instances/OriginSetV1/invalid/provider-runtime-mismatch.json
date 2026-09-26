@@ -1,0 +1,25 @@
+{
+  "contract_version": "zed.origin-set/v1",
+  "set_id": "zed-production",
+  "generation": 3,
+  "origins": [
+    {
+      "id": "invalid-cloud-run",
+      "base_url": "https://api.example.com",
+      "runtime_stack": "cloud_run",
+      "provider": "aws",
+      "priority": 10,
+      "deployment_receipt": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "health_path": "/healthz",
+      "compatibility_path": "/internal/origin-compatibility",
+      "expected_audience": "zed-edge-api",
+      "route_families": ["registry_read"]
+    }
+  ],
+  "read_policy": {
+    "request_deadline_ms": 5000,
+    "hedge_delay_ms": 150,
+    "max_inflight_origins": 2
+  },
+  "write_authorities": {}
+}

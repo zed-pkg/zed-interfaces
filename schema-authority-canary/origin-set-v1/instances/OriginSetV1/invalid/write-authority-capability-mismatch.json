@@ -1,0 +1,27 @@
+{
+  "contract_version": "zed.origin-set/v1",
+  "set_id": "zed-production",
+  "generation": 4,
+  "origins": [
+    {
+      "id": "read-only",
+      "base_url": "https://api.example.com",
+      "runtime_stack": "kubernetes",
+      "provider": "gcp",
+      "priority": 10,
+      "deployment_receipt": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "health_path": "/healthz",
+      "compatibility_path": "/internal/origin-compatibility",
+      "expected_audience": "zed-edge-api",
+      "route_families": ["registry_read"]
+    }
+  ],
+  "read_policy": {
+    "request_deadline_ms": 5000,
+    "hedge_delay_ms": 150,
+    "max_inflight_origins": 2
+  },
+  "write_authorities": {
+    "registry": "read-only"
+  }
+}

@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "authored.origin-set-v1.schema.json",
+  "$defs": {
+    "OriginRuntimeStackV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginRuntimeStackV1",
+      "type": "string",
+      "enum": ["kubernetes", "cloud_run", "beamscale", "scintilla"]
+    },
+    "OriginProviderV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginProviderV1",
+      "type": "string",
+      "enum": ["aws", "gcp", "beamscale", "scintilla"]
+    },
+    "OriginRouteFamilyV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginRouteFamilyV1",
+      "type": "string",
+      "enum": [
+        "registry_read",
+        "artifact_read",
+        "account_read",
+        "auth_read",
+        "registry_write",
+        "account_write",
+        "organization_write",
+        "auth_write"
+      ]
+    },
+    "OriginReadPolicyV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginReadPolicyV1",
+      "type": "object",
+      "properties": {
+        "request_deadline_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000
+        },
+        "hedge_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "max_inflight_origins": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        }
+      },
+      "required": ["request_deadline_ms", "hedge_delay_ms", "max_inflight_origins"],
+      "unevaluatedProperties": false
+    },
+    "OriginWriteAuthoritiesV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginWriteAuthoritiesV1",
+      "type": "object",
+      "properties": {
+        "registry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "accounts": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "organizations": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "auth": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "OriginV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginV1",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "base_url": {
+          "type": "string",
+          "minLength": 9,
+          "maxLength": 512,
+          "pattern": "^https://[^\\s/@]+(?:/[^\\s]*)?$"
+        },
+        "runtime_stack": { "$ref": "OriginRuntimeStackV1" },
+        "provider": { "$ref": "OriginProviderV1" },
+        "region": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "deployment_receipt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "health_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^/[A-Za-z0-9/_-]{0,127}$"
+        },
+        "compatibility_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^/[A-Za-z0-9/_-]{0,127}$"
+        },
+        "expected_audience": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "route_families": {
+          "type": "array",
+          "items": { "$ref": "OriginRouteFamilyV1" },
+          "minItems": 1,
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "id",
+        "base_url",
+        "runtime_stack",
+        "provider",
+        "priority",
+        "deployment_receipt",
+        "health_path",
+        "compatibility_path",
+        "expected_audience",
+        "route_families"
+      ],
+      "unevaluatedProperties": false
+    },
+    "OriginSetV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginSetV1",
+      "type": "object",
+      "properties": {
+        "contract_version": { "const": "zed.origin-set/v1" },
+        "set_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "origins": {
+          "type": "array",
+          "items": { "$ref": "OriginV1" },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "read_policy": { "$ref": "OriginReadPolicyV1" },
+        "write_authorities": { "$ref": "OriginWriteAuthoritiesV1" }
+      },
+      "required": [
+        "contract_version",
+        "set_id",
+        "generation",
+        "origins",
+        "read_policy",
+        "write_authorities"
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}
