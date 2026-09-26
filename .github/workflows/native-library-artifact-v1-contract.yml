@@ -1,0 +1,85 @@
+name: NativeLibraryArtifactV1 peer-authority admission
+
+on:
+  pull_request:
+    paths:
+      - "schema-authority-canary/native-library-artifact-v1/**"
+      - ".github/workflows/native-library-artifact-v1-contract.yml"
+  push:
+    branches: [main, dev]
+    paths:
+      - "schema-authority-canary/native-library-artifact-v1/**"
+      - ".github/workflows/native-library-artifact-v1-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-library-artifact-v1-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify checked-out revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Set up tested Node runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.16.0
+
+      - name: Run semantic native-library admission fixtures
+        run: node schema-authority-canary/native-library-artifact-v1/semantic-admission.mjs
+
+      - name: Compare independently authored peer authorities
+        uses: ORESoftware/typespec-json-schema-validator@813d5f021e02574f529a9553b670719f8f10d02c
+        with:
+          typespec: schema-authority-canary/native-library-artifact-v1/main.tsp
+          schema: schema-authority-canary/native-library-artifact-v1/authored.schema.json
+          report: .native-library-artifact-v1/report.json
+          sarif: .native-library-artifact-v1/report.sarif
+          contract_ir: .native-library-artifact-v1/contract-ir.json
+          output_dir: .native-library-artifact-v1/generated
+          max_probes: "128"
+
+      - name: Require zero unexplained peer-authority findings
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFileSync } from "node:fs";
+
+          const report = JSON.parse(readFileSync(".native-library-artifact-v1/report.json", "utf8"));
+          assert.equal(report.status, "passed");
+          assert.equal(report.zeroUnexplainedFindings, true);
+          assert.equal(report.authorities.typespec.authority, "independently-authored");
+          assert.equal(report.authorities.typespec.generatedJsonSchemaRole, "comparison-evidence-only");
+          assert.equal(report.authorities.jsonSchema.authority, "independently-authored");
+          assert.equal(report.authorities.jsonSchema.dialect, "https://json-schema.org/draft/2020-12/schema");
+          assert.equal(report.authorities.precedence, "none");
+          NODE
+
+      - name: Retain native-library contract evidence
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-library-artifact-v1-${{ github.run_id }}
+          path: .native-library-artifact-v1/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30

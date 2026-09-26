@@ -1,0 +1,14 @@
+{
+  "contract_version": "zed.native-library-artifact/v1",
+  "library_id": "ores_crypto",
+  "target_os": "macos",
+  "target_arch": "aarch64",
+  "binary_format": "mach_o",
+  "artifact_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "artifact_size": 114688,
+  "file_name": "libores_crypto.dylib",
+  "runtime_name": "@rpath/libores_crypto.dylib",
+  "abi_version": "1",
+  "direct_imports": ["@rpath/libores_support.dylib"],
+  "provenance_ref": "zed-pkg/ores-crypto@1.0.0"
+}
