@@ -22,12 +22,15 @@ model EdgeFallbackCapabilityV1 {
   sub: string;
 
   @minValue(0)
+  @maxValue(9007199254740991)
   iat: safeint;
 
   @minValue(0)
+  @maxValue(9007199254740991)
   nbf: safeint;
 
   @minValue(0)
+  @maxValue(9007199254740991)
   exp: safeint;
 
   @minLength(8)
