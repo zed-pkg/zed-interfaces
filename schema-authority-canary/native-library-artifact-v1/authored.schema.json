@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "authored.native-library-artifact-v1.schema.json",
+  "$defs": {
+    "NativeLibraryOsV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "NativeLibraryOsV1",
+      "type": "string",
+      "enum": ["windows", "linux", "macos"]
+    },
+    "NativeLibraryArchV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "NativeLibraryArchV1",
+      "type": "string",
+      "enum": ["x86_64", "aarch64"]
+    },
+    "NativeLibraryFormatV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "NativeLibraryFormatV1",
+      "type": "string",
+      "enum": ["pe", "elf", "mach_o"]
+    },
+    "NativeLibraryArtifactV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "NativeLibraryArtifactV1",
+      "type": "object",
+      "properties": {
+        "contract_version": { "const": "zed.native-library-artifact/v1" },
+        "library_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9._+-]{0,127}$"
+        },
+        "target_os": { "$ref": "NativeLibraryOsV1" },
+        "target_arch": { "$ref": "NativeLibraryArchV1" },
+        "binary_format": { "$ref": "NativeLibraryFormatV1" },
+        "artifact_sha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "artifact_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "file_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "runtime_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "abi_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "direct_imports": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128
+        },
+        "provenance_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "contract_version",
+        "library_id",
+        "target_os",
+        "target_arch",
+        "binary_format",
+        "artifact_sha256",
+        "artifact_size",
+        "file_name",
+        "runtime_name",
+        "direct_imports"
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}
