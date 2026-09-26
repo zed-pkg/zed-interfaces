@@ -32,10 +32,7 @@ fn windows_platform_commands_parse_and_roundtrip() {
     let manifest = Manifest::parse(manifest_with_platform_commands()).expect("manifest must parse");
     let build = manifest.build.as_ref().expect("build section");
 
-    assert_eq!(
-        build.command_for_host(false),
-        "cargo build --release"
-    );
+    assert_eq!(build.command_for_host(false), "cargo build --release");
     assert_eq!(
         build.command_for_host(true),
         "cargo build --release --target x86_64-pc-windows-msvc"
@@ -98,7 +95,11 @@ fn empty_windows_build_command_is_rejected() {
         "command_windows = \"   \"",
     );
     let error = Manifest::parse(&source).expect_err("blank windows build command must fail");
-    assert!(error.to_string().contains("command_windows must not be empty"));
+    assert!(
+        error
+            .to_string()
+            .contains("command_windows must not be empty")
+    );
 }
 
 #[test]
@@ -118,5 +119,9 @@ fn empty_windows_smoke_test_is_rejected() {
         "smoke_test_windows = \"\"",
     );
     let error = Manifest::parse(&source).expect_err("blank windows smoke test must fail");
-    assert!(error.to_string().contains("smoke_test_windows must not be empty"));
+    assert!(
+        error
+            .to_string()
+            .contains("smoke_test_windows must not be empty")
+    );
 }
