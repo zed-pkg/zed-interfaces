@@ -291,6 +291,7 @@ impl PublishSection {
     /// Resolve the smoke command for a host without consulting ambient shell state.
     /// Native Windows overrides are additive; older manifests fall back to the
     /// existing POSIX/default command so the schema change is backwards-compatible.
+    #[allow(clippy::needless_return)]
     pub fn smoke_test_for_host(&self, windows: bool) -> Option<&str> {
         if windows {
             return self
@@ -1821,6 +1822,7 @@ pub struct BuildSection {
 }
 
 impl BuildSection {
+    #[allow(clippy::needless_return)]
     pub fn command_for_host(&self, windows: bool) -> &str {
         if windows {
             return self.command_windows.as_deref().unwrap_or(&self.command);
@@ -1828,6 +1830,7 @@ impl BuildSection {
         return &self.command;
     }
 
+    #[allow(clippy::needless_return)]
     pub fn outputs_for_host(&self, windows: bool) -> &[String] {
         if windows && !self.outputs_windows.is_empty() {
             return &self.outputs_windows;
