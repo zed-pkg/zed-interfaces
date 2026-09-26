@@ -69,7 +69,7 @@
       }
     },
     "EdgeFallbackGrantV1": {
-      "oneOf": [
+      "anyOf": [
         {
           "$ref": "#/$defs/GitHubEdgeFallbackGrantV1"
         },
