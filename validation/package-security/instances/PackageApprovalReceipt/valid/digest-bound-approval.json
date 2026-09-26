@@ -1,0 +1,12 @@
+{
+  "approval_id": "approval_0002",
+  "decision_id": "decision_0002",
+  "artifact_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "policy_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "risk_receipt_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "rebuild_receipt_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "reviewer_ref": "user:security-reviewer",
+  "result": "approved",
+  "reviewed_at": 1780000030000
+}
