@@ -1,0 +1,49 @@
+name: finalize Windows generated schemas
+
+on:
+  push:
+    branches: [feat/native-windows-package-contract]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-windows-generated-schemas-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: "1.98.1"
+      - name: Generate all schema projections
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked --example generate_schemas
+          git diff --check
+      - name: Re-prove Windows package contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p zed-interfaces --locked --test windows_package_commands
+      - name: Commit generated schemas once
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- schemas/; then
+            echo "generated schemas already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add schemas/
+          git commit -m "generated: refresh Windows package contract schemas"
+          git push origin HEAD:feat/native-windows-package-contract
