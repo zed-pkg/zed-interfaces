@@ -2,80 +2,104 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/zed-pkg/zed-interfaces/contracts/edge-fallback/v1/authored.schema.json",
   "title": "EdgeFallbackCapabilityV1",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "zed_edge_capability",
-    "iss",
-    "aud",
-    "sub",
-    "iat",
-    "nbf",
-    "exp",
-    "jti",
-    "grants"
-  ],
-  "properties": {
-    "zed_edge_capability": {
-      "type": "integer",
-      "const": 1
-    },
-    "iss": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 512
-    },
-    "aud": {
-      "type": "string",
-      "const": "zed-edge-fallback"
-    },
-    "sub": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 256
-    },
-    "iat": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 9007199254740991
-    },
-    "nbf": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 9007199254740991
-    },
-    "exp": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 9007199254740991
-    },
-    "jti": {
-      "type": "string",
-      "minLength": 8,
-      "maxLength": 192,
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,191}$"
-    },
-    "grants": {
-      "type": "array",
-      "minItems": 1,
-      "maxItems": 16,
-      "items": {
-        "oneOf": [
-          { "$ref": "#/$defs/GitHubEdgeFallbackGrantV1" },
-          { "$ref": "#/$defs/NpmEdgeFallbackGrantV1" },
-          { "$ref": "#/$defs/CargoRegistryEdgeFallbackGrantV1" }
-        ]
-      }
-    }
-  },
+  "$ref": "#/$defs/EdgeFallbackCapabilityV1",
   "$defs": {
+    "EdgeFallbackCapabilityV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zed_edge_capability",
+        "iss",
+        "aud",
+        "sub",
+        "iat",
+        "nbf",
+        "exp",
+        "jti",
+        "grants"
+      ],
+      "properties": {
+        "zed_edge_capability": {
+          "type": "integer",
+          "const": 1
+        },
+        "iss": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "aud": {
+          "type": "string",
+          "const": "zed-edge-fallback"
+        },
+        "sub": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "iat": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "nbf": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "exp": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "jti": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 192,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,191}$"
+        },
+        "grants": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/EdgeFallbackGrantV1"
+          }
+        }
+      }
+    },
+    "EdgeFallbackGrantV1": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/GitHubEdgeFallbackGrantV1"
+        },
+        {
+          "$ref": "#/$defs/NpmEdgeFallbackGrantV1"
+        },
+        {
+          "$ref": "#/$defs/CargoRegistryEdgeFallbackGrantV1"
+        }
+      ]
+    },
     "GitHubEdgeFallbackGrantV1": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["provider", "operation", "package", "resource", "credential_ref"],
+      "required": [
+        "provider",
+        "operation",
+        "package",
+        "resource",
+        "credential_ref"
+      ],
       "properties": {
-        "provider": { "type": "string", "const": "github" },
-        "operation": { "type": "string", "const": "read" },
+        "provider": {
+          "type": "string",
+          "const": "github"
+        },
+        "operation": {
+          "type": "string",
+          "const": "read"
+        },
         "package": {
           "type": "string",
           "minLength": 3,
@@ -99,10 +123,22 @@
     "NpmEdgeFallbackGrantV1": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["provider", "operation", "package", "resource", "credential_ref"],
+      "required": [
+        "provider",
+        "operation",
+        "package",
+        "resource",
+        "credential_ref"
+      ],
       "properties": {
-        "provider": { "type": "string", "const": "npm" },
-        "operation": { "type": "string", "const": "read" },
+        "provider": {
+          "type": "string",
+          "const": "npm"
+        },
+        "operation": {
+          "type": "string",
+          "const": "read"
+        },
         "package": {
           "type": "string",
           "minLength": 3,
@@ -135,8 +171,14 @@
         "credential_ref"
       ],
       "properties": {
-        "provider": { "type": "string", "const": "cargo-registry" },
-        "operation": { "type": "string", "const": "read" },
+        "provider": {
+          "type": "string",
+          "const": "cargo-registry"
+        },
+        "operation": {
+          "type": "string",
+          "const": "read"
+        },
         "package": {
           "type": "string",
           "minLength": 3,
