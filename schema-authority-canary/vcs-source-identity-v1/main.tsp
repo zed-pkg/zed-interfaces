@@ -79,7 +79,8 @@ model VcsSourceIdentityV1 {
   artifact_sha256: string;
 
   @minValue(1)
-  artifact_size: uint64;
+  @maxValue(4294967295)
+  artifact_size: uint32;
 
   artifact_format: VcsArtifactFormatV1;
 
