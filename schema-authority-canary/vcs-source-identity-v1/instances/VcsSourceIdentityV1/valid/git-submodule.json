@@ -1,0 +1,17 @@
+{
+  "contract_version": "zed.vcs-source-identity/v1",
+  "source_id": "shared-auth-interfaces",
+  "vcs_kind": "git",
+  "repository_url": "https://github.com/shared-auth/shared-auth-interfaces",
+  "revision": "1111111111111111111111111111111111111111",
+  "selector_kind": "tag",
+  "selector": "v0.1.0",
+  "relation_kind": "git_submodule",
+  "destination_path": "deps/shared-auth-interfaces",
+  "package": "shared-auth/shared-auth-interfaces",
+  "package_version": "0.1.0",
+  "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifact_size": 1024,
+  "artifact_format": "tar.gz",
+  "parent_source_id": "root-project"
+}
