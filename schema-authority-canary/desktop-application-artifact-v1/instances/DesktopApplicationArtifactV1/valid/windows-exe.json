@@ -1,0 +1,21 @@
+{
+  "contract_version": "zed.desktop-application-artifact/v1",
+  "org": "zed-pkg",
+  "app": "zed-desktop",
+  "version": "1.0.0",
+  "channel": "stable",
+  "target_os": "windows",
+  "target_arch": "x86_64",
+  "artifact_format": "windows_exe",
+  "artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "artifact_size": 62914560,
+  "file_name": "zed-desktop-1.0.0-x86_64.exe",
+  "source_repository": "https://github.com/zed-pkg/zed-desktop-app.rs",
+  "source_revision": "1111111111111111111111111111111111111111",
+  "build_receipt_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+  "minimum_os_version": "10",
+  "signing_state": "signed",
+  "publisher_identity": "CN=Zed Package",
+  "notarization_state": "not_applicable",
+  "cdn_object_path": "apps/artifacts/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/zed-desktop-1.0.0-x86_64.exe"
+}
