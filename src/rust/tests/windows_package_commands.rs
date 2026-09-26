@@ -1,5 +1,6 @@
 use zed_interfaces::manifest::Manifest;
 
+#[allow(clippy::needless_return)]
 fn manifest_with_platform_commands() -> &'static str {
     return r#"
 [package]
