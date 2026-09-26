@@ -1,0 +1,87 @@
+name: Edge fallback capability peer authority
+
+on:
+  pull_request:
+    paths:
+      - "contracts/edge-fallback/v1/**"
+      - ".github/workflows/edge-fallback-capability-contract.yml"
+  push:
+    branches: [main, dev]
+    paths:
+      - "contracts/edge-fallback/v1/**"
+      - ".github/workflows/edge-fallback-capability-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edge-fallback-capability-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  peer-authority:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify checked-out revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Compare independently-authored TypeSpec and JSON Schema
+        uses: ORESoftware/typespec-json-schema-validator@813d5f021e02574f529a9553b670719f8f10d02c
+        with:
+          typespec: contracts/edge-fallback/v1/main.tsp
+          schema: contracts/edge-fallback/v1/authored.schema.json
+          report: .edge-fallback-contract/report.json
+          sarif: .edge-fallback-contract/report.sarif
+          contract_ir: .edge-fallback-contract/contract-ir.json
+          output_dir: .edge-fallback-contract/generated
+          max_probes: "128"
+
+      - name: Require peer-authority admission
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFileSync } from "node:fs";
+
+          const report = JSON.parse(
+            readFileSync(".edge-fallback-contract/report.json", "utf8"),
+          );
+
+          assert.equal(report.status, "passed");
+          assert.equal(report.zeroUnexplainedFindings, true);
+          assert.equal(report.authorities.typespec.authority, "independently-authored");
+          assert.equal(report.authorities.typespec.generatedJsonSchemaRole, "comparison-evidence-only");
+          assert.equal(report.authorities.jsonSchema.authority, "independently-authored");
+          assert.equal(
+            report.authorities.jsonSchema.dialect,
+            "https://json-schema.org/draft/2020-12/schema",
+          );
+          assert.equal(report.authorities.precedence, "none");
+          assert.equal(report.coverage.typespecGeneratedJsonSchemaComparison, true);
+          assert.equal(report.coverage.differentialInstanceValidation, true);
+          NODE
+
+      - name: Retain Contract IR and comparison evidence
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: edge-fallback-capability-${{ github.run_id }}
+          path: .edge-fallback-contract/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
