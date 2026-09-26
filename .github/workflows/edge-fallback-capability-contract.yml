@@ -39,7 +39,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Compare independently-authored TypeSpec and JSON Schema
-        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        uses: ORESoftware/typespec-json-schema-validator@813d5f021e02574f529a9553b670719f8f10d02c
         with:
           typespec: contracts/edge-fallback/v1/main.tsp
           schema: contracts/edge-fallback/v1/authored.schema.json
