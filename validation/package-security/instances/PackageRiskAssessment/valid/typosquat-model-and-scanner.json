@@ -1,0 +1,37 @@
+{
+  "assessment_id": "assessment_0001",
+  "artifact": {
+    "ecosystem": "npm",
+    "package_name": "exampl3-utils",
+    "package_version": "1.0.0",
+    "source_uri": "https://github.com/example/exampl3-utils",
+    "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "resolved_revision": "0123456789abcdef0123456789abcdef01234567",
+    "artifact_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "findings": [
+    {
+      "finding_id": "finding_typosquat_01",
+      "signal_class": "typosquatting",
+      "producer_kind": "deterministic_scanner",
+      "producer_id": "zed-name-distance",
+      "producer_version": "1.0.0",
+      "severity": "high",
+      "evidence_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "evidence_ref": "evidence:name-distance:001"
+    },
+    {
+      "finding_id": "finding_generated_01",
+      "signal_class": "obfuscation_or_generated_payload",
+      "producer_kind": "model",
+      "producer_id": "zed-package-risk-model",
+      "producer_version": "2026-09-26",
+      "severity": "medium",
+      "confidence": 0.91,
+      "evidence_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ],
+  "policy_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "assessed_at": 1780000000000,
+  "expires_at": 1780003600000
+}
