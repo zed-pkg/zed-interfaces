@@ -1,0 +1,72 @@
+name: finalize native Windows package contract
+
+on:
+  push:
+    branches: [feat/native-windows-package-contract]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-native-windows-package-contract-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: "1.98.1"
+          components: rustfmt, clippy
+      - name: Preserve explicit-return style with narrow lint allowances
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby <<'RUBY'
+          path = "src/rust/manifest.rs"
+          source = File.read(path)
+          replacements = {
+            "    pub fn smoke_test_for_host(&self, windows: bool) -> Option<&str> {" =>
+              "    #[allow(clippy::needless_return)]\n    pub fn smoke_test_for_host(&self, windows: bool) -> Option<&str> {",
+            "    pub fn command_for_host(&self, windows: bool) -> &str {" =>
+              "    #[allow(clippy::needless_return)]\n    pub fn command_for_host(&self, windows: bool) -> &str {",
+            "    pub fn outputs_for_host(&self, windows: bool) -> &[String] {" =>
+              "    #[allow(clippy::needless_return)]\n    pub fn outputs_for_host(&self, windows: bool) -> &[String] {"
+          }
+          replacements.each do |old, new_value|
+            next if source.include?(new_value)
+            count = source.scan(old).length
+            abort("expected exactly one target for #{old.inspect}; got #{count}") unless count == 1
+            source = source.sub(old, new_value)
+          end
+          File.write(path, source)
+          RUBY
+          cargo fmt --all
+      - name: Refresh generated public manifest schema
+        run: cargo run --locked --example generate_schemas
+      - name: Prove Rust contract and lint policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p zed-interfaces --locked --test windows_package_commands
+          cargo clippy --locked --all-targets -- -D warnings
+          git diff --check
+      - name: Commit final contract evidence once
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/rust/manifest.rs schemas/manifest.json; then
+            echo "Windows package contract is already finalized"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/rust/manifest.rs schemas/manifest.json
+          git commit -m "fix: finalize native Windows package contract"
+          git push origin HEAD:feat/native-windows-package-contract
