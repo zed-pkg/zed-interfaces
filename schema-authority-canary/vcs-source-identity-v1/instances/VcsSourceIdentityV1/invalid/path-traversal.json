@@ -1,0 +1,12 @@
+{
+  "contract_version": "zed.vcs-source-identity/v1",
+  "source_id": "escaping-source",
+  "vcs_kind": "mercurial",
+  "repository_url": "https://hg.example.com/platform/escaping-source",
+  "revision": "5555555555555555555555555555555555555555",
+  "relation_kind": "direct",
+  "destination_path": "../outside",
+  "artifact_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "artifact_size": 256,
+  "artifact_format": "tar.gz"
+}
