@@ -3,14 +3,20 @@
   "$id": "authored.origin-set-v1.schema.json",
   "$defs": {
     "OriginRuntimeStackV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginRuntimeStackV1",
       "type": "string",
       "enum": ["kubernetes", "cloud_run", "beamscale", "scintilla"]
     },
     "OriginProviderV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginProviderV1",
       "type": "string",
       "enum": ["aws", "gcp", "beamscale", "scintilla"]
     },
     "OriginRouteFamilyV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginRouteFamilyV1",
       "type": "string",
       "enum": [
         "registry_read",
@@ -24,6 +30,8 @@
       ]
     },
     "OriginReadPolicyV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginReadPolicyV1",
       "type": "object",
       "properties": {
         "request_deadline_ms": {
@@ -46,6 +54,8 @@
       "unevaluatedProperties": false
     },
     "OriginWriteAuthoritiesV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginWriteAuthoritiesV1",
       "type": "object",
       "properties": {
         "registry": {
@@ -76,6 +86,8 @@
       "unevaluatedProperties": false
     },
     "OriginV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OriginV1",
       "type": "object",
       "properties": {
         "id": {
@@ -90,8 +102,8 @@
           "maxLength": 512,
           "pattern": "^https://[^\\s/@]+(?:/[^\\s]*)?$"
         },
-        "runtime_stack": { "$ref": "#/$defs/OriginRuntimeStackV1" },
-        "provider": { "$ref": "#/$defs/OriginProviderV1" },
+        "runtime_stack": { "$ref": "OriginRuntimeStackV1" },
+        "provider": { "$ref": "OriginProviderV1" },
         "region": {
           "type": "string",
           "minLength": 1,
@@ -127,7 +139,7 @@
         },
         "route_families": {
           "type": "array",
-          "items": { "$ref": "#/$defs/OriginRouteFamilyV1" },
+          "items": { "$ref": "OriginRouteFamilyV1" },
           "minItems": 1,
           "maxItems": 8
         }
@@ -165,12 +177,12 @@
         },
         "origins": {
           "type": "array",
-          "items": { "$ref": "#/$defs/OriginV1" },
+          "items": { "$ref": "OriginV1" },
           "minItems": 1,
           "maxItems": 16
         },
-        "read_policy": { "$ref": "#/$defs/OriginReadPolicyV1" },
-        "write_authorities": { "$ref": "#/$defs/OriginWriteAuthoritiesV1" }
+        "read_policy": { "$ref": "OriginReadPolicyV1" },
+        "write_authorities": { "$ref": "OriginWriteAuthoritiesV1" }
       },
       "required": [
         "contract_version",
