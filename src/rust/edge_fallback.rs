@@ -289,16 +289,37 @@ fn valid_cargo_resource(value: &str) -> bool {
 }
 
 fn valid_https_origin(value: &str) -> bool {
-    let Ok(url) = reqwest_url::Url::parse(value) else {
+    let Some(authority) = value.strip_prefix("https://") else {
         return false;
     };
-    url.scheme() == "https"
-        && url.username().is_empty()
-        && url.password().is_none()
-        && url.path() == "/"
-        && url.query().is_none()
-        && url.fragment().is_none()
-        && url.host_str().is_some()
+    if authority.is_empty()
+        || authority.len() > 504
+        || authority.contains(['/', '?', '#', '@'])
+    {
+        return false;
+    }
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((host, port)) if !host.contains(':') => (host, Some(port)),
+        _ => (authority, None),
+    };
+    if host.is_empty()
+        || host.starts_with('.')
+        || host.ends_with('.')
+        || !host.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-')
+        })
+    {
+        return false;
+    }
+    match port {
+        None => true,
+        Some(value) => {
+            !value.is_empty()
+                && value.len() <= 5
+                && value.bytes().all(|byte| byte.is_ascii_digit())
+                && value.parse::<u16>().is_ok_and(|port| port > 0)
+        }
+    }
 }
 
 fn valid_credential_ref(value: &str) -> bool {
@@ -324,9 +345,6 @@ fn valid_jti(value: &str) -> bool {
         })
 }
 
-mod reqwest_url {
-    pub use url::Url;
-}
 
 #[cfg(test)]
 mod tests {
