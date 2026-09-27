@@ -81,11 +81,10 @@ pub use dependents::{
 };
 pub use edge_fallback::{
     EDGE_FALLBACK_AUDIENCE_V1, EDGE_FALLBACK_AUDIENCE_V2, EDGE_FALLBACK_CAPABILITY_VERSION_V1,
-    EDGE_FALLBACK_CAPABILITY_VERSION_V2, EDGE_FALLBACK_MAX_GRANTS_V1,
-    EDGE_FALLBACK_MAX_GRANTS_V2, EDGE_FALLBACK_MAX_TTL_SECONDS_V1,
-    EDGE_FALLBACK_MAX_TTL_SECONDS_V2, EdgeFallbackCapabilityV1, EdgeFallbackCapabilityV2,
-    EdgeFallbackContractError, EdgeFallbackGrantV1, EdgeFallbackGrantV2, ReadOperationV1,
-    ReadOperationV2,
+    EDGE_FALLBACK_CAPABILITY_VERSION_V2, EDGE_FALLBACK_MAX_GRANTS_V1, EDGE_FALLBACK_MAX_GRANTS_V2,
+    EDGE_FALLBACK_MAX_TTL_SECONDS_V1, EDGE_FALLBACK_MAX_TTL_SECONDS_V2, EdgeFallbackCapabilityV1,
+    EdgeFallbackCapabilityV2, EdgeFallbackContractError, EdgeFallbackGrantV1, EdgeFallbackGrantV2,
+    ReadOperationV1, ReadOperationV2,
 };
 pub use environment::{
     ActivationPolicy, Checksum, ChecksumAlgorithm, EnvironmentManager, EnvironmentPlan,
