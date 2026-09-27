@@ -14,6 +14,7 @@ pub mod dependents;
 pub mod environment;
 pub mod environment_lock;
 pub mod environment_v2;
+pub mod edge_fallback;
 pub mod excludes;
 pub mod git_cli_install;
 pub mod inspection;
@@ -88,6 +89,11 @@ pub use environment_lock::{
     ENVIRONMENT_LOCK_SCHEMA_VERSION, EnvironmentLock, EnvironmentLockError,
     EnvironmentLockValidationMode, LockedArtifact, LockedArtifactFormat, LockedExecutable,
     LockedInstall, LockedPlatform, LockedSignature, LockedSource, LockedSourceKind, LockedTool,
+};
+pub use edge_fallback::{
+    EDGE_FALLBACK_AUDIENCE_V1, EDGE_FALLBACK_CAPABILITY_VERSION_V1,
+    EDGE_FALLBACK_MAX_GRANTS_V1, EDGE_FALLBACK_MAX_TTL_SECONDS_V1,
+    EdgeFallbackCapabilityV1, EdgeFallbackContractError, EdgeFallbackGrantV1, ReadOperationV1,
 };
 pub use environment_v2::{
     EnvironmentPlanV2, EnvironmentPlanV2Error, EnvironmentValue, SystemPackageSpec,
