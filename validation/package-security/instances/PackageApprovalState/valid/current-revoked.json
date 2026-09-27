@@ -1,0 +1,22 @@
+{
+  "format": "zed-package-approval-state-v1",
+  "artifact": {
+    "ecosystem": "hex",
+    "package_name": "gleam_stdlib",
+    "package_version": "0.62.1",
+    "source_uri": "https://github.com/gleam-lang/stdlib",
+    "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "resolved_revision": "0.62.1",
+    "artifact_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "registry_uri": "https://repo.hex.pm",
+    "outer_checksum": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "closure_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "approval_receipt_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "policy_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "status": "revoked",
+  "state_revision": 8,
+  "effective_at": 1780000050000,
+  "observed_at": 1780000060000,
+  "expires_at": 1780000360000
+}
