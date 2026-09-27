@@ -185,10 +185,7 @@ fn validate_bounded_text(
     return Ok(());
 }
 
-fn validate_sha256(
-    field: &'static str,
-    value: &str,
-) -> Result<(), PackageSecurityContractError> {
+fn validate_sha256(field: &'static str, value: &str) -> Result<(), PackageSecurityContractError> {
     if value.len() != 64
         || !value
             .bytes()
@@ -232,7 +229,9 @@ mod tests {
             resolver_id: "zed-hex-resolver".into(),
             resolver_version: "1.0.0".into(),
         };
-        closure.validate().expect("valid package dependency closure");
+        closure
+            .validate()
+            .expect("valid package dependency closure");
 
         let encoded = serde_json::to_value(&closure).expect("serialize closure");
         assert_eq!(encoded["root"]["ecosystem"], "hex");
@@ -254,9 +253,7 @@ mod tests {
             "artifact_digest": digest('b'),
             "registry_uri": "https://repo.hex.pm"
         });
-        assert!(
-            serde_json::from_value::<PackageArtifactIdentity>(missing_outer_checksum).is_err()
-        );
+        assert!(serde_json::from_value::<PackageArtifactIdentity>(missing_outer_checksum).is_err());
 
         let mut unknown_field = serde_json::to_value(hex_identity("gleam_stdlib", "0.62.1", 'a'))
             .expect("serialize hex identity");
