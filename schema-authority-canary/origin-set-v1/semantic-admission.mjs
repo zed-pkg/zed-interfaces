@@ -9,6 +9,14 @@ function readFixture(relativePath) {
   return JSON.parse(readFileSync(resolve(root, relativePath), "utf8"));
 }
 
+
+const authoredSchema = readFixture("authored.schema.json");
+assert.equal(
+  authoredSchema.$ref,
+  "#/$defs/OriginSetV1",
+  "authored OriginSetV1 schema must fail closed at the root instead of exposing an unconstrained container",
+);
+
 function semanticErrors(document) {
   const errors = [];
   const origins = Array.isArray(document.origins) ? document.origins : [];

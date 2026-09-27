@@ -222,5 +222,6 @@
       ],
       "unevaluatedProperties": false
     }
-  }
+  },
+  "$ref": "#/$defs/OriginSetV1"
 }
