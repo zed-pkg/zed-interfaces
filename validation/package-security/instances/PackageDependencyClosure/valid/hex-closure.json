@@ -1,0 +1,42 @@
+{
+  "format": "zed-package-dependency-closure-v1",
+  "root": {
+    "ecosystem": "hex",
+    "package_name": "beam_app",
+    "package_version": "1.0.0",
+    "source_uri": "https://github.com/example/beam_app",
+    "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "resolved_revision": "1.0.0",
+    "artifact_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "registry_uri": "https://repo.hex.pm",
+    "outer_checksum": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "dependencies": [
+    {
+      "ecosystem": "hex",
+      "package_name": "gleam_stdlib",
+      "package_version": "0.62.1",
+      "source_uri": "https://github.com/gleam-lang/stdlib",
+      "source_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "resolved_revision": "0.62.1",
+      "artifact_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "registry_uri": "https://repo.hex.pm",
+      "outer_checksum": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    {
+      "ecosystem": "hex",
+      "package_name": "gleam_json",
+      "package_version": "3.0.2",
+      "source_uri": "https://github.com/gleam-lang/json",
+      "source_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "resolved_revision": "3.0.2",
+      "artifact_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "registry_uri": "https://repo.hex.pm",
+      "outer_checksum": "3333333333333333333333333333333333333333333333333333333333333333"
+    }
+  ],
+  "dependency_lock_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+  "closure_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+  "resolver_id": "zed-hex-resolver",
+  "resolver_version": "1.0.0"
+}

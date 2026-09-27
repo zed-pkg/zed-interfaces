@@ -40,6 +40,21 @@
         {"$ref": "#/$defs/HexPackageArtifactIdentity"}
       ]
     },
+    "PackageDependencyClosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "unevaluatedProperties": false,
+      "required": ["format", "root", "dependencies", "dependency_lock_digest", "closure_digest", "resolver_id", "resolver_version"],
+      "properties": {
+        "format": {"const": "zed-package-dependency-closure-v1"},
+        "root": {"$ref": "#/$defs/PackageArtifactIdentity"},
+        "dependencies": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/PackageArtifactIdentity"}},
+        "dependency_lock_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "closure_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "resolver_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "resolver_version": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
     "PackageRiskFinding": {
       "type": "object",
       "additionalProperties": false,
