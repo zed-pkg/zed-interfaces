@@ -35,6 +35,16 @@ function semanticErrors(document) {
     if (parsed.username || parsed.password) {
       errors.push(`credential_bearing_origin_url:${origin.id}`);
     }
+    if (parsed.search) {
+      errors.push(`query_bearing_origin_url:${origin.id}`);
+    }
+    if (parsed.hash) {
+      errors.push(`fragment_bearing_origin_url:${origin.id}`);
+    }
+    const rawAuthority = origin.base_url.slice("https://".length).split("/", 1)[0];
+    if (/:[0-9]+$/.test(rawAuthority)) {
+      errors.push(`explicit_port_origin_url:${origin.id}`);
+    }
 
     const providerAllowed =
       (origin.runtime_stack === "kubernetes" && ["aws", "gcp"].includes(origin.provider)) ||
@@ -111,5 +121,18 @@ assert.ok(
 
 const httpOrigin = readFixture("instances/OriginSetV1/invalid/http-origin.json");
 assert.ok(semanticErrors(httpOrigin).some((error) => error.startsWith("non_https_origin:")));
+
+for (const [fixture, expectedError] of [
+  ["query-origin.json", "query_bearing_origin_url:"],
+  ["fragment-origin.json", "fragment_bearing_origin_url:"],
+  ["userinfo-origin.json", "credential_bearing_origin_url:"],
+  ["explicit-port-origin.json", "explicit_port_origin_url:"],
+]) {
+  const document = readFixture(`instances/OriginSetV1/invalid/${fixture}`);
+  assert.ok(
+    semanticErrors(document).some((error) => error.startsWith(expectedError)),
+    `${fixture} must fail with ${expectedError}`,
+  );
+}
 
 console.log("OriginSetV1 semantic admission fixtures passed");
