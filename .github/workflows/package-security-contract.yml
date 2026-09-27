@@ -1,0 +1,84 @@
+name: package security contract
+
+on:
+  pull_request:
+    paths:
+      - "validation/package-security/**"
+      - ".github/workflows/package-security-contract.yml"
+  push:
+    branches: [main]
+    paths:
+      - "validation/package-security/**"
+      - ".github/workflows/package-security-contract.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-security-contract-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact Zed interfaces head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify checked-out revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Compare independent package-security authorities
+        uses: ORESoftware/typespec-json-schema-validator@813d5f021e02574f529a9553b670719f8f10d02c
+        with:
+          typespec: validation/package-security/main.tsp
+          schema: validation/package-security/authored.schema.json
+          instances: validation/package-security/instances
+          report: .typespec-json-schema-validator/package-security/report.json
+          sarif: .typespec-json-schema-validator/package-security/report.sarif
+          contract_ir: .typespec-json-schema-validator/package-security/contract-ir.json
+          output_dir: .typespec-json-schema-validator/package-security/generated
+          max_probes: "256"
+          quiet: "true"
+      - name: Verify complete package-security declaration scope
+        uses: ORESoftware/typespec-json-schema-validator/actions/verify-contract-ir@813d5f021e02574f529a9553b670719f8f10d02c
+        with:
+          contract_ir: .typespec-json-schema-validator/package-security/contract-ir.json
+          report: .typespec-json-schema-validator/package-security/report.json
+          typespec: validation/package-security/main.tsp
+          schema: validation/package-security/authored.schema.json
+          generated_schema: .typespec-json-schema-validator/package-security/generated/typespec.generated.schema.json
+          expected_declarations: '["Zed.PackageSecurity.RegistryPackageArtifactIdentity","Zed.PackageSecurity.HexPackageArtifactIdentity","Zed.PackageSecurity.PackageArtifactIdentity","Zed.PackageSecurity.PackageDependencyClosure","Zed.PackageSecurity.PackageRiskFinding","Zed.PackageSecurity.PackageRiskAssessment","Zed.PackageSecurity.PackageRebuildReceipt","Zed.PackageSecurity.PackageIntakeDecision","Zed.PackageSecurity.PackageApprovalReceipt"]'
+          verification: .typespec-json-schema-validator/package-security/consumer-verification.json
+      - name: Require peer parity and digest-bound evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const root = '.typespec-json-schema-validator/package-security';
+          const report = JSON.parse(readFileSync(`${root}/report.json`, 'utf8'));
+          const receipt = JSON.parse(readFileSync(`${root}/consumer-verification.json`, 'utf8'));
+          if (report.status !== 'passed' || report.zeroUnexplainedFindings !== true) throw new Error('package-security parity did not pass');
+          if (report.authorities?.precedence !== 'none') throw new Error('peer authority precedence forbidden');
+          if (report.differential?.summary?.divergences !== 0 || report.differential?.summary?.refusals !== 0) throw new Error('package-security differential divergence');
+          if (receipt.status !== 'passed' || receipt.admissible !== true || receipt.receiptRunId !== report.runId) throw new Error('package-security consumer verification failed');
+          NODE
+      - name: Preserve authored authorities and fixture corpus
+        run: git diff --exit-code -- validation/package-security/
+      - name: Retain deterministic package-security evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: tjsv-package-security-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .typespec-json-schema-validator/package-security/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

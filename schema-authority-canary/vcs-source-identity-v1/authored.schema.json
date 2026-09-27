@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "authored.vcs-source-identity-v1.schema.json",
+  "$defs": {
+    "VcsKindV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "VcsKindV1",
+      "type": "string",
+      "enum": ["git", "mercurial", "jujutsu"]
+    },
+    "VcsSelectorKindV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "VcsSelectorKindV1",
+      "type": "string",
+      "enum": ["commit", "tag", "branch", "bookmark", "change_id"]
+    },
+    "VcsRelationKindV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "VcsRelationKindV1",
+      "type": "string",
+      "enum": ["direct", "git_submodule", "hg_subrepo", "jj_colocated_git"]
+    },
+    "VcsArtifactFormatV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "VcsArtifactFormatV1",
+      "type": "string",
+      "enum": ["tar.gz", "zip"]
+    },
+    "VcsSourceIdentityV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "VcsSourceIdentityV1",
+      "type": "object",
+      "properties": {
+        "contract_version": { "const": "zed.vcs-source-identity/v1" },
+        "source_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+        },
+        "vcs_kind": { "$ref": "VcsKindV1" },
+        "repository_url": {
+          "type": "string",
+          "minLength": 9,
+          "maxLength": 512,
+          "pattern": "^https://[^\\s/@]+(?:/[^\\s]*)?$"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{40,64}$"
+        },
+        "selector_kind": { "$ref": "VcsSelectorKindV1" },
+        "selector": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "relation_kind": { "$ref": "VcsRelationKindV1" },
+        "destination_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "package": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "package_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "artifact_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "artifact_format": { "$ref": "VcsArtifactFormatV1" },
+        "parent_source_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+        }
+      },
+      "required": [
+        "contract_version",
+        "source_id",
+        "vcs_kind",
+        "repository_url",
+        "revision",
+        "relation_kind",
+        "destination_path",
+        "artifact_sha256",
+        "artifact_size",
+        "artifact_format"
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}

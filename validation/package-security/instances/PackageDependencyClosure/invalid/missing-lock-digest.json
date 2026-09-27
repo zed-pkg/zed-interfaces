@@ -1,0 +1,18 @@
+{
+  "format": "zed-package-dependency-closure-v1",
+  "root": {
+    "ecosystem": "hex",
+    "package_name": "beam_app",
+    "package_version": "1.0.0",
+    "source_uri": "https://github.com/example/beam_app",
+    "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "resolved_revision": "1.0.0",
+    "artifact_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "registry_uri": "https://repo.hex.pm",
+    "outer_checksum": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "dependencies": [],
+  "closure_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+  "resolver_id": "zed-hex-resolver",
+  "resolver_version": "1.0.0"
+}

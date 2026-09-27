@@ -1,0 +1,15 @@
+{
+  "contract_version": "zed.vcs-source-identity/v1",
+  "source_id": "bad-hg-as-git",
+  "vcs_kind": "git",
+  "repository_url": "https://github.com/example/repo",
+  "revision": "4444444444444444444444444444444444444444",
+  "selector_kind": "branch",
+  "selector": "main",
+  "relation_kind": "hg_subrepo",
+  "destination_path": "deps/repo",
+  "artifact_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "artifact_size": 512,
+  "artifact_format": "tar.gz",
+  "parent_source_id": "root-project"
+}
