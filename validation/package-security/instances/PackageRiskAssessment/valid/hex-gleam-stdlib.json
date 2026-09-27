@@ -1,0 +1,17 @@
+{
+  "assessment_id": "assessment_hex_0001",
+  "artifact": {
+    "ecosystem": "hex",
+    "package_name": "gleam_stdlib",
+    "package_version": "0.62.1",
+    "source_uri": "https://github.com/gleam-lang/stdlib",
+    "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "resolved_revision": "0.62.1",
+    "artifact_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "registry_uri": "https://repo.hex.pm",
+    "outer_checksum": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "findings": [],
+  "policy_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "assessed_at": 1780000000000
+}
