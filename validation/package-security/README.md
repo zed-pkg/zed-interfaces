@@ -16,6 +16,10 @@ This lane models evidence and admission receipts; it does not make a scanner or 
 - Rebuild evidence binds the rebuilt artifact, declared file manifest, and dependency-lock identity to the same immutable artifact identity.
 - Intake decisions bind exact artifact, source, assessment, rebuild, and policy digests. A stale assessment cannot authorize a different artifact.
 - Approval receipts bind exact artifact, source, policy, risk, and rebuild receipt digests. Missing bindings fail admission.
+- `PackageApprovalState` binds the **current** authority state to the exact artifact identity, full dependency `closure_digest`, immutable approval-receipt digest, and policy digest. It exists so an old approved receipt cannot remain valid after Zed revokes or expires that exact artifact/closure.
+- `state_revision` is monotonic for one exact artifact + closure authority record. A later revocation/rejection/expiry must use a greater revision; consumers must never select a lower revision over a higher one.
+- `effective_at <= observed_at < expires_at` is a behavioral invariant enforced by the serving/consuming implementations. The schema keeps the timestamps bounded, while Zed service behavior must reject invalid ordering.
+- Current approval state is intended to be obtained from the authenticated Zed service with transport caches disabled or explicitly bounded by `expires_at`. A tenant-supplied or previously persisted state document is not current-state authority by itself.
 - Raw credentials, secrets, bearer tokens, private source bodies, arbitrary package payloads, and unbounded model explanations are not portable evidence fields. The schemas are closed so unexpected payload material is rejected.
 - `publishable` is a policy outcome, not proof that publication occurred. Runtime state transitions and deployment policy live in the infrastructure/service layers.
 
@@ -39,6 +43,6 @@ For Hex closures, each member carries the registry `outer_checksum` plus indepen
 
 These contracts are portable public validation shapes. They do not contain registry credentials, network policy, deployment topology, database connection details, or executable ORM models.
 
-`zed-pkg/zed-infra` owns the operational quarantine/build/rebuild/promotion policy. `zed-pkg/zed-lib-core` owns implementation behavior, including closure canonicalization/digest verification. Private persistence belongs in `zed-pkg/zed-orm-core`.
+`zed-pkg/zed-infra` owns the operational quarantine/build/rebuild/promotion policy. `zed-pkg/zed-lib-core` owns implementation behavior, including closure canonicalization/digest verification and approval-state freshness checks. Private persistence belongs in `zed-pkg/zed-orm-core`; the authenticated current-state read API belongs at the `zed-api-server.rs` service boundary.
 
 Changes to this directory must preserve independently authored TypeSpec and Draft 2020-12 JSON Schema authorities and pass the dedicated TJSV peer-authority workflow before downstream generation or service adoption.
