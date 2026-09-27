@@ -5,7 +5,7 @@ using TypeSpec.JsonSchema;
 namespace Zed.PackageSecurity;
 
 @extension("additionalProperties", false)
-model PackageArtifactIdentity {
+model RegistryPackageArtifactIdentity {
   ecosystem: "npm" | "cargo" | "python" | "git";
   @minLength(1) @maxLength(256) package_name: string;
   @minLength(1) @maxLength(128) package_version: string;
@@ -13,6 +13,24 @@ model PackageArtifactIdentity {
   @pattern("^[a-f0-9]{64}$") source_digest: string;
   @minLength(1) @maxLength(256) resolved_revision: string;
   @pattern("^[a-f0-9]{64}$") artifact_digest: string;
+}
+
+@extension("additionalProperties", false)
+model HexPackageArtifactIdentity {
+  ecosystem: "hex";
+  @minLength(1) @maxLength(256) package_name: string;
+  @minLength(1) @maxLength(128) package_version: string;
+  @minLength(1) @maxLength(2048) source_uri: string;
+  @pattern("^[a-f0-9]{64}$") source_digest: string;
+  @minLength(1) @maxLength(256) resolved_revision: string;
+  @pattern("^[a-f0-9]{64}$") artifact_digest: string;
+  @minLength(1) @maxLength(2048) registry_uri: string;
+  @pattern("^[a-f0-9]{64}$") outer_checksum: string;
+}
+
+union PackageArtifactIdentity {
+  registry: RegistryPackageArtifactIdentity,
+  hex: HexPackageArtifactIdentity,
 }
 
 @extension("additionalProperties", false)
