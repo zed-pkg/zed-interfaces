@@ -9,6 +9,9 @@ This lane models evidence and admission receipts; it does not make a scanner or 
 - A `PackageRiskAssessment` is evidence. Publication remains a separate policy decision.
 - `producer_kind` distinguishes deterministic scanners, heuristics, and model-derived findings. Consumers must not silently collapse them into one opaque score.
 - Package identity is immutable across source, resolved revision, source digest, and built artifact digest.
+- Registry package identities for npm, Cargo, Python, and Git retain the original portable artifact shape.
+- Hex package identities are a distinct fail-closed variant. They additionally bind `registry_uri` and the lowercase 64-hex `outer_checksum` supplied by the Hex lock/registry metadata. A Hex assessment without that checksum is invalid rather than falling back to package name/version.
+- For Hex, `outer_checksum` proves the registry's immutable package checksum; `artifact_digest` and `source_digest` remain independent Zed evidence for the exact downloaded/materialized artifact and source tree. Consumers must compare all applicable identities instead of treating the Hex checksum alone as a safety approval.
 - Rebuild evidence binds the rebuilt artifact, declared file manifest, and dependency-lock identity to the same immutable artifact identity.
 - Intake decisions bind exact artifact, source, assessment, rebuild, and policy digests. A stale assessment cannot authorize a different artifact.
 - Approval receipts bind exact artifact, source, policy, risk, and rebuild receipt digests. Missing bindings fail admission.
