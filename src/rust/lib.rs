@@ -11,6 +11,7 @@ pub mod binary_artifact;
 pub mod dependency_graph;
 pub mod dependency_graph_export;
 pub mod dependents;
+pub mod edge_fallback;
 pub mod environment;
 pub mod environment_lock;
 pub mod environment_v2;
@@ -77,6 +78,11 @@ pub use dependents::{
     DependentActionV1, DependentImpactV1, DependentsContractError, LockedDependencySnapshotV1,
     RELEASE_IMPACT_PLAN_PROTOCOL_V1, RELEASE_IMPACT_PROTOCOL_V1, ReleaseClassV1,
     ReleaseImpactPlanV1, ReleaseImpactRequestV1,
+};
+pub use edge_fallback::{
+    EDGE_FALLBACK_AUDIENCE_V1, EDGE_FALLBACK_CAPABILITY_VERSION_V1, EDGE_FALLBACK_MAX_GRANTS_V1,
+    EDGE_FALLBACK_MAX_TTL_SECONDS_V1, EdgeFallbackCapabilityV1, EdgeFallbackContractError,
+    EdgeFallbackGrantV1, ReadOperationV1,
 };
 pub use environment::{
     ActivationPolicy, Checksum, ChecksumAlgorithm, EnvironmentManager, EnvironmentPlan,
