@@ -34,6 +34,17 @@ union PackageArtifactIdentity {
 }
 
 @extension("additionalProperties", false)
+model PackageDependencyClosure {
+  format: "zed-package-dependency-closure-v1";
+  root: PackageArtifactIdentity;
+  @maxItems(4096) dependencies: PackageArtifactIdentity[];
+  @pattern("^[a-f0-9]{64}$") dependency_lock_digest: string;
+  @pattern("^[a-f0-9]{64}$") closure_digest: string;
+  @minLength(1) @maxLength(128) resolver_id: string;
+  @minLength(1) @maxLength(128) resolver_version: string;
+}
+
+@extension("additionalProperties", false)
 model PackageRiskFinding {
   @pattern("^[A-Za-z0-9_-]{8,128}$") finding_id: string;
   signal_class: "typosquatting" | "dependency_confusion" | "install_or_lifecycle_scripts" | "unexpected_network_behavior" | "maintainer_or_ownership_churn" | "new_package_or_name_age" | "source_artifact_mismatch" | "obfuscation_or_generated_payload" | "secret_or_credential_access" | "native_binary_or_dynamic_library" | "malware_static_analysis" | "historical_lineage_anomaly";
