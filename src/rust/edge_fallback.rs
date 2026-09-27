@@ -24,7 +24,6 @@ pub struct EdgeFallbackCapabilityV1 {
     pub grants: Vec<EdgeFallbackGrantV1>,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EdgeFallbackCapabilityV2 {
@@ -136,7 +135,6 @@ impl EdgeFallbackCapabilityV1 {
             .try_for_each(EdgeFallbackGrantV1::validate)
     }
 }
-
 
 impl EdgeFallbackCapabilityV2 {
     pub fn validate(&self) -> Result<(), EdgeFallbackContractError> {
@@ -387,7 +385,6 @@ fn valid_credential_ref(value: &str) -> bool {
         })
 }
 
-
 fn valid_lineage_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
@@ -432,7 +429,6 @@ mod tests {
             }],
         }
     }
-
 
     fn valid_capability_v2() -> EdgeFallbackCapabilityV2 {
         EdgeFallbackCapabilityV2 {
