@@ -6,13 +6,23 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "OriginRuntimeStackV1",
       "type": "string",
-      "enum": ["kubernetes", "cloud_run", "beamscale", "scintilla"]
+      "enum": [
+        "kubernetes",
+        "cloud_run",
+        "beamscale",
+        "scintilla"
+      ]
     },
     "OriginProviderV1": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "OriginProviderV1",
       "type": "string",
-      "enum": ["aws", "gcp", "beamscale", "scintilla"]
+      "enum": [
+        "aws",
+        "gcp",
+        "beamscale",
+        "scintilla"
+      ]
     },
     "OriginRouteFamilyV1": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -50,7 +60,11 @@
           "maximum": 2
         }
       },
-      "required": ["request_deadline_ms", "hedge_delay_ms", "max_inflight_origins"],
+      "required": [
+        "request_deadline_ms",
+        "hedge_delay_ms",
+        "max_inflight_origins"
+      ],
       "unevaluatedProperties": false
     },
     "OriginWriteAuthoritiesV1": {
@@ -100,10 +114,14 @@
           "type": "string",
           "minLength": 9,
           "maxLength": 512,
-          "pattern": "^https://[^\\s/@]+(?:/[^\\s]*)?$"
+          "pattern": "^https://[^\\s/@?:#]+(?:/[^\\s?#]*)?$"
         },
-        "runtime_stack": { "$ref": "OriginRuntimeStackV1" },
-        "provider": { "$ref": "OriginProviderV1" },
+        "runtime_stack": {
+          "$ref": "OriginRuntimeStackV1"
+        },
+        "provider": {
+          "$ref": "OriginProviderV1"
+        },
         "region": {
           "type": "string",
           "minLength": 1,
@@ -139,7 +157,9 @@
         },
         "route_families": {
           "type": "array",
-          "items": { "$ref": "OriginRouteFamilyV1" },
+          "items": {
+            "$ref": "OriginRouteFamilyV1"
+          },
           "minItems": 1,
           "maxItems": 8
         }
@@ -163,7 +183,9 @@
       "$id": "OriginSetV1",
       "type": "object",
       "properties": {
-        "contract_version": { "const": "zed.origin-set/v1" },
+        "contract_version": {
+          "const": "zed.origin-set/v1"
+        },
         "set_id": {
           "type": "string",
           "minLength": 1,
@@ -177,12 +199,18 @@
         },
         "origins": {
           "type": "array",
-          "items": { "$ref": "OriginV1" },
+          "items": {
+            "$ref": "OriginV1"
+          },
           "minItems": 1,
           "maxItems": 16
         },
-        "read_policy": { "$ref": "OriginReadPolicyV1" },
-        "write_authorities": { "$ref": "OriginWriteAuthoritiesV1" }
+        "read_policy": {
+          "$ref": "OriginReadPolicyV1"
+        },
+        "write_authorities": {
+          "$ref": "OriginWriteAuthoritiesV1"
+        }
       },
       "required": [
         "contract_version",
