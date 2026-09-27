@@ -1,0 +1,16 @@
+{
+  "contract_version": "zed.vcs-source-identity/v1",
+  "source_id": "jj-colocated-sdk",
+  "vcs_kind": "jujutsu",
+  "repository_url": "https://github.com/example/sdk",
+  "revision": "3333333333333333333333333333333333333333333333333333333333333333",
+  "selector_kind": "change_id",
+  "selector": "qvuntsmwlqtpsluzzsnyyzlmlwvmlqkz",
+  "relation_kind": "jj_colocated_git",
+  "destination_path": "deps/sdk",
+  "package": "example/sdk",
+  "package_version": "0.2.0",
+  "artifact_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "artifact_size": 4096,
+  "artifact_format": "zip"
+}

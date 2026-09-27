@@ -1,0 +1,15 @@
+{
+  "contract_version": "zed.vcs-source-identity/v1",
+  "source_id": "legacy-core",
+  "vcs_kind": "mercurial",
+  "repository_url": "https://hg.example.com/platform/legacy-core",
+  "revision": "2222222222222222222222222222222222222222",
+  "selector_kind": "bookmark",
+  "selector": "stable",
+  "relation_kind": "hg_subrepo",
+  "destination_path": "deps/legacy-core",
+  "artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "artifact_size": 2048,
+  "artifact_format": "tar.gz",
+  "parent_source_id": "root-project"
+}
