@@ -6,134 +6,515 @@
       "type": "object",
       "additionalProperties": false,
       "unevaluatedProperties": false,
-      "required": ["ecosystem", "package_name", "package_version", "source_uri", "source_digest", "resolved_revision", "artifact_digest"],
+      "required": [
+        "ecosystem",
+        "package_name",
+        "package_version",
+        "source_uri",
+        "source_digest",
+        "resolved_revision",
+        "artifact_digest"
+      ],
       "properties": {
-        "ecosystem": {"enum": ["npm", "cargo", "python", "git"]},
-        "package_name": {"type": "string", "minLength": 1, "maxLength": 256},
-        "package_version": {"type": "string", "minLength": 1, "maxLength": 128},
-        "source_uri": {"type": "string", "minLength": 1, "maxLength": 2048},
-        "source_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "resolved_revision": {"type": "string", "minLength": 1, "maxLength": 256},
-        "artifact_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        "ecosystem": {
+          "enum": [
+            "npm",
+            "cargo",
+            "python",
+            "git"
+          ]
+        },
+        "package_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "package_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "source_uri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "source_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "resolved_revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
       }
     },
     "HexPackageArtifactIdentity": {
       "type": "object",
       "additionalProperties": false,
       "unevaluatedProperties": false,
-      "required": ["ecosystem", "package_name", "package_version", "source_uri", "source_digest", "resolved_revision", "artifact_digest", "registry_uri", "outer_checksum"],
+      "required": [
+        "ecosystem",
+        "package_name",
+        "package_version",
+        "source_uri",
+        "source_digest",
+        "resolved_revision",
+        "artifact_digest",
+        "registry_uri",
+        "outer_checksum"
+      ],
       "properties": {
-        "ecosystem": {"const": "hex"},
-        "package_name": {"type": "string", "minLength": 1, "maxLength": 256},
-        "package_version": {"type": "string", "minLength": 1, "maxLength": 128},
-        "source_uri": {"type": "string", "minLength": 1, "maxLength": 2048},
-        "source_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "resolved_revision": {"type": "string", "minLength": 1, "maxLength": 256},
-        "artifact_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "registry_uri": {"type": "string", "minLength": 1, "maxLength": 2048},
-        "outer_checksum": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        "ecosystem": {
+          "const": "hex"
+        },
+        "package_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "package_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "source_uri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "source_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "resolved_revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "registry_uri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "outer_checksum": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
       }
     },
     "PackageArtifactIdentity": {
       "anyOf": [
-        {"$ref": "#/$defs/RegistryPackageArtifactIdentity"},
-        {"$ref": "#/$defs/HexPackageArtifactIdentity"}
+        {
+          "$ref": "#/$defs/RegistryPackageArtifactIdentity"
+        },
+        {
+          "$ref": "#/$defs/HexPackageArtifactIdentity"
+        }
       ]
     },
     "PackageDependencyClosure": {
       "type": "object",
       "additionalProperties": false,
       "unevaluatedProperties": false,
-      "required": ["format", "root", "dependencies", "dependency_lock_digest", "closure_digest", "resolver_id", "resolver_version"],
+      "required": [
+        "format",
+        "root",
+        "dependencies",
+        "dependency_lock_digest",
+        "closure_digest",
+        "resolver_id",
+        "resolver_version"
+      ],
       "properties": {
-        "format": {"const": "zed-package-dependency-closure-v1"},
-        "root": {"$ref": "#/$defs/PackageArtifactIdentity"},
-        "dependencies": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/PackageArtifactIdentity"}},
-        "dependency_lock_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "closure_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "resolver_id": {"type": "string", "minLength": 1, "maxLength": 128},
-        "resolver_version": {"type": "string", "minLength": 1, "maxLength": 128}
+        "format": {
+          "const": "zed-package-dependency-closure-v1"
+        },
+        "root": {
+          "$ref": "#/$defs/PackageArtifactIdentity"
+        },
+        "dependencies": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/PackageArtifactIdentity"
+          }
+        },
+        "dependency_lock_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "closure_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "resolver_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "resolver_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
       }
     },
     "PackageRiskFinding": {
       "type": "object",
       "additionalProperties": false,
       "unevaluatedProperties": false,
-      "required": ["finding_id", "signal_class", "producer_kind", "producer_id", "producer_version", "severity", "evidence_digest"],
+      "required": [
+        "finding_id",
+        "signal_class",
+        "producer_kind",
+        "producer_id",
+        "producer_version",
+        "severity",
+        "evidence_digest"
+      ],
       "properties": {
-        "finding_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{8,128}$"},
-        "signal_class": {"enum": ["typosquatting", "dependency_confusion", "install_or_lifecycle_scripts", "unexpected_network_behavior", "maintainer_or_ownership_churn", "new_package_or_name_age", "source_artifact_mismatch", "obfuscation_or_generated_payload", "secret_or_credential_access", "native_binary_or_dynamic_library", "malware_static_analysis", "historical_lineage_anomaly"]},
-        "producer_kind": {"enum": ["deterministic_scanner", "model", "heuristic"]},
-        "producer_id": {"type": "string", "minLength": 1, "maxLength": 128},
-        "producer_version": {"type": "string", "minLength": 1, "maxLength": 128},
-        "severity": {"enum": ["info", "low", "medium", "high", "critical"]},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        "evidence_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "evidence_ref": {"type": "string", "minLength": 1, "maxLength": 512}
+        "finding_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,128}$"
+        },
+        "signal_class": {
+          "enum": [
+            "typosquatting",
+            "dependency_confusion",
+            "install_or_lifecycle_scripts",
+            "unexpected_network_behavior",
+            "maintainer_or_ownership_churn",
+            "new_package_or_name_age",
+            "source_artifact_mismatch",
+            "obfuscation_or_generated_payload",
+            "secret_or_credential_access",
+            "native_binary_or_dynamic_library",
+            "malware_static_analysis",
+            "historical_lineage_anomaly"
+          ]
+        },
+        "producer_kind": {
+          "enum": [
+            "deterministic_scanner",
+            "model",
+            "heuristic"
+          ]
+        },
+        "producer_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "producer_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "evidence_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
       }
     },
     "PackageRiskAssessment": {
       "type": "object",
       "additionalProperties": false,
       "unevaluatedProperties": false,
-      "required": ["assessment_id", "artifact", "findings", "policy_digest", "assessed_at"],
+      "required": [
+        "assessment_id",
+        "artifact",
+        "findings",
+        "policy_digest",
+        "assessed_at"
+      ],
       "properties": {
-        "assessment_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{8,128}$"},
-        "artifact": {"$ref": "#/$defs/PackageArtifactIdentity"},
-        "findings": {"type": "array", "items": {"$ref": "#/$defs/PackageRiskFinding"}},
-        "policy_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "assessed_at": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
-        "expires_at": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+        "assessment_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,128}$"
+        },
+        "artifact": {
+          "$ref": "#/$defs/PackageArtifactIdentity"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageRiskFinding"
+          }
+        },
+        "policy_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "assessed_at": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "expires_at": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
       }
     },
     "PackageRebuildReceipt": {
       "type": "object",
       "additionalProperties": false,
       "unevaluatedProperties": false,
-      "required": ["rebuild_id", "artifact", "rebuilt_artifact_digest", "declared_file_manifest_digest", "dependency_lock_digest", "matched", "builder_identity", "built_at"],
+      "required": [
+        "rebuild_id",
+        "artifact",
+        "rebuilt_artifact_digest",
+        "declared_file_manifest_digest",
+        "dependency_lock_digest",
+        "matched",
+        "builder_identity",
+        "built_at"
+      ],
       "properties": {
-        "rebuild_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{8,128}$"},
-        "artifact": {"$ref": "#/$defs/PackageArtifactIdentity"},
-        "rebuilt_artifact_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "declared_file_manifest_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "dependency_lock_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "matched": {"type": "boolean"},
-        "builder_identity": {"type": "string", "minLength": 1, "maxLength": 192},
-        "built_at": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+        "rebuild_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,128}$"
+        },
+        "artifact": {
+          "$ref": "#/$defs/PackageArtifactIdentity"
+        },
+        "rebuilt_artifact_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "declared_file_manifest_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "dependency_lock_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "matched": {
+          "type": "boolean"
+        },
+        "builder_identity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 192
+        },
+        "built_at": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
       }
     },
     "PackageIntakeDecision": {
       "type": "object",
       "additionalProperties": false,
       "unevaluatedProperties": false,
-      "required": ["decision_id", "artifact_digest", "source_digest", "assessment_digest", "rebuild_receipt_digest", "policy_digest", "result", "decided_at"],
+      "required": [
+        "decision_id",
+        "artifact_digest",
+        "source_digest",
+        "assessment_digest",
+        "rebuild_receipt_digest",
+        "policy_digest",
+        "result",
+        "decided_at"
+      ],
       "properties": {
-        "decision_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{8,128}$"},
-        "artifact_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "source_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "assessment_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "rebuild_receipt_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "policy_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "result": {"enum": ["quarantine", "pending_approval", "reject", "publishable"]},
-        "decided_at": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+        "decision_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,128}$"
+        },
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "assessment_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "rebuild_receipt_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "policy_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "result": {
+          "enum": [
+            "quarantine",
+            "pending_approval",
+            "reject",
+            "publishable"
+          ]
+        },
+        "decided_at": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
       }
     },
     "PackageApprovalReceipt": {
       "type": "object",
       "additionalProperties": false,
       "unevaluatedProperties": false,
-      "required": ["approval_id", "decision_id", "artifact_digest", "source_digest", "policy_digest", "risk_receipt_digest", "rebuild_receipt_digest", "reviewer_ref", "result", "reviewed_at"],
+      "required": [
+        "approval_id",
+        "decision_id",
+        "artifact_digest",
+        "source_digest",
+        "policy_digest",
+        "risk_receipt_digest",
+        "rebuild_receipt_digest",
+        "reviewer_ref",
+        "result",
+        "reviewed_at"
+      ],
       "properties": {
-        "approval_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{8,128}$"},
-        "decision_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{8,128}$"},
-        "artifact_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "source_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "policy_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "risk_receipt_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "rebuild_receipt_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "reviewer_ref": {"type": "string", "minLength": 1, "maxLength": 192},
-        "result": {"enum": ["approved", "rejected"]},
-        "reviewed_at": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+        "approval_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,128}$"
+        },
+        "decision_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,128}$"
+        },
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "policy_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "risk_receipt_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "rebuild_receipt_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "reviewer_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 192
+        },
+        "result": {
+          "enum": [
+            "approved",
+            "rejected"
+          ]
+        },
+        "reviewed_at": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "PackageApprovalState": {
+      "type": "object",
+      "additionalProperties": false,
+      "unevaluatedProperties": false,
+      "required": [
+        "format",
+        "artifact",
+        "closure_digest",
+        "approval_receipt_digest",
+        "policy_digest",
+        "status",
+        "state_revision",
+        "effective_at",
+        "observed_at",
+        "expires_at"
+      ],
+      "properties": {
+        "format": {
+          "const": "zed-package-approval-state-v1"
+        },
+        "artifact": {
+          "$ref": "#/$defs/PackageArtifactIdentity"
+        },
+        "closure_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "approval_receipt_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "policy_digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "status": {
+          "enum": [
+            "approved",
+            "revoked",
+            "rejected",
+            "expired"
+          ]
+        },
+        "state_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "effective_at": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "observed_at": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "expires_at": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
       }
     }
   }
