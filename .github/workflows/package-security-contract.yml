@@ -55,7 +55,7 @@ jobs:
           typespec: validation/package-security/main.tsp
           schema: validation/package-security/authored.schema.json
           generated_schema: .typespec-json-schema-validator/package-security/generated/typespec.generated.schema.json
-          expected_declarations: '["Zed.PackageSecurity.PackageArtifactIdentity","Zed.PackageSecurity.PackageRiskFinding","Zed.PackageSecurity.PackageRiskAssessment","Zed.PackageSecurity.PackageRebuildReceipt","Zed.PackageSecurity.PackageIntakeDecision","Zed.PackageSecurity.PackageApprovalReceipt"]'
+          expected_declarations: '["Zed.PackageSecurity.RegistryPackageArtifactIdentity","Zed.PackageSecurity.HexPackageArtifactIdentity","Zed.PackageSecurity.PackageArtifactIdentity","Zed.PackageSecurity.PackageRiskFinding","Zed.PackageSecurity.PackageRiskAssessment","Zed.PackageSecurity.PackageRebuildReceipt","Zed.PackageSecurity.PackageIntakeDecision","Zed.PackageSecurity.PackageApprovalReceipt"]'
           verification: .typespec-json-schema-validator/package-security/consumer-verification.json
       - name: Require peer parity and digest-bound evidence
         shell: bash
