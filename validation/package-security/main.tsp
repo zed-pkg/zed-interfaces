@@ -104,3 +104,18 @@ model PackageApprovalReceipt {
   result: "approved" | "rejected";
   @minValue(1) @maxValue(9007199254740991) reviewed_at: integer;
 }
+
+
+@extension("additionalProperties", false)
+model PackageApprovalState {
+  format: "zed-package-approval-state-v1";
+  artifact: PackageArtifactIdentity;
+  @pattern("^[a-f0-9]{64}$") closure_digest: string;
+  @pattern("^[a-f0-9]{64}$") approval_receipt_digest: string;
+  @pattern("^[a-f0-9]{64}$") policy_digest: string;
+  status: "approved" | "revoked" | "rejected" | "expired";
+  @minValue(1) @maxValue(9007199254740991) state_revision: integer;
+  @minValue(1) @maxValue(9007199254740991) effective_at: integer;
+  @minValue(1) @maxValue(9007199254740991) observed_at: integer;
+  @minValue(1) @maxValue(9007199254740991) expires_at: integer;
+}
