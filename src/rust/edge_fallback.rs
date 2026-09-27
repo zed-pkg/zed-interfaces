@@ -105,7 +105,9 @@ impl EdgeFallbackCapabilityV1 {
         if self.grants.is_empty() || self.grants.len() > EDGE_FALLBACK_MAX_GRANTS_V1 {
             return Err(EdgeFallbackContractError::InvalidGrantCount);
         }
-        self.grants.iter().try_for_each(EdgeFallbackGrantV1::validate)
+        self.grants
+            .iter()
+            .try_for_each(EdgeFallbackGrantV1::validate)
     }
 }
 
@@ -206,10 +208,7 @@ fn validate_credential_ref(value: &str) -> Result<(), EdgeFallbackContractError>
 
 fn bounded_text(value: &str, min: usize, max: usize) -> bool {
     let len = value.len();
-    len >= min
-        && len <= max
-        && value.trim() == value
-        && !value.chars().any(char::is_control)
+    len >= min && len <= max && value.trim() == value && !value.chars().any(char::is_control)
 }
 
 fn valid_package_coordinate(value: &str) -> bool {
@@ -230,7 +229,9 @@ fn valid_slug(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes[0].is_ascii_lowercase()
         && bytes[bytes.len() - 1].is_ascii_alphanumeric()
-        && bytes.iter().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
         && !value.contains("--")
 }
 
@@ -251,9 +252,9 @@ fn valid_github_repo(value: &str) -> bool {
 fn valid_github_component(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
-        && value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-')
-        })
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
 }
 
 fn valid_npm_package(value: &str) -> bool {
@@ -270,32 +271,23 @@ fn valid_npm_component(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'_' | b'.' | b'-')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'.' | b'-')
         })
 }
 
 fn valid_cargo_resource(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
-        && value
-            .bytes()
-            .enumerate()
-            .all(|(index, byte)| {
-                byte.is_ascii_alphanumeric()
-                    || (index > 0 && matches!(byte, b'_' | b'-'))
-            })
+        && value.bytes().enumerate().all(|(index, byte)| {
+            byte.is_ascii_alphanumeric() || (index > 0 && matches!(byte, b'_' | b'-'))
+        })
 }
 
 fn valid_https_origin(value: &str) -> bool {
     let Some(authority) = value.strip_prefix("https://") else {
         return false;
     };
-    if authority.is_empty()
-        || authority.len() > 504
-        || authority.contains(['/', '?', '#', '@'])
-    {
+    if authority.is_empty() || authority.len() > 504 || authority.contains(['/', '?', '#', '@']) {
         return false;
     }
     let (host, port) = match authority.rsplit_once(':') {
@@ -305,9 +297,9 @@ fn valid_https_origin(value: &str) -> bool {
     if host.is_empty()
         || host.starts_with('.')
         || host.ends_with('.')
-        || !host.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-')
-        })
+        || !host
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
     {
         return false;
     }
@@ -329,8 +321,7 @@ fn valid_credential_ref(value: &str) -> bool {
             if index == 0 {
                 return byte.is_ascii_alphanumeric();
             }
-            byte.is_ascii_alphanumeric()
-                || matches!(byte, b':' | b'.' | b'_' | b'/' | b'-')
+            byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'.' | b'_' | b'/' | b'-')
         })
 }
 
@@ -344,7 +335,6 @@ fn valid_jti(value: &str) -> bool {
             byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-')
         })
 }
-
 
 #[cfg(test)]
 mod tests {
