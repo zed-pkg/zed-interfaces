@@ -1,3 +1,5 @@
+#![allow(clippy::needless_return)]
+
 //! Portable package-security identities promoted from the independently authored
 //! `validation/package-security` TypeSpec and JSON Schema authorities.
 //!
