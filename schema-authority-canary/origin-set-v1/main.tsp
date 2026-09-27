@@ -74,7 +74,7 @@ model OriginV1 {
 
   @minLength(9)
   @maxLength(512)
-  @pattern("^https://[^\\s/@]+(?:/[^\\s]*)?$")
+  @pattern("^https://[^\\s/@?:#]+(?:/[^\\s?#]*)?$")
   base_url: string;
 
   runtime_stack: OriginRuntimeStackV1;
