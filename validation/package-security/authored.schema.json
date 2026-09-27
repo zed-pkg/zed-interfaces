@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:zed:package-security:v1",
   "$defs": {
-    "PackageArtifactIdentity": {
+    "RegistryPackageArtifactIdentity": {
       "type": "object",
       "additionalProperties": false,
       "unevaluatedProperties": false,
@@ -16,6 +16,29 @@
         "resolved_revision": {"type": "string", "minLength": 1, "maxLength": 256},
         "artifact_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
       }
+    },
+    "HexPackageArtifactIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "unevaluatedProperties": false,
+      "required": ["ecosystem", "package_name", "package_version", "source_uri", "source_digest", "resolved_revision", "artifact_digest", "registry_uri", "outer_checksum"],
+      "properties": {
+        "ecosystem": {"const": "hex"},
+        "package_name": {"type": "string", "minLength": 1, "maxLength": 256},
+        "package_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "source_uri": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "source_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "resolved_revision": {"type": "string", "minLength": 1, "maxLength": 256},
+        "artifact_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "registry_uri": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "outer_checksum": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "PackageArtifactIdentity": {
+      "anyOf": [
+        {"$ref": "#/$defs/RegistryPackageArtifactIdentity"},
+        {"$ref": "#/$defs/HexPackageArtifactIdentity"}
+      ]
     },
     "PackageRiskFinding": {
       "type": "object",
