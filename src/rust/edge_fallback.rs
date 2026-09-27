@@ -2,9 +2,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub const EDGE_FALLBACK_CAPABILITY_VERSION_V1: u8 = 1;
+pub const EDGE_FALLBACK_CAPABILITY_VERSION_V2: u8 = 2;
 pub const EDGE_FALLBACK_AUDIENCE_V1: &str = "zed-edge-fallback";
+pub const EDGE_FALLBACK_AUDIENCE_V2: &str = EDGE_FALLBACK_AUDIENCE_V1;
 pub const EDGE_FALLBACK_MAX_GRANTS_V1: usize = 16;
+pub const EDGE_FALLBACK_MAX_GRANTS_V2: usize = EDGE_FALLBACK_MAX_GRANTS_V1;
 pub const EDGE_FALLBACK_MAX_TTL_SECONDS_V1: u64 = 300;
+pub const EDGE_FALLBACK_MAX_TTL_SECONDS_V2: u64 = EDGE_FALLBACK_MAX_TTL_SECONDS_V1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -19,6 +23,26 @@ pub struct EdgeFallbackCapabilityV1 {
     pub jti: String,
     pub grants: Vec<EdgeFallbackGrantV1>,
 }
+
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EdgeFallbackCapabilityV2 {
+    pub zed_edge_capability: u8,
+    pub iss: String,
+    pub aud: String,
+    pub sub: String,
+    pub sid: String,
+    pub parent_jti: String,
+    pub iat: u64,
+    pub nbf: u64,
+    pub exp: u64,
+    pub jti: String,
+    pub grants: Vec<EdgeFallbackGrantV2>,
+}
+
+pub type EdgeFallbackGrantV2 = EdgeFallbackGrantV1;
+pub type ReadOperationV2 = ReadOperationV1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "provider", deny_unknown_fields)]
@@ -55,7 +79,7 @@ pub enum ReadOperationV1 {
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum EdgeFallbackContractError {
-    #[error("capability version must be exactly 1")]
+    #[error("capability version is invalid")]
     InvalidVersion,
     #[error("audience must be zed-edge-fallback")]
     InvalidAudience,
@@ -65,6 +89,8 @@ pub enum EdgeFallbackContractError {
     InvalidSubject,
     #[error("capability id is invalid")]
     InvalidJti,
+    #[error("session lineage is invalid")]
+    InvalidLineage,
     #[error("capability lifetime is invalid")]
     InvalidLifetime,
     #[error("capability must contain 1..16 grants")]
@@ -96,7 +122,7 @@ impl EdgeFallbackCapabilityV1 {
         if !valid_jti(&self.jti) {
             return Err(EdgeFallbackContractError::InvalidJti);
         }
-        if self.exp <= self.iat || self.nbf > self.exp {
+        if self.exp <= self.iat || self.nbf < self.iat || self.nbf > self.exp {
             return Err(EdgeFallbackContractError::InvalidLifetime);
         }
         if self.exp - self.iat > EDGE_FALLBACK_MAX_TTL_SECONDS_V1 {
@@ -108,6 +134,42 @@ impl EdgeFallbackCapabilityV1 {
         self.grants
             .iter()
             .try_for_each(EdgeFallbackGrantV1::validate)
+    }
+}
+
+
+impl EdgeFallbackCapabilityV2 {
+    pub fn validate(&self) -> Result<(), EdgeFallbackContractError> {
+        if self.zed_edge_capability != EDGE_FALLBACK_CAPABILITY_VERSION_V2 {
+            return Err(EdgeFallbackContractError::InvalidVersion);
+        }
+        if self.aud != EDGE_FALLBACK_AUDIENCE_V2 {
+            return Err(EdgeFallbackContractError::InvalidAudience);
+        }
+        if !bounded_text(&self.iss, 1, 512) {
+            return Err(EdgeFallbackContractError::InvalidIssuer);
+        }
+        if !bounded_text(&self.sub, 1, 256) {
+            return Err(EdgeFallbackContractError::InvalidSubject);
+        }
+        if !valid_lineage_id(&self.sid) || !valid_lineage_id(&self.parent_jti) {
+            return Err(EdgeFallbackContractError::InvalidLineage);
+        }
+        if !valid_jti(&self.jti) {
+            return Err(EdgeFallbackContractError::InvalidJti);
+        }
+        if self.exp <= self.iat || self.nbf < self.iat || self.nbf > self.exp {
+            return Err(EdgeFallbackContractError::InvalidLifetime);
+        }
+        if self.exp - self.iat > EDGE_FALLBACK_MAX_TTL_SECONDS_V2 {
+            return Err(EdgeFallbackContractError::InvalidLifetime);
+        }
+        if self.grants.is_empty() || self.grants.len() > EDGE_FALLBACK_MAX_GRANTS_V2 {
+            return Err(EdgeFallbackContractError::InvalidGrantCount);
+        }
+        self.grants
+            .iter()
+            .try_for_each(EdgeFallbackGrantV2::validate)
     }
 }
 
@@ -325,6 +387,18 @@ fn valid_credential_ref(value: &str) -> bool {
         })
 }
 
+
+fn valid_lineage_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 256
+        && value.bytes().enumerate().all(|(index, byte)| {
+            if index == 0 {
+                return byte.is_ascii_alphanumeric();
+            }
+            byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'.' | b'_' | b'/' | b'-')
+        })
+}
+
 fn valid_jti(value: &str) -> bool {
     value.len() >= 8
         && value.len() <= 192
@@ -359,6 +433,28 @@ mod tests {
         }
     }
 
+
+    fn valid_capability_v2() -> EdgeFallbackCapabilityV2 {
+        EdgeFallbackCapabilityV2 {
+            zed_edge_capability: 2,
+            iss: "https://api.zpkg.net".into(),
+            aud: EDGE_FALLBACK_AUDIENCE_V2.into(),
+            sub: "user:test".into(),
+            sid: "session:abc-123".into(),
+            parent_jti: "parent-token-0001".into(),
+            iat: 100,
+            nbf: 100,
+            exp: 220,
+            jti: "capability-0002".into(),
+            grants: vec![EdgeFallbackGrantV2::Github {
+                operation: ReadOperationV2::Read,
+                package: "acme/private-lib".into(),
+                resource: "acme/private-lib".into(),
+                credential_ref: "github-app:acme:installation-42".into(),
+            }],
+        }
+    }
+
     #[test]
     fn valid_capability_round_trips_with_provider_tag() {
         let capability = valid_capability();
@@ -371,6 +467,45 @@ mod tests {
 
         let decoded: EdgeFallbackCapabilityV1 = serde_json::from_value(json).unwrap();
         assert_eq!(decoded, capability);
+    }
+
+    #[test]
+    fn v2_round_trips_signed_lineage_and_rejects_invalid_lineage() {
+        let capability = valid_capability_v2();
+        capability.validate().unwrap();
+
+        let json = serde_json::to_value(&capability).unwrap();
+        assert_eq!(json["zed_edge_capability"], 2);
+        assert_eq!(json["sid"], "session:abc-123");
+        assert_eq!(json["parent_jti"], "parent-token-0001");
+        assert!(json.get("access_token").is_none());
+
+        let decoded: EdgeFallbackCapabilityV2 = serde_json::from_value(json).unwrap();
+        assert_eq!(decoded, capability);
+
+        let mut invalid = valid_capability_v2();
+        invalid.parent_jti = "parent token with spaces".into();
+        assert_eq!(
+            invalid.validate(),
+            Err(EdgeFallbackContractError::InvalidLineage)
+        );
+    }
+
+    #[test]
+    fn v1_and_v2_reject_inconsistent_temporal_ordering() {
+        let mut v1 = valid_capability();
+        v1.nbf = v1.iat - 1;
+        assert_eq!(
+            v1.validate(),
+            Err(EdgeFallbackContractError::InvalidLifetime)
+        );
+
+        let mut v2 = valid_capability_v2();
+        v2.nbf = v2.exp + 1;
+        assert_eq!(
+            v2.validate(),
+            Err(EdgeFallbackContractError::InvalidLifetime)
+        );
     }
 
     #[test]
