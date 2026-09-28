@@ -135,6 +135,24 @@
         "result": {"enum": ["approved", "rejected"]},
         "reviewed_at": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
       }
+    },
+    "PackageApprovalState": {
+      "type": "object",
+      "additionalProperties": false,
+      "unevaluatedProperties": false,
+      "required": ["format", "artifact", "closure_digest", "approval_receipt_digest", "policy_digest", "status", "state_revision", "effective_at", "observed_at", "expires_at"],
+      "properties": {
+        "format": {"const": "zed-package-approval-state-v1"},
+        "artifact": {"$ref": "#/$defs/PackageArtifactIdentity"},
+        "closure_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "approval_receipt_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "policy_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "status": {"enum": ["approved", "revoked", "rejected", "expired"]},
+        "state_revision": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "effective_at": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "observed_at": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "expires_at": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+      }
     }
   }
 }
