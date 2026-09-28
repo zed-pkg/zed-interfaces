@@ -29,6 +29,7 @@ pub mod native_registry;
 pub mod nix;
 pub mod nix_plan;
 pub mod oci;
+pub mod package_security;
 pub mod paths;
 pub mod public_intake;
 pub mod recovery;
