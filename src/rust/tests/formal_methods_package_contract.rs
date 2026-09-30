@@ -107,7 +107,8 @@ fn templates_use_a_tool_pin_without_creating_a_runtime_dependency() {
 #[test]
 fn tandem_repositories_stay_independent_and_acyclic() {
     for input in [FORMAL_METHODS_RS, ORES_WIT] {
-        let manifest = Manifest::parse(input).expect("formal-method package manifest must be valid");
+        let manifest =
+            Manifest::parse(input).expect("formal-method package manifest must be valid");
         assert!(manifest.dependencies.is_empty());
         assert!(manifest.build_dependencies.is_empty());
         assert!(manifest.tool_dependencies.is_empty());
@@ -115,6 +116,8 @@ fn tandem_repositories_stay_independent_and_acyclic() {
     }
 
     let ores_wit = Manifest::parse(ORES_WIT).expect("ores-wit manifest must be valid");
-    let build = ores_wit.build.expect("ores-wit must declare a locked build");
+    let build = ores_wit
+        .build
+        .expect("ores-wit must declare a locked build");
     assert!(build.command.contains("cargo build --release --locked"));
 }
