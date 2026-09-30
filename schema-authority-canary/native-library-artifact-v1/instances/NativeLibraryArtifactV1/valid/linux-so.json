@@ -1,0 +1,14 @@
+{
+  "contract_version": "zed.native-library-artifact/v1",
+  "library_id": "ores_crypto",
+  "target_os": "linux",
+  "target_arch": "aarch64",
+  "binary_format": "elf",
+  "artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "artifact_size": 98304,
+  "file_name": "libores_crypto.so.1",
+  "runtime_name": "libores_crypto.so.1",
+  "abi_version": "1",
+  "direct_imports": ["libc.so.6", "libpthread.so.0"],
+  "provenance_ref": "zed-pkg/ores-crypto@1.0.0"
+}

@@ -1,0 +1,14 @@
+{
+  "contract_version": "zed.native-library-artifact/v1",
+  "library_id": "ores_crypto",
+  "target_os": "windows",
+  "target_arch": "x86_64",
+  "binary_format": "pe",
+  "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifact_size": 65536,
+  "file_name": "ores_crypto.dll",
+  "runtime_name": "ores_crypto.dll",
+  "abi_version": "1",
+  "direct_imports": ["kernel32.dll", "bcrypt.dll"],
+  "provenance_ref": "zed-pkg/ores-crypto@1.0.0"
+}
