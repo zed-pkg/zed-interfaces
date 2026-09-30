@@ -252,6 +252,11 @@ pub struct PublishSection {
     /// consumer project that has this package installed the same way a real
     /// consumer would.
     pub smoke_test: Option<String>,
+    /// Optional native-Windows smoke command. When present, Windows hosts run
+    /// this command through the native PowerShell execution contract instead
+    /// of the POSIX `smoke_test`. Omitted manifests retain the legacy fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub smoke_test_windows: Option<String>,
     /// VCS tag template that must exist and point at the published commit.
     /// `{version}` is substituted with `package.version`.
     pub tag_format: String,
@@ -274,10 +279,27 @@ impl Default for PublishSection {
             exclude: Vec::new(),
             include_readme: false,
             smoke_test: None,
+            smoke_test_windows: None,
             tag_format: "v{version}".to_string(),
             native: None,
             nix: None,
         }
+    }
+}
+
+impl PublishSection {
+    /// Resolve the smoke command for a host without consulting ambient shell state.
+    /// Native Windows overrides are additive; older manifests fall back to the
+    /// existing POSIX/default command so the schema change is backwards-compatible.
+    #[allow(clippy::needless_return)]
+    pub fn smoke_test_for_host(&self, windows: bool) -> Option<&str> {
+        if windows {
+            return self
+                .smoke_test_windows
+                .as_deref()
+                .or(self.smoke_test.as_deref());
+        }
+        return self.smoke_test.as_deref();
     }
 }
 
@@ -1777,19 +1799,44 @@ fn validate_project_lifecycle_env(
     Ok(())
 }
 
-/// A post-extract build step. Because compiled output is OS/arch-specific,
-/// zed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the
-/// source and caches the result in a build cache keyed by
-/// `(source sha256, target triple, command)` — separate from the universal,
-/// platform-independent source store (zed-docs issue #5).
+/// A post-extract build step. Compiled output is OS/arch-specific. The
+/// default command retains the historical POSIX execution contract; Windows
+/// may opt into an explicit native command and output list. The effective host
+/// command is part of the build-cache identity.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct BuildSection {
-    /// Command executed after extraction, e.g. `make` or `cargo build --release`.
+    /// Default/Unix command executed after extraction.
     pub command: String,
+    /// Optional native-Windows build command. Zed executes this through its
+    /// PowerShell contract when running on Windows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_windows: Option<String>,
     /// Paths (relative to the package root) to keep from the staging build.
     /// Empty means keep everything.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outputs: Vec<String>,
+    /// Optional Windows-specific output paths, for example Cargo `.exe` files.
+    /// An empty list falls back to `outputs` for backwards compatibility.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs_windows: Vec<String>,
+}
+
+impl BuildSection {
+    #[allow(clippy::needless_return)]
+    pub fn command_for_host(&self, windows: bool) -> &str {
+        if windows {
+            return self.command_windows.as_deref().unwrap_or(&self.command);
+        }
+        return &self.command;
+    }
+
+    #[allow(clippy::needless_return)]
+    pub fn outputs_for_host(&self, windows: bool) -> &[String] {
+        if windows && !self.outputs_windows.is_empty() {
+            return &self.outputs_windows;
+        }
+        return &self.outputs;
+    }
 }
 
 /// Monorepo workspace membership. `members` are glob patterns (relative to
@@ -1848,6 +1895,8 @@ pub enum ManifestError {
     InvalidSourceComposition(String),
     #[error("invalid build section: {0}")]
     InvalidBuild(String),
+    #[error("invalid publish section: {0}")]
+    InvalidPublish(String),
     #[error("invalid native dependency declaration for `{0}`: {1}")]
     InvalidNativeDependency(String, String),
     #[error("invalid install hook declaration for `{0}`: {1}")]
@@ -2419,6 +2468,18 @@ impl Manifest {
                 )));
             }
         }
+        if let Some(command) = self.publish.smoke_test_windows.as_deref() {
+            if command.trim().is_empty() {
+                return Err(ManifestError::InvalidPublish(
+                    "smoke_test_windows must not be empty".to_string(),
+                ));
+            }
+            if command.contains('\0') || command.len() > 32 * 1024 {
+                return Err(ManifestError::InvalidPublish(
+                    "smoke_test_windows must be at most 32768 bytes and contain no NUL".to_string(),
+                ));
+            }
+        }
         let overriding = self.overrides.build.values();
         for build in self.build.iter().chain(overriding) {
             if build.command.trim().is_empty() {
@@ -2426,7 +2487,20 @@ impl Manifest {
                     "command must not be empty".to_string(),
                 ));
             }
-            for output in &build.outputs {
+            if let Some(command) = build.command_windows.as_deref() {
+                if command.trim().is_empty() {
+                    return Err(ManifestError::InvalidBuild(
+                        "command_windows must not be empty".to_string(),
+                    ));
+                }
+                if command.contains('\0') || command.len() > 32 * 1024 {
+                    return Err(ManifestError::InvalidBuild(
+                        "command_windows must be at most 32768 bytes and contain no NUL"
+                            .to_string(),
+                    ));
+                }
+            }
+            for output in build.outputs.iter().chain(&build.outputs_windows) {
                 if !is_safe_relative_path(output) {
                     return Err(ManifestError::InvalidBuild(format!(
                         "output `{output}` must be a relative path without `..`"

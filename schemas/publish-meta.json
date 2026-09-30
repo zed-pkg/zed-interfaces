@@ -109,15 +109,29 @@
       }
     },
     "BuildSection": {
-      "description": "A post-extract build step. Because compiled output is OS/arch-specific,\nzed-pkg runs `command` via `sh -c` inside a sandboxed staging copy of the\nsource and caches the result in a build cache keyed by\n`(source sha256, target triple, command)` — separate from the universal,\nplatform-independent source store (zed-docs issue #5).",
+      "description": "A post-extract build step. Compiled output is OS/arch-specific. The\ndefault command retains the historical POSIX execution contract; Windows\nmay opt into an explicit native command and output list. The effective host\ncommand is part of the build-cache identity.",
       "type": "object",
       "properties": {
         "command": {
-          "description": "Command executed after extraction, e.g. `make` or `cargo build --release`.",
+          "description": "Default/Unix command executed after extraction.",
           "type": "string"
+        },
+        "command_windows": {
+          "description": "Optional native-Windows build command. Zed executes this through its\nPowerShell contract when running on Windows.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "outputs": {
           "description": "Paths (relative to the package root) to keep from the staging build.\nEmpty means keep everything.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outputs_windows": {
+          "description": "Optional Windows-specific output paths, for example Cargo `.exe` files.\nAn empty list falls back to `outputs` for backwards compatibility.",
           "type": "array",
           "items": {
             "type": "string"
@@ -1043,6 +1057,13 @@
             "null"
           ],
           "default": null
+        },
+        "smoke_test_windows": {
+          "description": "Optional native-Windows smoke command. When present, Windows hosts run\nthis command through the native PowerShell execution contract instead\nof the POSIX `smoke_test`. Omitted manifests retain the legacy fallback.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "tag_format": {
           "description": "VCS tag template that must exist and point at the published commit.\n`{version}` is substituted with `package.version`.",
