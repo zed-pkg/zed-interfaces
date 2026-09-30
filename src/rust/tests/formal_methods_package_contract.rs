@@ -15,12 +15,29 @@ url = "https://github.com/ORESoftware/ores-formal-methods-templates"
 [install]
 adapter = "none"
 dir = ".vendor/.zed"
+"#;
+
+const TEMPLATES_WITH_PUBLISHED_TJSV: &str = r#"
+[package]
+org = "oresoftware"
+name = "ores-formal-methods-templates"
+version = "0.1.0"
+description = "Polyglot formal-methods templates"
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/ORESoftware/ores-formal-methods-templates"
+
+[install]
+adapter = "none"
+dir = ".vendor/.zed"
 
 [tool-dependencies]
 "oresoftware/typespec-json-schema-validator" = "^0.1.1"
 "#;
 
-const TEMPLATES_LOCK: &str = r#"
+const TEMPLATES_TOOL_LOCK: &str = r#"
 version = 1
 
 [[tool]]
@@ -79,34 +96,8 @@ dir = ".vendor/.zed"
 "#;
 
 #[test]
-fn templates_use_a_tool_pin_without_creating_a_runtime_dependency() {
-    let manifest = Manifest::parse(TEMPLATES).expect("templates manifest must be valid");
-    assert!(manifest.dependencies.is_empty());
-    assert!(manifest.build_dependencies.is_empty());
-    assert!(manifest.targets.is_empty());
-    assert_eq!(
-        manifest
-            .tool_dependencies
-            .get("oresoftware/typespec-json-schema-validator")
-            .map(String::as_str),
-        Some("^0.1.1")
-    );
-
-    let lock = Lockfile::parse(TEMPLATES_LOCK).expect("templates tool lock must be valid");
-    assert!(lock.packages.is_empty());
-    let tool = lock
-        .find_tool("oresoftware", "typespec-json-schema-validator")
-        .expect("TJSV must be pinned as a tool");
-    assert_eq!(tool.version, "0.1.1");
-    assert_eq!(
-        tool.vcs_commit.as_deref(),
-        Some("66aff520ab946f7d9b116e8c4f39423fa70e9558")
-    );
-}
-
-#[test]
-fn tandem_repositories_stay_independent_and_acyclic() {
-    for input in [FORMAL_METHODS_RS, ORES_WIT] {
+fn current_formal_method_packages_have_a_resolvable_acyclic_zed_graph() {
+    for input in [TEMPLATES, FORMAL_METHODS_RS, ORES_WIT] {
         let manifest =
             Manifest::parse(input).expect("formal-method package manifest must be valid");
         assert!(manifest.dependencies.is_empty());
@@ -120,4 +111,31 @@ fn tandem_repositories_stay_independent_and_acyclic() {
         .build
         .expect("ores-wit must declare a locked build");
     assert!(build.command.contains("cargo build --release --locked"));
+}
+
+#[test]
+fn a_published_tjsv_belongs_in_tool_dependencies_not_runtime_dependencies() {
+    let manifest = Manifest::parse(TEMPLATES_WITH_PUBLISHED_TJSV)
+        .expect("templates manifest with published TJSV must be valid");
+    assert!(manifest.dependencies.is_empty());
+    assert!(manifest.build_dependencies.is_empty());
+    assert!(manifest.targets.is_empty());
+    assert_eq!(
+        manifest
+            .tool_dependencies
+            .get("oresoftware/typespec-json-schema-validator")
+            .map(String::as_str),
+        Some("^0.1.1")
+    );
+
+    let lock = Lockfile::parse(TEMPLATES_TOOL_LOCK).expect("templates tool lock must be valid");
+    assert!(lock.packages.is_empty());
+    let tool = lock
+        .find_tool("oresoftware", "typespec-json-schema-validator")
+        .expect("TJSV must be pinned as a tool");
+    assert_eq!(tool.version, "0.1.1");
+    assert_eq!(
+        tool.vcs_commit.as_deref(),
+        Some("66aff520ab946f7d9b116e8c4f39423fa70e9558")
+    );
 }
