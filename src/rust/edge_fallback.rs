@@ -704,24 +704,39 @@ mod tests {
             Err(EdgeFallbackContractError::OutagePolicyRejected)
         );
         assert_eq!(
-            capability.admit_outage(130, 105, 90, EdgeFallbackOutagePolicyV3 {
-                max_revocation_age_seconds: 20,
-                ..policy
-            }),
+            capability.admit_outage(
+                130,
+                105,
+                90,
+                EdgeFallbackOutagePolicyV3 {
+                    max_revocation_age_seconds: 20,
+                    ..policy
+                }
+            ),
             Err(EdgeFallbackContractError::OutagePolicyRejected)
         );
         assert_eq!(
-            capability.admit_outage(110, 105, 0, EdgeFallbackOutagePolicyV3 {
-                max_jwks_age_seconds: 100,
-                ..policy
-            }),
+            capability.admit_outage(
+                110,
+                105,
+                0,
+                EdgeFallbackOutagePolicyV3 {
+                    max_jwks_age_seconds: 100,
+                    ..policy
+                }
+            ),
             Err(EdgeFallbackContractError::OutagePolicyRejected)
         );
         assert_eq!(
-            capability.admit_outage(130, 0, 90, EdgeFallbackOutagePolicyV3 {
-                max_outage_seconds: 120,
-                ..policy
-            }),
+            capability.admit_outage(
+                130,
+                0,
+                90,
+                EdgeFallbackOutagePolicyV3 {
+                    max_outage_seconds: 120,
+                    ..policy
+                }
+            ),
             Err(EdgeFallbackContractError::OutagePolicyRejected)
         );
     }
