@@ -3,12 +3,12 @@ name: Edge fallback capability peer authority
 on:
   pull_request:
     paths:
-      - "contracts/edge-fallback/v1/**"
+      - "contracts/edge-fallback/**"
       - ".github/workflows/edge-fallback-capability-contract.yml"
   push:
     branches: [main, dev]
     paths:
-      - "contracts/edge-fallback/v1/**"
+      - "contracts/edge-fallback/**"
       - ".github/workflows/edge-fallback-capability-contract.yml"
   workflow_dispatch:
 
@@ -23,6 +23,10 @@ jobs:
   peer-authority:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [v1, v2, v3]
     steps:
       - name: Check out exact head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,16 +45,18 @@ jobs:
       - name: Compare independently-authored TypeSpec and JSON Schema
         uses: ORESoftware/typespec-json-schema-validator@813d5f021e02574f529a9553b670719f8f10d02c
         with:
-          typespec: contracts/edge-fallback/v1/main.tsp
-          schema: contracts/edge-fallback/v1/authored.schema.json
-          report: .edge-fallback-contract/report.json
-          sarif: .edge-fallback-contract/report.sarif
-          contract_ir: .edge-fallback-contract/contract-ir.json
-          output_dir: .edge-fallback-contract/generated
+          typespec: contracts/edge-fallback/${{ matrix.version }}/main.tsp
+          schema: contracts/edge-fallback/${{ matrix.version }}/authored.schema.json
+          report: .edge-fallback-contract/${{ matrix.version }}/report.json
+          sarif: .edge-fallback-contract/${{ matrix.version }}/report.sarif
+          contract_ir: .edge-fallback-contract/${{ matrix.version }}/contract-ir.json
+          output_dir: .edge-fallback-contract/${{ matrix.version }}/generated
           max_probes: "128"
 
       - name: Require peer-authority admission
         shell: bash
+        env:
+          REPORT_PATH: .edge-fallback-contract/${{ matrix.version }}/report.json
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
@@ -58,7 +64,7 @@ jobs:
           import { readFileSync } from "node:fs";
 
           const report = JSON.parse(
-            readFileSync(".edge-fallback-contract/report.json", "utf8"),
+            readFileSync(process.env.REPORT_PATH, "utf8"),
           );
 
           assert.equal(report.status, "passed");
@@ -80,8 +86,8 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: edge-fallback-capability-${{ github.run_id }}
-          path: .edge-fallback-contract/
+          name: edge-fallback-capability-${{ matrix.version }}-${{ github.run_id }}
+          path: .edge-fallback-contract/${{ matrix.version }}/
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 30
