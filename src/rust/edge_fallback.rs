@@ -70,6 +70,8 @@ pub struct EdgeFallbackCapabilityV3 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EdgeFallbackOutagePolicyV3 {
     pub minimum_assurance: u8,
+    pub minimum_session_epoch: u64,
+    pub minimum_policy_epoch: u64,
     pub max_capability_age_seconds: u64,
     pub max_revocation_age_seconds: u64,
     pub max_jwks_age_seconds: u64,
@@ -275,7 +277,12 @@ impl EdgeFallbackCapabilityV3 {
         {
             return Err(EdgeFallbackContractError::OutagePolicyRejected);
         }
-        if self.assurance < policy.minimum_assurance || now < self.nbf || now >= self.exp {
+        if self.assurance < policy.minimum_assurance
+            || self.session_epoch < policy.minimum_session_epoch
+            || self.policy_epoch < policy.minimum_policy_epoch
+            || now < self.nbf
+            || now >= self.exp
+        {
             return Err(EdgeFallbackContractError::OutagePolicyRejected);
         }
 
@@ -612,6 +619,8 @@ mod tests {
     fn outage_policy_v3() -> EdgeFallbackOutagePolicyV3 {
         EdgeFallbackOutagePolicyV3 {
             minimum_assurance: 2,
+            minimum_session_epoch: 7,
+            minimum_policy_epoch: 4,
             max_capability_age_seconds: 120,
             max_revocation_age_seconds: 30,
             max_jwks_age_seconds: 300,
@@ -696,6 +705,27 @@ mod tests {
         low_assurance.assurance = 1;
         assert_eq!(
             low_assurance.admit_outage(110, 105, 90, policy),
+            Err(EdgeFallbackContractError::OutagePolicyRejected)
+        );
+
+        let mut stale_session_epoch = capability.clone();
+        stale_session_epoch.session_epoch = policy.minimum_session_epoch - 1;
+        assert_eq!(
+            stale_session_epoch.admit_outage(110, 105, 90, policy),
+            Err(EdgeFallbackContractError::OutagePolicyRejected)
+        );
+
+        let mut stale_policy_epoch = capability.clone();
+        stale_policy_epoch.policy_epoch = policy.minimum_policy_epoch - 1;
+        assert_eq!(
+            stale_policy_epoch.admit_outage(110, 105, 90, policy),
+            Err(EdgeFallbackContractError::OutagePolicyRejected)
+        );
+
+        let mut not_before_future = capability.clone();
+        not_before_future.nbf = 115;
+        assert_eq!(
+            not_before_future.admit_outage(110, 105, 90, policy),
             Err(EdgeFallbackContractError::OutagePolicyRejected)
         );
 
