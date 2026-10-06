@@ -33,7 +33,9 @@ model EdgeFallbackCapabilityV3 {
   parent_jti: string;
 
   // Authentication assurance established before the outage capability was minted.
-  assurance: 1 | 2;
+  @minValue(1)
+  @maxValue(2)
+  assurance: safeint;
 
   // Canonical Shared Auth epochs bound at issuance. The edge does not invent
   // newer epochs while the authority is unavailable.
