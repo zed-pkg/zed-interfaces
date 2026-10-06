@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zed-pkg/zed-interfaces/contracts/edge-fallback/v3/authored.schema.json",
+  "title": "EdgeFallbackCapabilityV3",
+  "$ref": "#/$defs/EdgeFallbackCapabilityV3",
+  "$defs": {
+    "EdgeFallbackCapabilityV3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zed_edge_capability",
+        "iss",
+        "aud",
+        "sub",
+        "sid",
+        "parent_jti",
+        "assurance",
+        "session_epoch",
+        "policy_epoch",
+        "revocation_checked_at",
+        "iat",
+        "nbf",
+        "exp",
+        "jti",
+        "grants"
+      ],
+      "properties": {
+        "zed_edge_capability": {
+          "type": "integer",
+          "const": 3
+        },
+        "iss": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "aud": {
+          "type": "string",
+          "const": "zed-edge-fallback"
+        },
+        "sub": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "sid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:._/-]{0,255}$"
+        },
+        "parent_jti": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:._/-]{0,255}$"
+        },
+        "iat": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "nbf": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "exp": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "jti": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 192,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,191}$"
+        },
+        "grants": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/EdgeFallbackGrantV3"
+          }
+        },
+        "assurance": {
+          "type": "integer",
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "session_epoch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "policy_epoch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "revocation_checked_at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "EdgeFallbackGrantV3": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GitHubEdgeFallbackGrantV3"
+        },
+        {
+          "$ref": "#/$defs/NpmEdgeFallbackGrantV3"
+        },
+        {
+          "$ref": "#/$defs/CargoRegistryEdgeFallbackGrantV3"
+        }
+      ]
+    },
+    "GitHubEdgeFallbackGrantV3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "operation",
+        "package",
+        "resource",
+        "credential_ref"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "const": "github"
+        },
+        "operation": {
+          "type": "string",
+          "const": "read"
+        },
+        "package": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 257,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*/[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "resource": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "credential_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 192,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:._/-]{0,191}$"
+        }
+      }
+    },
+    "NpmEdgeFallbackGrantV3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "operation",
+        "package",
+        "resource",
+        "credential_ref"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "const": "npm"
+        },
+        "operation": {
+          "type": "string",
+          "const": "read"
+        },
+        "package": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 257,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*/[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "resource": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 256,
+          "pattern": "^@[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$"
+        },
+        "credential_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 192,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:._/-]{0,191}$"
+        }
+      }
+    },
+    "CargoRegistryEdgeFallbackGrantV3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "operation",
+        "package",
+        "resource",
+        "origin",
+        "credential_ref"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "const": "cargo-registry"
+        },
+        "operation": {
+          "type": "string",
+          "const": "read"
+        },
+        "package": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 257,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*/[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "resource": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "origin": {
+          "type": "string",
+          "minLength": 9,
+          "maxLength": 512,
+          "pattern": "^https://[A-Za-z0-9.-]+(?::[0-9]{1,5})?$"
+        },
+        "credential_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 192,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:._/-]{0,191}$"
+        }
+      }
+    }
+  }
+}
