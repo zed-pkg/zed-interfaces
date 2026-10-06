@@ -36,11 +36,13 @@ runtime facts. Admission requires all of the following:
    five-minute contract lifetime;
 3. capability age is within the configured outage policy;
 4. `assurance` meets the configured minimum;
-5. `revocation_checked_at` is not newer than issuance and remains within the
+5. signed `session_epoch` and `policy_epoch` are at least the verifier's
+   locally trusted minimum epochs;
+6. `revocation_checked_at` is not newer than issuance and remains within the
    configured freshness bound;
-6. the verifier's **local trusted JWKS snapshot** remains within its configured
+7. the verifier's **local trusted JWKS snapshot** remains within its configured
    freshness bound;
-7. the locally observed outage duration remains within its configured bound.
+8. the locally observed outage duration remains within its configured bound.
 
 Unknown `kid` values fail closed at the JOSE layer. Key freshness is
 deliberately verifier-local: a bearer capability is not allowed to self-assert
@@ -63,8 +65,9 @@ All v2 restrictions remain:
 - unknown fields fail closed.
 
 The session and policy epochs are signed continuity markers. During an outage
-the edge may compare them with locally trusted minima, but it must never infer a
-newer epoch or treat equality of email/domain/profile data as identity.
+the edge **must** compare them with locally trusted minimum epochs before
+admission. It must never infer a newer epoch or treat equality of
+email/domain/profile data as identity.
 
 ## Activation
 
