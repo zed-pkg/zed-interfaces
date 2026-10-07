@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "authored.desktop-application-artifact-v1.schema.json",
+  "$defs": {
+    "DesktopReleaseChannelV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "DesktopReleaseChannelV1",
+      "type": "string",
+      "enum": ["stable", "beta", "nightly"]
+    },
+    "DesktopTargetOsV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "DesktopTargetOsV1",
+      "type": "string",
+      "enum": ["macos", "windows", "linux"]
+    },
+    "DesktopTargetArchV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "DesktopTargetArchV1",
+      "type": "string",
+      "enum": ["x86_64", "aarch64", "universal"]
+    },
+    "DesktopArtifactFormatV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "DesktopArtifactFormatV1",
+      "type": "string",
+      "enum": ["macos_pkg", "macos_dmg", "windows_exe", "linux_snap"]
+    },
+    "DesktopSigningStateV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "DesktopSigningStateV1",
+      "type": "string",
+      "enum": ["unsigned", "signed"]
+    },
+    "DesktopNotarizationStateV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "DesktopNotarizationStateV1",
+      "type": "string",
+      "enum": ["not_applicable", "not_notarized", "notarized"]
+    },
+    "DesktopApplicationArtifactV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "DesktopApplicationArtifactV1",
+      "type": "object",
+      "properties": {
+        "contract_version": { "const": "zed.desktop-application-artifact/v1" },
+        "org": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "app": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "channel": { "$ref": "DesktopReleaseChannelV1" },
+        "target_os": { "$ref": "DesktopTargetOsV1" },
+        "target_arch": { "$ref": "DesktopTargetArchV1" },
+        "artifact_format": { "$ref": "DesktopArtifactFormatV1" },
+        "artifact_sha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "artifact_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "file_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "source_repository": {
+          "type": "string",
+          "minLength": 9,
+          "maxLength": 512,
+          "pattern": "^https://[^\\s/@]+(?:/[^\\s]*)?$"
+        },
+        "source_revision": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 40,
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "build_receipt_sha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "minimum_os_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "signing_state": { "$ref": "DesktopSigningStateV1" },
+        "publisher_identity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "notarization_state": { "$ref": "DesktopNotarizationStateV1" },
+        "cdn_object_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "required": [
+        "contract_version",
+        "org",
+        "app",
+        "version",
+        "channel",
+        "target_os",
+        "target_arch",
+        "artifact_format",
+        "artifact_sha256",
+        "artifact_size",
+        "file_name",
+        "source_repository",
+        "source_revision",
+        "build_receipt_sha256",
+        "signing_state",
+        "notarization_state",
+        "cdn_object_path"
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}
