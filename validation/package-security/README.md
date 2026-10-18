@@ -30,7 +30,7 @@ This lane models evidence and admission receipts; it does not make a scanner or 
 Producers and consumers must recompute `closure_digest`; it is not trusted merely because it is present. The v1 digest is SHA-256 over RFC 8785 JCS serialization of the closure object **without** the `closure_digest` member. Before serialization:
 
 1. normalize hexadecimal digests to lowercase;
-2. sort `dependencies` by the tuple `(ecosystem, registry_uri-or-empty, package_name, package_version, resolved_revision, artifact_digest, source_digest, outer_checksum-or-empty)`;
+2. sort `dependencies` by the tuple `(ecosystem, registry_uri-or-empty, package_name, package_version, resolved_revision, artifact_digest, source_digest, outer_checksum-or-empty)` using **lexicographic UTF-16 code-unit order** for each string, ascending, with no locale collation or Unicode normalization; for example U+10000 sorts before U+E000 (unlike UTF-8 byte order);
 3. reject duplicate tuples rather than silently deduplicating them;
 4. require the root artifact to be separate from, and not repeated in, `dependencies`;
 5. retain the exact `dependency_lock_digest`, `resolver_id`, and `resolver_version` in the signed/hashed payload.
@@ -38,6 +38,19 @@ Producers and consumers must recompute `closure_digest`; it is not trusted merel
 A consumer must treat a closure as changed if the lock digest, resolver identity/version, root identity, any member identity, or dependency membership/order-normalized set changes. The schema caps the dependency list at 4096 entries; operational resolvers may impose tighter limits.
 
 For Hex closures, each member carries the registry `outer_checksum` plus independent Zed artifact/source digests. A closure made only from package names and versions is insufficient for safety reuse.
+
+
+The authoritative semantic golden vector is
+`instances/PackageDependencyClosure/valid/hex-closure.json`: its
+`closure_digest` equals SHA-256
+`2f704cfa7c9f59894d97d4b2552e7dec0e6bdee6852a70b1dca8cd50b9e78684`.
+The **exact UTF-8 canonical preimage**, without `closure_digest`, is
+`golden/hex-closure.canonical-preimage.json` (1550 bytes excluding the
+file's one trailing newline). Tests exercise reversed input, duplicate/root
+repetition, resolver and lock drift, and an astral-versus-BMP Unicode vector.
+These are behavior/conformance fixtures and **not** an additional JSON Schema
+or TypeSpec authority. Downstream Rust, Dart and TypeScript implementations
+must verify the same bytes and digests independently before promotion.
 
 ## Repository boundary
 
