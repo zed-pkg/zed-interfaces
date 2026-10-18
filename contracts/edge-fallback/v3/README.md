@@ -52,6 +52,19 @@ A Shared Auth outage never turns an expired capability, stale revocation
 checkpoint, stale keyset, insufficient-assurance session, or unknown signing key
 into authority.
 
+## Semantic grant identity
+
+The independently authored TypeSpec and JSON Schema authorities constrain each
+grant's shape, but neither `uniqueItems` nor structural equality enforces
+uniqueness by authorization. After wire/schema validation, runtime consumers
+**must reject any repeated** `(provider, package, resource)` tuple, including
+duplicates with different `credential_ref` or Cargo `origin`. These fields
+must not make provider selection array-order dependent. The
+[shared semantic admission rule](../semantic-grants.mjs) and its negative
+[fixtures](../fixtures/) are enforced in the edge-fallback CI matrix for all
+three versions. The semantic layer is additional to, not a replacement for,
+peer-authority wire validation.
+
 ## Security invariants
 
 All v2 restrictions remain:
