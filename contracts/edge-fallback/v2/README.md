@@ -25,6 +25,19 @@ bounded, non-secret claims:
 The edge capability's own `jti` remains the capability id. These three values
 are deliberately distinct and MUST NOT be substituted for one another.
 
+## Semantic grant identity
+
+The independently authored TypeSpec and JSON Schema authorities constrain each
+grant's shape, but neither `uniqueItems` nor structural equality enforces
+uniqueness by authorization. After wire/schema validation, runtime consumers
+**must reject any repeated** `(provider, package, resource)` tuple, including
+duplicates with different `credential_ref` or Cargo `origin`. These fields
+must not make provider selection array-order dependent. The
+[shared semantic admission rule](../semantic-grants.mjs) and its negative
+[fixtures](../fixtures/) are enforced in the edge-fallback CI matrix for all
+three versions. The semantic layer is additional to, not a replacement for,
+peer-authority wire validation.
+
 ## Security invariants
 
 All v1 resource restrictions remain:

@@ -1,0 +1,26 @@
+{
+  "zed_edge_capability": 1,
+  "iss": "https://auth.zpkg.net",
+  "aud": "zed-edge-fallback",
+  "sub": "user:test",
+  "iat": 1999999990,
+  "nbf": 1999999990,
+  "exp": 2000000120,
+  "jti": "capability-0001",
+  "grants": [
+    {
+      "provider": "github",
+      "operation": "read",
+      "package": "acme/private-lib",
+      "resource": "acme/private-lib",
+      "credential_ref": "github-app:zed:one"
+    },
+    {
+      "provider": "github",
+      "operation": "read",
+      "package": "acme/private-lib",
+      "resource": "acme/private-lib",
+      "credential_ref": "github-app:zed:two"
+    }
+  ]
+}
