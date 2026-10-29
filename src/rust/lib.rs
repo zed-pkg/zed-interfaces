@@ -37,6 +37,7 @@ pub mod registry;
 pub mod registry_protocol_v1;
 pub mod retirement;
 pub mod signing;
+pub mod signed_build;
 pub mod source;
 pub mod sync;
 pub mod vcs;
