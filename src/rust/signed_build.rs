@@ -29,6 +29,9 @@ pub struct BuildClaimsV1 {
     pub target: String,
     pub artifact_sha256: String,
     pub artifact_size: u64,
+    /// Exact archive suffix used in Zed's content-addressed store.
+    pub artifact_format: String,
+    pub issued_at_unix_ms: u64,
     pub expires_at_unix_ms: u64,
 }
 
@@ -73,8 +76,11 @@ impl BuildClaimsV1 {
             return Err("invalid signed build source, challenge or artifact digest".into());
         }
         if !matches!(self.target.as_str(), "java" | "llvm" | "wasm" | "net" | "forge" | "js")
+            || !matches!(self.artifact_format.as_str(), "tar.gz" | "zip")
             || self.artifact_size == 0
-            || self.expires_at_unix_ms == 0 {
+            || self.issued_at_unix_ms == 0
+            || self.expires_at_unix_ms <= self.issued_at_unix_ms
+            || self.expires_at_unix_ms - self.issued_at_unix_ms > 300_000 {
             return Err("invalid target, artifact size or expiration".into());
         }
         Ok(())
@@ -117,6 +123,7 @@ mod tests {
             source_commit: "b".repeat(40), source_sha256: "c".repeat(64),
             toolchain_sha256: "d".repeat(64), target: "llvm".into(),
             artifact_sha256: "e".repeat(64), artifact_size: 128,
+            artifact_format: "tar.gz".into(), issued_at_unix_ms: 1_799_999_880_000,
             expires_at_unix_ms: 1_800_000_000_000,
         }
     }
