@@ -513,14 +513,19 @@ mod tests {
         for token in ["attolang", "AttoLang", "oreslang", "ORESlang"] {
             assert_eq!(Language::from_token(token), Some(Language::Attolang));
             assert_eq!(Ecosystem::from_token(token), Some(Ecosystem::Attolang));
-            let from_manifest: Language =
-                serde_json::from_str(&format!("\"{token}\"")).unwrap();
+            let from_manifest: Language = serde_json::from_str(&format!("\"{token}\"")).unwrap();
             assert_eq!(from_manifest, Language::Attolang);
         }
         assert_eq!(Language::Attolang.as_str(), "attolang");
         assert_eq!(Language::Attolang.ecosystem(), Ecosystem::Attolang);
-        assert_eq!(serde_json::to_string(&Language::Attolang).unwrap(), "\"attolang\"");
-        assert_eq!(serde_json::to_string(&Ecosystem::Attolang).unwrap(), "\"attolang\"");
+        assert_eq!(
+            serde_json::to_string(&Language::Attolang).unwrap(),
+            "\"attolang\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Ecosystem::Attolang).unwrap(),
+            "\"attolang\""
+        );
         assert_eq!(
             serde_json::from_str::<Ecosystem>("\"oreslang\"").unwrap(),
             Ecosystem::Attolang
