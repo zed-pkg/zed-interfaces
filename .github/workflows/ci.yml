@@ -17,28 +17,29 @@ jobs:
       - name: Checkout exact contract PR head
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: 52a807836b480f294122358df465b6d282665efe
+          ref: 13c8a3eda2245850c5d199fb4f70d9c47fc3a3ea
           persist-credentials: false
       - name: Verify exact head
-        run: test "$(git rev-parse HEAD)" = "52a807836b480f294122358df465b6d282665efe"
+        run: test "$(git rev-parse HEAD)" = "13c8a3eda2245850c5d199fb4f70d9c47fc3a3ea"
       - name: Install pinned Rust
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
           components: rustfmt,clippy
-      - name: Run canonical generators in disposable checkout
+      - name: Check exact-head formatting and Rust tests
+        run: |
+          set -euo pipefail
+          cargo fmt --check
+          cargo test --locked
+      - name: Verify generated schemas, fixtures and TS/Dart are current
         run: |
           set -euo pipefail
           cargo run --locked --example generate_schemas
           cargo run --locked --example generate_fixtures
           npm run codegen
-          echo GEN_DIFF_START
-          git diff -- schemas/ fixtures/ src/dart/ src/ts/
-          echo GEN_DIFF_END
-      - name: Validate Rust syntax and unit tests
-        run: |
-          cargo fmt --check
-          cargo test --locked
+          git diff --exit-code -- schemas/ fixtures/ src/dart/ src/ts/
+      - name: Verify TypeScript/Dart generator contract
+        run: node --test codegen/generate.test.mjs
       - name: Confirm changes remain local to disposable checkout
         run: |
-          test "$(git rev-parse HEAD)" = "52a807836b480f294122358df465b6d282665efe"
+          test "$(git rev-parse HEAD)" = "13c8a3eda2245850c5d199fb4f70d9c47fc3a3ea"
           git status --short
