@@ -78,7 +78,7 @@ fn legacy_oreslang_and_display_case_are_canonicalized_not_ungated() {
 
 #[test]
 fn backend_names_cannot_be_misinterpreted_as_atto_package_languages() {
-    for implementation in ["llvm", "wasm", "graalvm", "nativeaot", "cranelift", "forge"] {
+    for implementation in ["llvm", "graalvm", "nativeaot", "cranelift", "forge"] {
         let source = SOURCE_MANIFEST.replace(
             "language = \"attolang\"",
             &format!("language = \"{implementation}\""),
@@ -91,6 +91,18 @@ fn backend_names_cannot_be_misinterpreted_as_atto_package_languages() {
         );
         assert_eq!(Language::from_token(implementation), None);
     }
+
+    // "wasm" predates AttoLang as an explicit alias for RustWasm packages.
+    // Preserve that public compatibility: it maps to npm, NOT to AttoLang's
+    // compiler-source import ecosystem, so it cannot masquerade as .atto.
+    let wasm_source = SOURCE_MANIFEST.replace(
+        "language = \"attolang\"",
+        "language = \"wasm\"",
+    );
+    let wasm = Manifest::parse(&wasm_source).expect("existing RustWasm alias");
+    assert_eq!(wasm.package.language, Language::RustWasm);
+    assert_eq!(wasm.package.ecosystem(), Ecosystem::Npm);
+    assert_ne!(wasm.package.ecosystem(), Ecosystem::Attolang);
 }
 
 #[test]
