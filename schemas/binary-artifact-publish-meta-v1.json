@@ -204,6 +204,11 @@
           "type": "string"
         },
         {
+          "const": "attolang",
+          "description": "Source modules imported by AttoLang's compiler, regardless of backend.",
+          "type": "string"
+        },
+        {
           "const": "hex",
           "description": "Elixir, Erlang and Gleam share Hex and the BEAM.",
           "type": "string"
@@ -354,6 +359,11 @@
         {
           "const": "universal",
           "description": "Not language-specific: protocol schemas, docs, `.proto` files, an\numbrella package. Never subject to the install ecosystem guard.",
+          "type": "string"
+        },
+        {
+          "const": "attolang",
+          "description": "AttoLang (formerly Oreslang) source packages; backend selection is independent.",
           "type": "string"
         },
         {

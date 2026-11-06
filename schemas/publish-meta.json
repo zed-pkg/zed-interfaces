@@ -205,6 +205,11 @@
           "const": "universal"
         },
         {
+          "description": "Source modules imported by AttoLang's compiler, regardless of backend.",
+          "type": "string",
+          "const": "attolang"
+        },
+        {
           "description": "Elixir, Erlang and Gleam share Hex and the BEAM.",
           "type": "string",
           "const": "hex"
@@ -368,6 +373,11 @@
           "description": "Not language-specific: protocol schemas, docs, `.proto` files, an\numbrella package. Never subject to the install ecosystem guard.",
           "type": "string",
           "const": "universal"
+        },
+        {
+          "description": "AttoLang (formerly Oreslang) source packages; backend selection is independent.",
+          "type": "string",
+          "const": "attolang"
         },
         {
           "description": "Flutter is a framework rather than a language, but a Flutter client is a\nseparate package from a plain Dart one (different `pubspec.yaml`,\ndifferent deps), so it gets its own token.",

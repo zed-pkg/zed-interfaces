@@ -49,6 +49,8 @@ pub enum Language {
     /// umbrella package. Never subject to the install ecosystem guard.
     #[default]
     Universal,
+    /// AttoLang (formerly Oreslang) source packages; backend selection is independent.
+    Attolang,
     C,
     Clojure,
     Cpp,
@@ -114,6 +116,9 @@ pub enum Ecosystem {
     /// No ecosystem constraint. Installs into any project; never gated.
     #[default]
     Universal,
+    /// Source modules imported by AttoLang's compiler, regardless of backend.
+    #[serde(alias = "oreslang")]
+    Attolang,
     Cargo,
     Cmake,
     Composer,
@@ -147,6 +152,7 @@ impl Language {
         use Language::*;
         match self {
             Universal => "universal",
+            Attolang => "attolang",
             C => "c",
             Clojure => "clojure",
             Cpp => "cpp",
@@ -195,6 +201,7 @@ impl Language {
         use Language::*;
         match self {
             Universal => Ecosystem::Universal,
+            Attolang => Ecosystem::Attolang,
             C | Cpp => Ecosystem::Cmake,
             Clojure | Java | Kotlin | Scala => Ecosystem::Jvm,
             Crystal => Ecosystem::Shards,
@@ -242,6 +249,7 @@ impl Language {
             // named a language-specific artifact, so its compatible current
             // meaning is the ungated `universal` package language.
             "universal" | "any" | "none" | "polyglot" | "yaml" | "yml" => Universal,
+            "attolang" | "oreslang" => Attolang,
             "c" => C,
             "clojure" | "clj" => Clojure,
             "cpp" | "c++" | "cxx" => Cpp,
@@ -311,6 +319,7 @@ impl Ecosystem {
         use Ecosystem::*;
         match self {
             Universal => "universal",
+            Attolang => "attolang",
             Cargo => "cargo",
             Cmake => "cmake",
             Composer => "composer",
@@ -346,6 +355,7 @@ impl Ecosystem {
         use Ecosystem::*;
         Some(match token.trim().to_ascii_lowercase().as_str() {
             "universal" | "any" | "none" => Universal,
+            "attolang" | "oreslang" => Attolang,
             "cargo" | "crates" | "crates-io" => Cargo,
             "cmake" => Cmake,
             "composer" => Composer,
@@ -388,6 +398,7 @@ impl Ecosystem {
         use Ecosystem::*;
         match self {
             Universal | Matlab | Shell => &[],
+            Attolang => &[".ores.pkg.toml"],
             Cargo => &["Cargo.toml"],
             Cmake => &["CMakeLists.txt"],
             Composer => &["composer.json"],
@@ -427,6 +438,7 @@ impl Ecosystem {
     /// Every ecosystem, for exhaustive detection and for error messages that
     /// list what a project could be.
     pub const ALL: &'static [Ecosystem] = &[
+        Ecosystem::Attolang,
         Ecosystem::Cargo,
         Ecosystem::Cmake,
         Ecosystem::Composer,
@@ -497,12 +509,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn attolang_and_oreslang_are_one_canonical_package_language() {
+        for token in ["attolang", "AttoLang", "oreslang", "ORESlang"] {
+            assert_eq!(Language::from_token(token), Some(Language::Attolang));
+            assert_eq!(Ecosystem::from_token(token), Some(Ecosystem::Attolang));
+            let from_manifest: Language = serde_json::from_str(&format!("\"{token}\"")).unwrap();
+            assert_eq!(from_manifest, Language::Attolang);
+        }
+        assert_eq!(Language::Attolang.as_str(), "attolang");
+        assert_eq!(Language::Attolang.ecosystem(), Ecosystem::Attolang);
+        assert_eq!(
+            serde_json::to_string(&Language::Attolang).unwrap(),
+            "\"attolang\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Ecosystem::Attolang).unwrap(),
+            "\"attolang\""
+        );
+        assert_eq!(
+            serde_json::from_str::<Ecosystem>("\"oreslang\"").unwrap(),
+            Ecosystem::Attolang
+        );
+        assert_eq!(
+            detect_ecosystems([".ores.pkg.toml", "Cargo.toml"]),
+            BTreeSet::from([Ecosystem::Attolang, Ecosystem::Cargo])
+        );
+        assert!(!Ecosystem::Attolang.matches_marker(".ores.pkg.tomlx"));
+        assert!(Ecosystem::Attolang.matches_marker(".ores.pkg.toml"));
+    }
+
+    #[test]
     fn every_language_round_trips_through_its_own_token() {
         // Guards the three parallel match arms (as_str / from_token /
         // ecosystem): adding a variant to one and forgetting another is the
         // easy mistake, and it would silently mis-tag a published package.
         for lang in [
             Language::Universal,
+            Language::Attolang,
             Language::C,
             Language::Clojure,
             Language::Cpp,
