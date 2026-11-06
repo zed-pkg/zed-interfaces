@@ -27,8 +27,13 @@ fn public_attolang_manifest_is_typed_and_round_trips_canonically() {
     assert_eq!(manifest.package.ecosystem(), Ecosystem::Attolang);
     assert_eq!(manifest.full_name(), "zed-e2e/attolang-source-bridge");
 
-    let serialized = manifest.to_toml_string().expect("serialize public manifest");
-    assert!(serialized.contains("language = \"attolang\""), "{serialized}");
+    let serialized = manifest
+        .to_toml_string()
+        .expect("serialize public manifest");
+    assert!(
+        serialized.contains("language = \"attolang\""),
+        "{serialized}"
+    );
     assert_eq!(
         Manifest::parse(&serialized).expect("reparse canonical manifest"),
         manifest
@@ -47,8 +52,14 @@ fn legacy_oreslang_and_display_case_are_canonicalized_not_ungated() {
         assert_eq!(manifest.package.language, Language::Attolang);
         assert_eq!(manifest.package.ecosystem(), Ecosystem::Attolang);
         let normalized = manifest.to_toml_string().expect("serialize legacy alias");
-        assert!(normalized.contains("language = \"attolang\""), "{normalized}");
-        assert!(!normalized.contains("language = \"oreslang\""), "{normalized}");
+        assert!(
+            normalized.contains("language = \"attolang\""),
+            "{normalized}"
+        );
+        assert!(
+            !normalized.contains("language = \"oreslang\""),
+            "{normalized}"
+        );
     }
 
     let explicit_legacy = SOURCE_MANIFEST.replace(
