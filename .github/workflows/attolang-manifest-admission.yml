@@ -1,0 +1,57 @@
+name: AttoLang manifest boundary (focused)
+
+on:
+  pull_request:
+    paths:
+      - 'src/rust/tests/attolang_manifest_admission.rs'
+      - 'src/rust/language.rs'
+      - 'src/rust/manifest.rs'
+      - '.github/workflows/attolang-manifest-admission.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/rust/tests/attolang_manifest_admission.rs'
+      - 'src/rust/language.rs'
+      - 'src/rust/manifest.rs'
+      - '.github/workflows/attolang-manifest-admission.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: attolang-manifest-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Canonical AttoLang manifest and legacy alias admission
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact candidate SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Install pinned Rust 1.98.1
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.98.1
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Execute real manifest parser contracts
+        run: cargo test --locked -p zed-interfaces --test attolang_manifest_admission -- --nocapture
+      - name: Verify schema generator did not drift
+        run: |
+          cargo run --locked --example generate_schemas
+          git diff --exit-code -- schemas/
+      - name: Verify downstream generated slices are unchanged
+        run: node codegen/generate.mjs --check
+      - name: Classify evidence
+        run: echo 'CONTRACT_SOURCE_ONLY - not AttoLang compiler or guest parity'
