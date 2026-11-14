@@ -1,0 +1,21 @@
+{
+  "contract_version": "zed.desktop-application-artifact/v1",
+  "org": "zed-pkg",
+  "app": "zed-desktop",
+  "version": "1.0.0",
+  "channel": "stable",
+  "target_os": "macos",
+  "target_arch": "universal",
+  "artifact_format": "macos_pkg",
+  "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifact_size": 73400320,
+  "file_name": "zed-desktop-1.0.0-universal.pkg",
+  "source_repository": "https://github.com/zed-pkg/zed-desktop-app.rs",
+  "source_revision": "1111111111111111111111111111111111111111",
+  "build_receipt_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "minimum_os_version": "13.0",
+  "signing_state": "signed",
+  "publisher_identity": "Developer ID Installer: Zed Package",
+  "notarization_state": "notarized",
+  "cdn_object_path": "apps/artifacts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/zed-desktop-1.0.0-universal.pkg"
+}

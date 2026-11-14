@@ -1,0 +1,19 @@
+{
+  "contract_version": "zed.desktop-application-artifact/v1",
+  "org": "zed-pkg",
+  "app": "zed-desktop",
+  "version": "1.0.0",
+  "channel": "stable",
+  "target_os": "linux",
+  "target_arch": "aarch64",
+  "artifact_format": "linux_snap",
+  "artifact_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "artifact_size": 52428800,
+  "file_name": "zed-desktop_1.0.0_arm64.snap",
+  "source_repository": "https://github.com/zed-pkg/zed-desktop-app.rs",
+  "source_revision": "1111111111111111111111111111111111111111",
+  "build_receipt_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "signing_state": "unsigned",
+  "notarization_state": "not_applicable",
+  "cdn_object_path": "apps/artifacts/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc/zed-desktop_1.0.0_arm64.snap"
+}
