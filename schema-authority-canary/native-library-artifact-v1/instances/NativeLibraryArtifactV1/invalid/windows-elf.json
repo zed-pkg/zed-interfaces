@@ -1,0 +1,12 @@
+{
+  "contract_version": "zed.native-library-artifact/v1",
+  "library_id": "bad_windows_lib",
+  "target_os": "windows",
+  "target_arch": "x86_64",
+  "binary_format": "elf",
+  "artifact_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "artifact_size": 4096,
+  "file_name": "bad_windows_lib.dll",
+  "runtime_name": "bad_windows_lib.dll",
+  "direct_imports": []
+}
