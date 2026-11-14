@@ -81,6 +81,12 @@ jobs:
           assert.equal(report.coverage.differentialInstanceValidation, true);
           NODE
 
+      - name: Enforce semantic grant identity contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test contracts/edge-fallback/semantic-grants.test.mjs
+
       - name: Retain Contract IR and comparison evidence
         if: ${{ always() }}
         continue-on-error: true

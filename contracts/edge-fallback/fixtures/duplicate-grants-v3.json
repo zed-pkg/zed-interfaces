@@ -1,0 +1,34 @@
+{
+  "zed_edge_capability": 3,
+  "iss": "https://auth.zpkg.net",
+  "aud": "zed-edge-fallback",
+  "sub": "user:test",
+  "iat": 1999999990,
+  "nbf": 1999999990,
+  "exp": 2000000120,
+  "jti": "capability-0001",
+  "grants": [
+    {
+      "provider": "cargo-registry",
+      "operation": "read",
+      "package": "acme/private-rust",
+      "resource": "private_rust",
+      "origin": "https://registry-one.example",
+      "credential_ref": "cargo-registry:one"
+    },
+    {
+      "provider": "cargo-registry",
+      "operation": "read",
+      "package": "acme/private-rust",
+      "resource": "private_rust",
+      "origin": "https://registry-two.example",
+      "credential_ref": "cargo-registry:two"
+    }
+  ],
+  "sid": "session:abc-123",
+  "parent_jti": "parent-token-0001",
+  "assurance": 2,
+  "session_epoch": 7,
+  "policy_epoch": 4,
+  "revocation_checked_at": 1999999980
+}
